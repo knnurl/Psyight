@@ -48,7 +48,10 @@ class Session {
     ~Session(); // Saves unsaved labels.
 
     void open_file(const std::filesystem::path &path);
-    void update(); // Call once per GUI frame.
+    void update(); // Call once per GUI frame, before the panels.
+    // Call after the panels: a pan by the user stops following the playhead; a zoom while following
+    // sets the window length.
+    void end_frame();
 
     Transport &transport() { return transport_; }
     bool has_track() const { return track_ != nullptr; }
@@ -86,6 +89,8 @@ class Session {
     LabelEditor labels_;
     bool labels_file_unreadable_ = false;
     LoopRegion loop_;
+    double expected_view_min_s_ = 0.0; // The view as update() set it, to detect user changes.
+    double expected_view_max_s_ = 0.0;
     std::chrono::steady_clock::time_point last_save_ = std::chrono::steady_clock::now();
 };
 

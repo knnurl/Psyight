@@ -68,9 +68,8 @@ void AnalysisView::draw() {
     const double playhead_s = session_.playhead_s();
     const Grid grid = session_.grid();
 
-    float row_ratios[] = {0.55f, 0.25f, 0.20f};
     if (!ImPlot::BeginSubplots("##analysis", 3, 1, ImVec2(-1, -1), ImPlotSubplotFlags_None,
-                               row_ratios)) {
+                               row_ratios_.data())) {
         ImGui::End();
         return;
     }

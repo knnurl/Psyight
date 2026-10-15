@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 
 namespace psyight {
 
@@ -14,6 +15,8 @@ namespace {
 constexpr int kOverviewBuckets = 4000;
 constexpr auto kAutosaveInterval = std::chrono::seconds(60);
 constexpr double kPlayheadLead = 0.3; // Fraction of the view shown before the playhead.
+constexpr double kMinViewS = 0.25;
+constexpr double kMaxViewS = 120.0;
 
 } // namespace
 
@@ -119,11 +122,27 @@ void Session::set_loop(const LoopRegion &loop) {
                         loop.enabled ? seconds_to_samples(end_s, sr) : 0);
 }
 
+void Session::end_frame() {
+    if (!view.follow_playhead ||
+        (view.min_s == expected_view_min_s_ && view.max_s == expected_view_max_s_)) {
+        return;
+    }
+    const double width_s = view.max_s - view.min_s;
+    const double expected_width_s = expected_view_max_s_ - expected_view_min_s_;
+    if (std::abs(width_s - expected_width_s) > 1e-6 * expected_width_s) {
+        view.window_s = std::clamp(width_s, kMinViewS, kMaxViewS); // Zoom: keep following.
+    } else {
+        view.follow_playhead = false; // Pan: the user wants to look elsewhere.
+    }
+}
+
 void Session::update() {
     if (view.follow_playhead) {
         view.min_s = playhead_s() - kPlayheadLead * view.window_s;
         view.max_s = view.min_s + view.window_s;
     }
+    expected_view_min_s_ = view.min_s;
+    expected_view_max_s_ = view.max_s;
     if (labels_.dirty() && std::chrono::steady_clock::now() - last_save_ > kAutosaveInterval) {
         autosave("periodic");
     }

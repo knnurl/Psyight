@@ -93,7 +93,6 @@ int main() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
-    ImPlot::GetInputMap().Pan = ImGuiMouseButton_Middle; // The left button edits labels.
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
@@ -161,6 +160,7 @@ int main() {
             bass_roll_view.draw_roll();
             bass_roll_view.draw_inspector();
             handle_shortcuts(session);
+            session.end_frame();
             if (show_imgui_demo) {
                 ImGui::ShowDemoWindow(&show_imgui_demo);
             }

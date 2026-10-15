@@ -3,6 +3,8 @@
 // a draggable first downbeat) drawn on every plot.
 #pragma once
 
+#include <array>
+
 #include "gui/session.h"
 #include "gui/spectrogram_textures.h"
 
@@ -23,6 +25,8 @@ class AnalysisView {
     float max_db_ = -10.0f;
     bool colours_changed_ = false;
     bool dragging_downbeat_ = false;
+    // Plot heights. ImPlot writes divider drags into this, so it must persist between frames.
+    std::array<float, 3> row_ratios_{0.55f, 0.25f, 0.20f};
 };
 
 } // namespace psyight
