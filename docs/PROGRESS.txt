@@ -46,6 +46,6 @@ Last updated: 2026-10-15
 ## Next M1 steps
 1. Done: core pieces (timebase and grid, SPSC queue, parameter registry with presets). 40 test cases, 464 assertions.
 2. Done: audio decode (WAV/FLAC/MP3 to 48 kHz) and WASAPI transport with a GUI panel: drop a file or pass it on the command line, Space to play, click the overview to seek, draggable loop, volume. 45 test cases. Not yet checked by ear; FLAC decode untested (no FLAC file locally).
-3. Front end. Done: STFT (pffft), filterbank and envelopes, spectral flux, log-frequency spectrogram (398 s track in 2.35 s, 170x real time). Next: spectrogram and band plot views, manual grid.
-4. Bass roll and labelling tools; label about 60 s of `data/OculusDrift.mp3`.
+3. Front end. Done: STFT (pffft), filterbank and envelopes, spectral flux, log-frequency spectrogram (398 s track in 2.35 s, 170x real time). Views done: analysis view (spectrogram tiles, band energies, flux, follows the playhead), manual grid (BPM, draggable first downbeat), default layout with View > Reset layout. Known: closing during loading waits up to about 3 s for the analysis (make analysis cancellable).
+4. Bass roll and labelling tools; label about 60 s of `data/OculusDrift.mp3`. (next)
 5. Bass tracker v0, golden-metric regression tests, and the baseline in `docs/results/M1.md`.
