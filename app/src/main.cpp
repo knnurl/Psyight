@@ -1,13 +1,16 @@
 // Psyight entry point: opens the main window with a Dear ImGui docking workspace.
 
-#include "audio/transport.h"
+#include "gui/analysis_view.h"
 #include "gui/command_line.h"
 #include "gui/frame_pacing.h"
+#include "gui/layout.h"
+#include "gui/session.h"
 #include "gui/transport_panel.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui_internal.h> // DockBuilderGetNode, to detect a missing saved layout.
 #include <implot.h>
 #include <spdlog/spdlog.h>
 
@@ -35,8 +38,8 @@ void log_glfw_error(int code, const char *description) {
 // Opens the first file dropped onto the window. GLFW passes UTF-8 paths.
 void on_files_dropped(GLFWwindow *window, int count, const char *paths[]) {
     if (count > 0) {
-        auto *panel = static_cast<psyight::TransportPanel *>(glfwGetWindowUserPointer(window));
-        panel->open_file(std::u8string(reinterpret_cast<const char8_t *>(paths[0])));
+        auto *session = static_cast<psyight::Session *>(glfwGetWindowUserPointer(window));
+        session->open_file(std::u8string(reinterpret_cast<const char8_t *>(paths[0])));
     }
 }
 
@@ -85,53 +88,67 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(kGlslVersion);
 
-    psyight::Transport transport;
-    psyight::TransportPanel transport_panel(transport);
-    glfwSetWindowUserPointer(window, &transport_panel);
-    glfwSetDropCallback(window, on_files_dropped);
-    if (const auto paths = psyight::command_line_paths(); !paths.empty()) {
-        transport_panel.open_file(paths.front());
-    }
-
-    bool show_imgui_demo = false;
-    bool show_implot_demo = false;
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
-            ImGui_ImplGlfw_Sleep(kMinimisedSleepMs); // Swap does not throttle a minimised window.
-            continue;
+    { // App objects own GL textures, so they must go before the GL context does.
+        psyight::Session session;
+        psyight::TransportPanel transport_panel(session);
+        psyight::AnalysisView analysis_view(session);
+        glfwSetWindowUserPointer(window, &session);
+        glfwSetDropCallback(window, on_files_dropped);
+        if (const auto paths = psyight::command_line_paths(); !paths.empty()) {
+            session.open_file(paths.front());
         }
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        bool reset_layout = false;
 
-        if (ImGui::BeginMainMenuBar()) {
-            if (ImGui::BeginMenu("View")) {
-                ImGui::MenuItem("ImGui demo", nullptr, &show_imgui_demo);
-                ImGui::MenuItem("ImPlot demo", nullptr, &show_implot_demo);
-                ImGui::EndMenu();
+        bool show_imgui_demo = false;
+        bool show_implot_demo = false;
+        while (!glfwWindowShouldClose(window)) {
+            glfwPollEvents();
+            if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
+                ImGui_ImplGlfw_Sleep(
+                    kMinimisedSleepMs); // Swap does not throttle a minimised window.
+                continue;
             }
-            ImGui::EndMainMenuBar();
-        }
-        ImGui::DockSpaceOverViewport();
-        transport_panel.draw();
-        if (show_imgui_demo) {
-            ImGui::ShowDemoWindow(&show_imgui_demo);
-        }
-        if (show_implot_demo) {
-            ImPlot::ShowDemoWindow(&show_implot_demo);
-        }
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
 
-        ImGui::Render();
-        int framebuffer_width_pixels = 0;
-        int framebuffer_height_pixels = 0;
-        glfwGetFramebufferSize(window, &framebuffer_width_pixels, &framebuffer_height_pixels);
-        glViewport(0, 0, framebuffer_width_pixels, framebuffer_height_pixels);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        glfwSwapBuffers(window);
-        psyight::wait_for_display_refresh();
+            if (ImGui::BeginMainMenuBar()) {
+                if (ImGui::BeginMenu("View")) {
+                    ImGui::MenuItem("Reset layout", nullptr, &reset_layout);
+                    ImGui::Separator();
+                    ImGui::MenuItem("ImGui demo", nullptr, &show_imgui_demo);
+                    ImGui::MenuItem("ImPlot demo", nullptr, &show_implot_demo);
+                    ImGui::EndMenu();
+                }
+                ImGui::EndMainMenuBar();
+            }
+            const ImGuiID dockspace_id = ImGui::GetID("Main dock space");
+            if (reset_layout || ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
+                psyight::apply_default_layout(dockspace_id); // First run, or View > Reset layout.
+                reset_layout = false;
+            }
+            ImGui::DockSpaceOverViewport(dockspace_id);
+            session.update();
+            transport_panel.draw();
+            analysis_view.draw();
+            if (show_imgui_demo) {
+                ImGui::ShowDemoWindow(&show_imgui_demo);
+            }
+            if (show_implot_demo) {
+                ImPlot::ShowDemoWindow(&show_implot_demo);
+            }
+
+            ImGui::Render();
+            int framebuffer_width_pixels = 0;
+            int framebuffer_height_pixels = 0;
+            glfwGetFramebufferSize(window, &framebuffer_width_pixels, &framebuffer_height_pixels);
+            glViewport(0, 0, framebuffer_width_pixels, framebuffer_height_pixels);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            glfwSwapBuffers(window);
+            psyight::wait_for_display_refresh();
+        }
     }
 
     ImGui_ImplOpenGL3_Shutdown();

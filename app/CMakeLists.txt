@@ -54,7 +54,9 @@ target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohman
                                           psyight_miniaudio pffft::pffft)
 
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
-                       src/gui/transport_panel.cpp)
+                       src/gui/session.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
+                       src/gui/analysis_view.cpp src/gui/spectrogram_textures.cpp
+                       src/gui/spectrogram_image.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32)
@@ -63,7 +65,8 @@ enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp tests/core_test.cpp
                              tests/audio_test.cpp tests/front_end_test.cpp
                              tests/labels_test.cpp tests/scoring_test.cpp
-                             tests/synth_generator.cpp tests/synth_generator_test.cpp)
+                             tests/synth_generator.cpp tests/synth_generator_test.cpp
+                             tests/gui_logic_test.cpp src/gui/spectrogram_image.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)
