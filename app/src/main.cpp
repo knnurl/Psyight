@@ -1,6 +1,9 @@
 // Psyight entry point: opens the main window with a Dear ImGui docking workspace.
 
+#include "audio/transport.h"
+#include "gui/command_line.h"
 #include "gui/frame_pacing.h"
+#include "gui/transport_panel.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -9,6 +12,9 @@
 #include <spdlog/spdlog.h>
 
 #include <GLFW/glfw3.h> // Brings in the system OpenGL header for glClear and glViewport.
+
+#include <filesystem>
+#include <string>
 
 namespace {
 
@@ -24,6 +30,14 @@ constexpr const char *kGlslVersion = "#version 330 core";
 
 void log_glfw_error(int code, const char *description) {
     spdlog::error("GLFW error {}: {}", code, description);
+}
+
+// Opens the first file dropped onto the window. GLFW passes UTF-8 paths.
+void on_files_dropped(GLFWwindow *window, int count, const char *paths[]) {
+    if (count > 0) {
+        auto *panel = static_cast<psyight::TransportPanel *>(glfwGetWindowUserPointer(window));
+        panel->open_file(std::u8string(reinterpret_cast<const char8_t *>(paths[0])));
+    }
 }
 
 } // namespace
@@ -71,6 +85,14 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(kGlslVersion);
 
+    psyight::Transport transport;
+    psyight::TransportPanel transport_panel(transport);
+    glfwSetWindowUserPointer(window, &transport_panel);
+    glfwSetDropCallback(window, on_files_dropped);
+    if (const auto paths = psyight::command_line_paths(); !paths.empty()) {
+        transport_panel.open_file(paths.front());
+    }
+
     bool show_imgui_demo = false;
     bool show_implot_demo = false;
     while (!glfwWindowShouldClose(window)) {
@@ -92,6 +114,7 @@ int main() {
             ImGui::EndMainMenuBar();
         }
         ImGui::DockSpaceOverViewport();
+        transport_panel.draw();
         if (show_imgui_demo) {
             ImGui::ShowDemoWindow(&show_imgui_demo);
         }

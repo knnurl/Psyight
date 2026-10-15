@@ -51,10 +51,11 @@ target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio)
 
-add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp)
+add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
+                       src/gui/transport_panel.cpp)
 target_include_directories(psyight PRIVATE src)
-target_link_libraries(psyight PRIVATE psyight_options imgui::imgui implot::implot glfw
-                                      OpenGL::GL spdlog::spdlog dwmapi)
+target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
+                                      glfw OpenGL::GL spdlog::spdlog dwmapi shell32)
 
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp tests/core_test.cpp
