@@ -12,6 +12,8 @@ namespace psyight {
 namespace {
 
 constexpr int kOverviewBuckets = 4000;
+constexpr auto kAutosaveInterval = std::chrono::seconds(60);
+constexpr double kPlayheadLead = 0.3; // Fraction of the view shown before the playhead.
 
 } // namespace
 
@@ -34,6 +36,7 @@ Session::LoadResult Session::load(std::filesystem::path path) {
     const AudioBuffer &buffer = result.audio.value();
     auto track = std::make_shared<LoadedTrack>();
     track->name = path_to_utf8(path.filename());
+    track->path = path;
     track->sample_rate_hz = buffer.sample_rate_hz;
     track->duration_s = samples_to_seconds(buffer.frames(), buffer.sample_rate_hz);
 
@@ -65,7 +68,65 @@ Session::LoadResult Session::load(std::filesystem::path path) {
     return result;
 }
 
+Session::~Session() { autosave("on exit"); }
+
+void Session::autosave(const char *reason) {
+    if (!has_track() || !labels_.dirty()) {
+        return;
+    }
+    if (const Result<void> saved = save_labels(); saved) {
+        spdlog::info("Saved labels {} ({})", path_to_utf8(labels_path().filename()), reason);
+    } else {
+        spdlog::error("Autosave failed: {}", saved.error().message);
+        last_save_ = std::chrono::steady_clock::now(); // Retry after the interval, not per frame.
+    }
+}
+
+Result<void> Session::save_labels() {
+    if (labels_file_unreadable_) {
+        return Error{"not saving: " + path_to_utf8(labels_path()) +
+                     " could not be read, so saving would overwrite it. Fix or move it first."};
+    }
+    const Result<void> saved = psyight::save_labels(labels_path(), labels_.labels());
+    if (saved) {
+        labels_.mark_saved();
+        last_save_ = std::chrono::steady_clock::now();
+    }
+    return saved;
+}
+
+std::filesystem::path Session::labels_path() const { return labels_path_for(track_->path); }
+
+double Session::playhead_s() const {
+    return has_track() ? samples_to_seconds(transport_.position(), track_->sample_rate_hz) : 0.0;
+}
+
+Grid Session::grid() const {
+    const int sample_rate_hz = has_track() ? track_->sample_rate_hz : kAnalysisSampleRateHz;
+    const LabelGrid &grid = labels_.labels().grid;
+    return {grid.bpm, seconds_to_samples(grid.first_downbeat_s, sample_rate_hz), sample_rate_hz};
+}
+
+void Session::set_loop(const LoopRegion &loop) {
+    loop_ = loop;
+    if (!has_track()) {
+        return;
+    }
+    const int sr = track_->sample_rate_hz;
+    const double start_s = std::min(loop.start_s, loop.end_s);
+    const double end_s = std::max(loop.start_s, loop.end_s);
+    transport_.set_loop(loop.enabled ? seconds_to_samples(start_s, sr) : 0,
+                        loop.enabled ? seconds_to_samples(end_s, sr) : 0);
+}
+
 void Session::update() {
+    if (view.follow_playhead) {
+        view.min_s = playhead_s() - kPlayheadLead * view.window_s;
+        view.max_s = view.min_s + view.window_s;
+    }
+    if (labels_.dirty() && std::chrono::steady_clock::now() - last_save_ > kAutosaveInterval) {
+        autosave("periodic");
+    }
     if (!loading_.valid() ||
         loading_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
         return;
@@ -76,6 +137,7 @@ void Session::update() {
         spdlog::error("{}", status_);
         return;
     }
+    autosave("switching track");
     const Result<void> opened = transport_.open(std::move(result.audio.value()));
     if (!opened) {
         status_ = opened.error().message;
@@ -83,9 +145,30 @@ void Session::update() {
         return;
     }
     track_ = std::move(result.track);
+    loop_ = {};
     status_.clear();
     spdlog::info("Loaded {} ({:.2f} s), device period {} frames", track_->name, track_->duration_s,
                  transport_.device_period_frames());
+
+    // Labels: load the file next to the audio, or start empty.
+    labels_file_unreadable_ = false;
+    if (std::filesystem::exists(labels_path())) {
+        Result<Labels> loaded = load_labels(labels_path());
+        if (loaded) {
+            labels_ = LabelEditor(std::move(loaded.value()));
+            spdlog::info("Loaded {} labelled notes from {}", labels_.labels().bass_notes.size(),
+                         path_to_utf8(labels_path().filename()));
+            return;
+        }
+        // Keep the unreadable file untouched: start empty, and refuse to save over it.
+        labels_file_unreadable_ = true;
+        status_ = "Labels not loaded: " + loaded.error().message;
+        spdlog::error("{}", status_);
+    }
+    Labels fresh;
+    fresh.audio = track_->name;
+    fresh.sample_rate = track_->sample_rate_hz;
+    labels_ = LabelEditor(std::move(fresh));
 }
 
 } // namespace psyight

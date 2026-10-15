@@ -1,5 +1,7 @@
 #include "gui/analysis_view.h"
 
+#include "gui/time_plot.h"
+
 #include <imgui.h>
 #include <implot.h>
 
@@ -13,9 +15,7 @@ namespace {
 
 constexpr double kMinBpm = 60.0;
 constexpr double kMaxBpm = 250.0;
-constexpr double kPlayheadLead = 0.3; // Fraction of the window shown before the playhead.
-constexpr size_t kMaxGridLines = 400; // Finer levels are dropped beyond this.
-constexpr int kMaxPlotPoints = 4000;  // Per line; longer visible ranges are decimated.
+constexpr int kMaxPlotPoints = 4000; // Per line; longer visible ranges are decimated.
 constexpr float kMinDisplayDb = -120.0f;
 constexpr float kMaxDisplayDb = 0.0f;
 constexpr double kFrequencyTicksHz[] = {50, 100, 200, 500, 1000, 2000, 5000, 10000};
@@ -58,7 +58,6 @@ void AnalysisView::draw() {
         ImGui::End();
         return;
     }
-    session_.grid.sample_rate_hz = track.sample_rate_hz;
     draw_toolbar(track);
     if (!textures_.built_for(analysis) || colours_changed_) {
         textures_.build(*analysis, min_db_, max_db_, viridis_table());
@@ -66,21 +65,11 @@ void AnalysisView::draw() {
     }
 
     const double frame_s = static_cast<double>(analysis->hop_samples) / analysis->sample_rate_hz;
-    const double playhead_s =
-        samples_to_seconds(session_.transport().position(), track.sample_rate_hz);
-    const double follow_from_s = playhead_s - kPlayheadLead * window_s_;
-    const auto setup_time_axis = [&] {
-        ImPlot::SetupAxis(ImAxis_X1, nullptr, ImPlotAxisFlags_NoLabel);
-        if (follow_) {
-            ImPlot::SetupAxisLimits(ImAxis_X1, follow_from_s, follow_from_s + window_s_,
-                                    ImPlotCond_Always);
-        } else {
-            ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, window_s_, ImPlotCond_Once);
-        }
-    };
+    const double playhead_s = session_.playhead_s();
+    const Grid grid = session_.grid();
 
     float row_ratios[] = {0.55f, 0.25f, 0.20f};
-    if (!ImPlot::BeginSubplots("##analysis", 3, 1, ImVec2(-1, -1), ImPlotSubplotFlags_LinkAllX,
+    if (!ImPlot::BeginSubplots("##analysis", 3, 1, ImVec2(-1, -1), ImPlotSubplotFlags_None,
                                row_ratios)) {
         ImGui::End();
         return;
@@ -88,7 +77,7 @@ void AnalysisView::draw() {
 
     const LogSpectrogram &spectrogram = analysis->spectrogram;
     if (ImPlot::BeginPlot("Spectrogram", ImVec2(), ImPlotFlags_NoLegend)) {
-        setup_time_axis();
+        setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "Hz", ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, spectrogram.rows, ImPlotCond_Always);
         // Row r has centre frequency min * (max / min)^(r / (rows - 1)) and spans [r, r + 1).
@@ -103,17 +92,29 @@ void AnalysisView::draw() {
                                kFrequencyTickLabels);
         const ImPlotRect limits = ImPlot::GetPlotLimits();
         textures_.draw(limits.X.Min, limits.X.Max);
-        draw_grid_lines(limits.X.Min, limits.X.Max);
+        draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
-        double downbeat_s = samples_to_seconds(session_.grid.first_downbeat, track.sample_rate_hz);
-        if (ImPlot::DragLineX(1, &downbeat_s, ImVec4(1.0f, 0.4f, 0.3f, 1.0f), 2.0f)) {
-            session_.grid.first_downbeat = seconds_to_samples(
-                std::clamp(downbeat_s, 0.0, track.duration_s), track.sample_rate_hz);
+        // Dragging the downbeat is one undoable gesture from press to release.
+        LabelEditor &labels = session_.labels();
+        LabelGrid label_grid = labels.labels().grid;
+        if (ImPlot::DragLineX(1, &label_grid.first_downbeat_s, ImVec4(1.0f, 0.4f, 0.3f, 1.0f),
+                              2.0f)) {
+            if (!dragging_downbeat_) {
+                labels.begin_gesture();
+                dragging_downbeat_ = true;
+            }
+            label_grid.first_downbeat_s =
+                std::clamp(label_grid.first_downbeat_s, 0.0, track.duration_s);
+            labels.set_grid(label_grid);
+        }
+        if (dragging_downbeat_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            labels.end_gesture();
+            dragging_downbeat_ = false;
         }
         ImPlot::EndPlot();
     }
     if (ImPlot::BeginPlot("Band energy", ImVec2(), ImPlotFlags_None)) {
-        setup_time_axis();
+        setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "dBFS");
         ImPlot::SetupAxisLimits(ImAxis_Y1, -80.0, 0.0, ImPlotCond_Once);
         ImPlot::SetupLegend(ImPlotLocation_NorthWest, ImPlotLegendFlags_Horizontal);
@@ -122,16 +123,16 @@ void AnalysisView::draw() {
             plot_series(band.band.name.c_str(), band.energy_db, frame_s, limits.X.Min,
                         limits.X.Max);
         }
-        draw_grid_lines(limits.X.Min, limits.X.Max);
+        draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
         ImPlot::EndPlot();
     }
     if (ImPlot::BeginPlot("Spectral flux", ImVec2(), ImPlotFlags_NoLegend)) {
-        setup_time_axis();
+        setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "flux", ImPlotAxisFlags_AutoFit);
         const ImPlotRect limits = ImPlot::GetPlotLimits();
         plot_series("total", analysis->flux_total, frame_s, limits.X.Min, limits.X.Max);
-        draw_grid_lines(limits.X.Min, limits.X.Max);
+        draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
         ImPlot::EndPlot();
     }
@@ -140,29 +141,36 @@ void AnalysisView::draw() {
 }
 
 void AnalysisView::draw_toolbar(const LoadedTrack &track) {
-    Grid &grid = session_.grid;
+    LabelEditor &labels = session_.labels();
+    LabelGrid grid = labels.labels().grid;
     const float em = ImGui::GetFontSize();
-    double bpm = grid.bpm;
     ImGui::SetNextItemWidth(7.0f * em);
-    if (ImGui::InputDouble("BPM", &bpm, 0.01, 1.0, "%.2f")) {
-        grid.bpm = std::clamp(bpm, kMinBpm, kMaxBpm);
+    if (ImGui::InputDouble("BPM", &grid.bpm, 0.01, 1.0, "%.2f")) {
+        grid.bpm = std::clamp(grid.bpm, kMinBpm, kMaxBpm);
+        labels.set_grid(grid);
     }
     ImGui::SameLine();
-    double downbeat_s = samples_to_seconds(grid.first_downbeat, track.sample_rate_hz);
     ImGui::SetNextItemWidth(8.0f * em);
-    if (ImGui::InputDouble("First downbeat (s)", &downbeat_s, 0.001, 0.01, "%.3f")) {
-        grid.first_downbeat =
-            seconds_to_samples(std::clamp(downbeat_s, 0.0, track.duration_s), track.sample_rate_hz);
+    if (ImGui::InputDouble("First downbeat (s)", &grid.first_downbeat_s, 0.001, 0.01, "%.3f")) {
+        grid.first_downbeat_s = std::clamp(grid.first_downbeat_s, 0.0, track.duration_s);
+        labels.set_grid(grid);
     }
     ImGui::SameLine();
     if (ImGui::Button("Set to playhead")) {
-        grid.first_downbeat = session_.transport().position();
+        grid.first_downbeat_s = session_.playhead_s();
+        labels.set_grid(grid);
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Follow playhead", &follow_);
+    ImGui::Checkbox("Follow playhead", &session_.view.follow_playhead);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(8.0f * em);
-    ImGui::SliderFloat("Window", &window_s_, 2.0f, 30.0f, "%.0f s");
+    float window_s = static_cast<float>(session_.view.window_s);
+    if (ImGui::SliderFloat("Window", &window_s, 2.0f, 30.0f, "%.0f s")) {
+        session_.view.window_s = window_s;
+        if (!session_.view.follow_playhead) {
+            session_.view.max_s = session_.view.min_s + window_s;
+        }
+    }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(12.0f * em);
     if (ImGui::DragFloatRange2("Colour range", &min_db_, &max_db_, 0.5f, kMinDisplayDb,
@@ -170,35 +178,6 @@ void AnalysisView::draw_toolbar(const LoadedTrack &track) {
         max_db_ = std::max(max_db_, min_db_ + 1.0f);
         colours_changed_ = true;
     }
-}
-
-void AnalysisView::draw_grid_lines(double from_s, double to_s) const {
-    const Grid &grid = session_.grid;
-    std::vector<double> bars;
-    std::vector<double> beats;
-    std::vector<double> slots;
-    for (const GridLine &line :
-         grid.lines(seconds_to_samples(from_s, grid.sample_rate_hz),
-                    seconds_to_samples(to_s, grid.sample_rate_hz), kMaxGridLines)) {
-        const double t_s = samples_to_seconds(line.sample, grid.sample_rate_hz);
-        (line.level == GridLevel::bar    ? bars
-         : line.level == GridLevel::beat ? beats
-                                         : slots)
-            .push_back(t_s);
-    }
-    const auto plot_lines = [](const char *label, const std::vector<double> &times, float alpha,
-                               float weight) {
-        ImPlot::SetNextLineStyle(ImVec4(1.0f, 1.0f, 1.0f, alpha), weight);
-        ImPlot::PlotInfLines(label, times.data(), static_cast<int>(times.size()));
-    };
-    plot_lines("##slots", slots, 0.10f, 1.0f);
-    plot_lines("##beats", beats, 0.30f, 1.0f);
-    plot_lines("##bars", bars, 0.60f, 1.5f);
-}
-
-void AnalysisView::draw_playhead(double playhead_s) const {
-    ImPlot::SetNextLineStyle(ImVec4(1.0f, 1.0f, 1.0f, 0.95f), 2.0f);
-    ImPlot::PlotInfLines("##playhead", &playhead_s, 1);
 }
 
 } // namespace psyight

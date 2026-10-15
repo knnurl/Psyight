@@ -16,16 +16,13 @@ class AnalysisView {
 
   private:
     void draw_toolbar(const LoadedTrack &track);
-    void draw_grid_lines(double from_s, double to_s) const;
-    void draw_playhead(double playhead_s) const;
 
     Session &session_;
     SpectrogramTextures textures_;
-    bool follow_ = true;
-    float window_s_ = 8.0f;
     float min_db_ = -90.0f;
     float max_db_ = -10.0f;
     bool colours_changed_ = false;
+    bool dragging_downbeat_ = false;
 };
 
 } // namespace psyight

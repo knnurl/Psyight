@@ -56,7 +56,8 @@ target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohman
 
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
                        src/gui/session.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
-                       src/gui/analysis_view.cpp src/gui/spectrogram_textures.cpp
+                       src/gui/analysis_view.cpp src/gui/bass_roll_view.cpp src/gui/time_plot.cpp
+                       src/gui/spectrogram_textures.cpp
                        src/gui/spectrogram_image.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot

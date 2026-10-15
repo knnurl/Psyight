@@ -43,9 +43,9 @@ void TransportPanel::draw() {
     const LoadedTrack &track = session_.track();
     if (shown_track_ != &track) { // A new track: the transport starts with default state.
         shown_track_ = &track;
-        loop_enabled_ = false;
         transport.set_gain(volume_to_gain(volume_db_));
     }
+    LoopRegion loop = session_.loop();
 
     const bool playing = transport.playing();
     const ImGuiIO &io = ImGui::GetIO();
@@ -61,19 +61,16 @@ void TransportPanel::draw() {
         ImGui::TextUnformatted(session_.status().c_str());
     }
 
-    if (ImGui::Checkbox("Loop", &loop_enabled_)) {
-        if (loop_enabled_ && loop_end_s_ <= loop_start_s_) {
-            loop_start_s_ = position_s;
-            loop_end_s_ = std::min(track.duration_s, position_s + kDefaultLoopLengthS);
+    if (ImGui::Checkbox("Loop", &loop.enabled)) {
+        if (loop.enabled && loop.end_s <= loop.start_s) {
+            loop.start_s = position_s;
+            loop.end_s = std::min(track.duration_s, position_s + kDefaultLoopLengthS);
         }
-        transport.set_loop(
-            loop_enabled_ ? seconds_to_samples(loop_start_s_, track.sample_rate_hz) : 0,
-            loop_enabled_ ? seconds_to_samples(loop_end_s_, track.sample_rate_hz) : 0);
+        session_.set_loop(loop);
     }
-    if (loop_enabled_) {
+    if (loop.enabled) {
         ImGui::SameLine();
-        ImGui::Text("%s to %s", format_time(loop_start_s_).c_str(),
-                    format_time(loop_end_s_).c_str());
+        ImGui::Text("%s to %s", format_time(loop.start_s).c_str(), format_time(loop.end_s).c_str());
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(10.0f * ImGui::GetFontSize());
@@ -98,20 +95,22 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
     ImPlot::PlotShaded("##wave", track.overview_time_s.data(), track.overview_min.data(),
                        track.overview_max.data(), static_cast<int>(track.overview_time_s.size()));
 
-    if (loop_enabled_) {
-        const double before_start = loop_start_s_;
-        const double before_end = loop_end_s_;
+    LoopRegion loop = session_.loop();
+    if (loop.enabled) {
         const ImVec4 loop_colour(0.95f, 0.75f, 0.2f, 1.0f);
-        ImPlot::DragLineX(1, &loop_start_s_, loop_colour, 2.0f);
-        ImPlot::DragLineX(2, &loop_end_s_, loop_colour, 2.0f);
-        loop_start_s_ = std::clamp(loop_start_s_, 0.0, track.duration_s);
-        loop_end_s_ = std::clamp(loop_end_s_, 0.0, track.duration_s);
-        if (loop_start_s_ != before_start || loop_end_s_ != before_end) {
-            transport.set_loop(
-                seconds_to_samples(std::min(loop_start_s_, loop_end_s_), track.sample_rate_hz),
-                seconds_to_samples(std::max(loop_start_s_, loop_end_s_), track.sample_rate_hz));
+        const bool moved = ImPlot::DragLineX(1, &loop.start_s, loop_colour, 2.0f) |
+                           ImPlot::DragLineX(2, &loop.end_s, loop_colour, 2.0f);
+        if (moved) {
+            loop.start_s = std::clamp(loop.start_s, 0.0, track.duration_s);
+            loop.end_s = std::clamp(loop.end_s, 0.0, track.duration_s);
+            session_.set_loop(loop);
         }
     }
+    // The visible range of the other plots, so it is easy to see where they are looking.
+    double view_bottom = -1.0;
+    double view_top = 1.0;
+    ImPlot::DragRect(3, &session_.view.min_s, &view_bottom, &session_.view.max_s, &view_top,
+                     ImVec4(1.0f, 1.0f, 1.0f, 0.25f), ImPlotDragToolFlags_NoInputs);
 
     const double playhead_s = samples_to_seconds(transport.position(), track.sample_rate_hz);
     ImPlot::SetNextLineStyle(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), 1.5f);
@@ -124,7 +123,7 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
                kHandleGrabPixels;
     };
     if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
-        !(loop_enabled_ && (near_handle(loop_start_s_) || near_handle(loop_end_s_)))) {
+        !(loop.enabled && (near_handle(loop.start_s) || near_handle(loop.end_s)))) {
         const double target_s = std::clamp(ImPlot::GetPlotMousePos().x, 0.0, track.duration_s);
         transport.seek(seconds_to_samples(target_s, track.sample_rate_hz));
     }

@@ -1,6 +1,8 @@
 // Psyight entry point: opens the main window with a Dear ImGui docking workspace.
 
+#include "core/paths.h"
 #include "gui/analysis_view.h"
+#include "gui/bass_roll_view.h"
 #include "gui/command_line.h"
 #include "gui/frame_pacing.h"
 #include "gui/layout.h"
@@ -43,6 +45,28 @@ void on_files_dropped(GLFWwindow *window, int count, const char *paths[]) {
     }
 }
 
+// Global shortcuts. Text fields keep Ctrl+Z for their own undo: global routing gives way to them.
+void handle_shortcuts(psyight::Session &session) {
+    if (!session.has_track()) {
+        return;
+    }
+    constexpr ImGuiInputFlags kGlobal = ImGuiInputFlags_RouteGlobal;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, kGlobal)) {
+        if (const psyight::Result<void> saved = session.save_labels(); saved) {
+            spdlog::info("Saved {}", psyight::path_to_utf8(session.labels_path().filename()));
+        } else {
+            spdlog::error("{}", saved.error().message);
+        }
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, kGlobal)) {
+        session.labels().undo();
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y, kGlobal) ||
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, kGlobal)) {
+        session.labels().redo();
+    }
+}
+
 } // namespace
 
 int main() {
@@ -69,6 +93,7 @@ int main() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
+    ImPlot::GetInputMap().Pan = ImGuiMouseButton_Middle; // The left button edits labels.
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
@@ -92,6 +117,7 @@ int main() {
         psyight::Session session;
         psyight::TransportPanel transport_panel(session);
         psyight::AnalysisView analysis_view(session);
+        psyight::BassRollView bass_roll_view(session);
         glfwSetWindowUserPointer(window, &session);
         glfwSetDropCallback(window, on_files_dropped);
         if (const auto paths = psyight::command_line_paths(); !paths.empty()) {
@@ -122,7 +148,8 @@ int main() {
                 }
                 ImGui::EndMainMenuBar();
             }
-            const ImGuiID dockspace_id = ImGui::GetID("Main dock space");
+            // Bump the version when panels are added, so saved layouts get the new default once.
+            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v2");
             if (reset_layout || ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
                 psyight::apply_default_layout(dockspace_id); // First run, or View > Reset layout.
                 reset_layout = false;
@@ -131,6 +158,9 @@ int main() {
             session.update();
             transport_panel.draw();
             analysis_view.draw();
+            bass_roll_view.draw_roll();
+            bass_roll_view.draw_inspector();
+            handle_shortcuts(session);
             if (show_imgui_demo) {
                 ImGui::ShowDemoWindow(&show_imgui_demo);
             }

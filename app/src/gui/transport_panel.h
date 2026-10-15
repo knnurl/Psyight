@@ -17,9 +17,6 @@ class TransportPanel {
 
     Session &session_;
     const LoadedTrack *shown_track_ = nullptr; // Detects a newly loaded track.
-    bool loop_enabled_ = false;
-    double loop_start_s_ = 0.0;
-    double loop_end_s_ = 0.0;
     float volume_db_ = 0.0f;
 };
 
