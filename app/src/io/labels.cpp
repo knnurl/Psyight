@@ -1,5 +1,7 @@
 #include "io/labels.h"
 
+#include "core/paths.h"
+
 #include <nlohmann/json.hpp>
 
 #include <fstream>
@@ -132,13 +134,13 @@ std::filesystem::path labels_path_for(const std::filesystem::path &audio_path) {
 Result<Labels> load_labels(const std::filesystem::path &path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        return Error{"cannot open " + path.string()};
+        return Error{"cannot open " + path_to_utf8(path)};
     }
     std::ostringstream contents;
     contents << file.rdbuf();
     Result<Labels> labels = parse_labels_json(contents.str());
     if (!labels) {
-        return Error{path.string() + ": " + labels.error().message};
+        return Error{path_to_utf8(path) + ": " + labels.error().message};
     }
     return labels;
 }
@@ -151,12 +153,12 @@ Result<void> save_labels(const std::filesystem::path &path, const Labels &labels
     {
         std::ofstream file(temp_path, std::ios::binary | std::ios::trunc);
         if (!file) {
-            return Error{"cannot write " + temp_path.string()};
+            return Error{"cannot write " + path_to_utf8(temp_path)};
         }
         file << to_labels_json(labels);
         file.close();
         if (!file) {
-            return Error{"failed writing " + temp_path.string()};
+            return Error{"failed writing " + path_to_utf8(temp_path)};
         }
     }
     std::error_code error;
@@ -164,7 +166,7 @@ Result<void> save_labels(const std::filesystem::path &path, const Labels &labels
     if (error) {
         const std::string reason = error.message();
         std::filesystem::remove(temp_path, error);
-        return Error{"cannot replace " + path.string() + ": " + reason};
+        return Error{"cannot replace " + path_to_utf8(path) + ": " + reason};
     }
     return {};
 }
