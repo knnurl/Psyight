@@ -24,6 +24,8 @@ constexpr double kHatHighpassHz = 8000.0;
 constexpr double kHatDecayTauMs = 20.0;
 constexpr double kHatLengthMs = 80.0;
 constexpr double kAttackMs = 1.0;
+constexpr double kGhostVelocity = 0.4;      // As in prototypes/bassline_reaction_simulator.html.
+constexpr double kMaxCutoffFraction = 0.45; // Of the sample rate; keeps tan() finite.
 
 // Deterministic on every platform, unlike std:: distributions.
 class SplitMix64 {
@@ -47,7 +49,8 @@ class SplitMix64 {
 class OnePole {
   public:
     double lowpass(double x, double cutoff_hz, double sample_rate_hz) {
-        const double g = std::tan(kPi * cutoff_hz / sample_rate_hz);
+        const double safe_cutoff_hz = std::min(cutoff_hz, kMaxCutoffFraction * sample_rate_hz);
+        const double g = std::tan(kPi * safe_cutoff_hz / sample_rate_hz);
         const double v = (x - state_) * g / (1.0 + g);
         const double y = v + state_;
         state_ = y + v;
@@ -82,15 +85,15 @@ std::int64_t ms_to_samples(double ms, int sample_rate_hz) {
 
 // A bass note resolved to sample positions.
 struct ResolvedNote {
-    std::int64_t onset = 0;
-    std::int64_t gate_off = 0;
+    std::int64_t onset_samples = 0;
+    std::int64_t gate_off_samples = 0;
     int midi = 0;
     double velocity = 1.0; // Of the attack that is sounding (slides keep the previous attack's).
     bool slide_in = false;
     bool slide_out = false;
 };
 
-std::vector<ResolvedNote> resolve_notes(std::vector<BassEvent> events, std::int64_t lead_in,
+std::vector<ResolvedNote> resolve_notes(std::vector<BassEvent> events, std::int64_t lead_in_samples,
                                         double slot_samples, std::int64_t total_samples) {
     std::stable_sort(events.begin(), events.end(), [](const BassEvent &a, const BassEvent &b) {
         return a.start_slots < b.start_slots;
@@ -98,23 +101,29 @@ std::vector<ResolvedNote> resolve_notes(std::vector<BassEvent> events, std::int6
     std::vector<ResolvedNote> notes;
     for (const BassEvent &event : events) {
         ResolvedNote note;
-        note.onset = lead_in + std::llround(event.start_slots * slot_samples);
-        note.gate_off = note.onset + std::llround(event.length_slots * slot_samples);
+        note.onset_samples = lead_in_samples + std::llround(event.start_slots * slot_samples);
+        note.gate_off_samples =
+            note.onset_samples + std::llround(event.length_slots * slot_samples);
         note.midi = event.midi;
         note.velocity = event.velocity;
         note.slide_in = event.slide_in && !notes.empty();
-        if (note.onset >= total_samples) {
+        if (note.onset_samples >= total_samples) {
             break;
         }
-        note.gate_off = std::min(note.gate_off, total_samples);
+        note.gate_off_samples = std::min(note.gate_off_samples, total_samples);
         if (!notes.empty()) {
             ResolvedNote &previous = notes.back();
             if (note.slide_in) {
-                previous.gate_off = note.onset; // Held until the glide starts.
+                previous.gate_off_samples = note.onset_samples; // Held until the glide starts.
                 previous.slide_out = true;
                 note.velocity = previous.velocity;
             } else {
-                previous.gate_off = std::min(previous.gate_off, note.onset); // Monophonic.
+                previous.gate_off_samples =
+                    std::min(previous.gate_off_samples, note.onset_samples); // Monophonic.
+            }
+            if (previous.gate_off_samples <= previous.onset_samples) {
+                notes.pop_back(); // A coincident event left it no length.
+                note.slide_in = note.slide_in && !notes.empty();
             }
         }
         notes.push_back(note);
@@ -135,8 +144,8 @@ std::vector<BassEvent> make_pattern(Pattern pattern, int bars, int root_midi, do
         case Pattern::rolling:
         case Pattern::rolling_ghost:
         case Pattern::rolling_octave_jump:
-            add(base + 1, 1.0, root_midi, pattern == Pattern::rolling_ghost ? 0.5 : 1.0);
-            add(base + 2, 1.0, root_midi, 1.0);
+            add(base + 1, 1.0, root_midi, 1.0);
+            add(base + 2, 1.0, root_midi, pattern == Pattern::rolling_ghost ? kGhostVelocity : 1.0);
             add(base + 3, 1.0, pattern == Pattern::rolling_octave_jump ? root_midi + 12 : root_midi,
                 1.0);
             break;
@@ -161,25 +170,26 @@ std::vector<BassEvent> make_pattern(Pattern pattern, int bars, int root_midi, do
 SynthOutput render(const SynthParams &params, const std::vector<BassEvent> &events) {
     const int sr = params.sample_rate_hz;
     const double slot_samples = sr * 60.0 / params.bpm / kSlotsPerBeat;
-    const std::int64_t lead_in = std::llround(params.lead_in_s * sr);
+    const std::int64_t lead_in_samples = std::llround(params.lead_in_s * sr);
     const int total_slots = params.bars * kSlotsPerBar;
-    const std::int64_t total_samples =
-        lead_in + std::llround(total_slots * slot_samples) + std::llround(params.tail_s * sr);
+    const std::int64_t total_samples = lead_in_samples + std::llround(total_slots * slot_samples) +
+                                       std::llround(params.tail_s * sr);
     std::vector<double> mix(static_cast<size_t>(total_samples), 0.0);
     SplitMix64 rng(params.seed);
 
-    std::vector<std::int64_t> kick_onsets;
+    std::vector<std::int64_t> kick_onset_samples;
     for (int beat = 0; beat < total_slots / kSlotsPerBeat; ++beat) {
-        kick_onsets.push_back(lead_in + std::llround(beat * kSlotsPerBeat * slot_samples));
+        kick_onset_samples.push_back(lead_in_samples +
+                                     std::llround(beat * kSlotsPerBeat * slot_samples));
     }
 
     if (params.kick) {
-        const std::int64_t length = ms_to_samples(kKickLengthMs, sr);
-        const std::int64_t click_length = ms_to_samples(kClickLengthMs, sr);
-        for (const std::int64_t onset : kick_onsets) {
+        const std::int64_t length_samples = ms_to_samples(kKickLengthMs, sr);
+        const std::int64_t click_length_samples = ms_to_samples(kClickLengthMs, sr);
+        for (const std::int64_t onset_samples : kick_onset_samples) {
             double phase = 0.0;
             OnePole click_filter;
-            for (std::int64_t i = 0; i < length && onset + i < total_samples; ++i) {
+            for (std::int64_t i = 0; i < length_samples && onset_samples + i < total_samples; ++i) {
                 const double t_ms = 1e3 * i / sr;
                 const double frequency_hz =
                     t_ms < kKickSweepMs
@@ -187,24 +197,24 @@ SynthOutput render(const SynthParams &params, const std::vector<BassEvent> &even
                         : kKickEndHz;
                 double sample = std::exp(-t_ms / kKickDecayTauMs) * std::sin(2.0 * kPi * phase);
                 phase += frequency_hz / sr;
-                if (params.kick_click && i < click_length) {
+                if (params.kick_click && i < click_length_samples) {
                     sample += kClickLevel * std::exp(-t_ms / kClickDecayTauMs) *
                               click_filter.highpass(rng.next_bipolar(), kClickHighpassHz, sr);
                 }
-                mix[static_cast<size_t>(onset + i)] += params.kick_level * sample;
+                mix[static_cast<size_t>(onset_samples + i)] += params.kick_level * sample;
             }
         }
     }
 
     if (params.hats) {
-        const std::int64_t length = ms_to_samples(kHatLengthMs, sr);
+        const std::int64_t length_samples = ms_to_samples(kHatLengthMs, sr);
         for (int beat = 0; beat < total_slots / kSlotsPerBeat; ++beat) {
-            const std::int64_t onset =
-                lead_in + std::llround((beat * kSlotsPerBeat + 2) * slot_samples);
+            const std::int64_t onset_samples =
+                lead_in_samples + std::llround((beat * kSlotsPerBeat + 2) * slot_samples);
             OnePole filter;
-            for (std::int64_t i = 0; i < length && onset + i < total_samples; ++i) {
+            for (std::int64_t i = 0; i < length_samples && onset_samples + i < total_samples; ++i) {
                 const double t_ms = 1e3 * i / sr;
-                mix[static_cast<size_t>(onset + i)] +=
+                mix[static_cast<size_t>(onset_samples + i)] +=
                     params.hat_level * std::exp(-t_ms / kHatDecayTauMs) *
                     filter.highpass(rng.next_bipolar(), kHatHighpassHz, sr);
             }
@@ -213,7 +223,7 @@ SynthOutput render(const SynthParams &params, const std::vector<BassEvent> &even
 
     // Monophonic bass voice.
     const std::vector<ResolvedNote> notes =
-        resolve_notes(events, lead_in, slot_samples, total_samples);
+        resolve_notes(events, lead_in_samples, slot_samples, total_samples);
     const double attack_samples = kAttackMs * 1e-3 * sr;
     const double decay_tau_samples = params.bass_decay_tau_ms * 1e-3 * sr;
     const double release_samples = params.bass_release_ms * 1e-3 * sr;
@@ -225,55 +235,57 @@ SynthOutput render(const SynthParams &params, const std::vector<BassEvent> &even
                std::exp(-since_attack / decay_tau_samples);
     };
     size_t current = 0;
-    std::int64_t attack_start = 0;
+    std::int64_t attack_start_samples = 0;
     double glide_from_hz = 0.0;
     double frequency_hz = 0.0;
     double phase = 0.0;
     OnePole filter_a;
     OnePole filter_b;
-    size_t next_kick = 0;
-    std::int64_t last_kick = -1;
+    size_t next_kick_index = 0;
+    std::int64_t last_kick_samples = -1;
     for (std::int64_t n = 0; !notes.empty() && n < total_samples; ++n) {
-        if (n < notes[0].onset) {
+        if (n < notes[0].onset_samples) {
             continue;
         }
-        while (current + 1 < notes.size() && n >= notes[current + 1].onset) {
+        while (current + 1 < notes.size() && n >= notes[current + 1].onset_samples) {
             ++current;
             if (notes[current].slide_in) {
                 glide_from_hz = frequency_hz;
             } else {
-                attack_start = n;
+                attack_start_samples = n;
             }
         }
         const ResolvedNote &note = notes[current];
-        if (n == notes[0].onset) {
-            attack_start = n;
+        if (n == notes[0].onset_samples) {
+            attack_start_samples = n;
         }
         const double target_hz = midi_to_hz(note.midi);
         if (note.slide_in) {
             const double progress =
-                std::min(1.0, static_cast<double>(n - note.onset) / slide_samples);
+                std::min(1.0, static_cast<double>(n - note.onset_samples) / slide_samples);
             frequency_hz = glide_from_hz * std::pow(target_hz / glide_from_hz, progress);
         } else {
             frequency_hz = target_hz;
         }
 
-        double amplitude = envelope(static_cast<double>(n - attack_start), note.velocity);
-        if (n >= note.gate_off) {
-            const double at_gate_off =
-                envelope(static_cast<double>(note.gate_off - attack_start), note.velocity);
-            amplitude = at_gate_off * std::max(0.0, 1.0 - static_cast<double>(n - note.gate_off) /
-                                                              release_samples);
+        double amplitude = envelope(static_cast<double>(n - attack_start_samples), note.velocity);
+        if (n >= note.gate_off_samples) {
+            const double at_gate_off = envelope(
+                static_cast<double>(note.gate_off_samples - attack_start_samples), note.velocity);
+            amplitude =
+                at_gate_off * std::max(0.0, 1.0 - static_cast<double>(n - note.gate_off_samples) /
+                                                      release_samples);
         }
 
-        while (next_kick < kick_onsets.size() && kick_onsets[next_kick] <= n) {
-            last_kick = kick_onsets[next_kick++];
+        while (next_kick_index < kick_onset_samples.size() &&
+               kick_onset_samples[next_kick_index] <= n) {
+            last_kick_samples = kick_onset_samples[next_kick_index++];
         }
-        const double duck =
-            last_kick < 0
-                ? 1.0
-                : 1.0 - params.sidechain_depth *
-                            std::exp(-static_cast<double>(n - last_kick) / sidechain_tau_samples);
+        const double duck = last_kick_samples < 0
+                                ? 1.0
+                                : 1.0 - params.sidechain_depth *
+                                            std::exp(-static_cast<double>(n - last_kick_samples) /
+                                                     sidechain_tau_samples);
 
         const double phase_step = frequency_hz / sr;
         const double saw = 2.0 * phase - 1.0 - poly_blep(phase, phase_step);
@@ -282,7 +294,7 @@ SynthOutput render(const SynthParams &params, const std::vector<BassEvent> &even
         const double cutoff_hz =
             params.filter_end_hz +
             (params.filter_start_hz - params.filter_end_hz) *
-                std::exp(-static_cast<double>(n - attack_start) / filter_tau_samples);
+                std::exp(-static_cast<double>(n - attack_start_samples) / filter_tau_samples);
         const double filtered =
             filter_b.lowpass(filter_a.lowpass(saw, cutoff_hz, sr), cutoff_hz, sr);
         mix[static_cast<size_t>(n)] += params.bass_level * duck * amplitude * filtered;
@@ -303,10 +315,10 @@ SynthOutput render(const SynthParams &params, const std::vector<BassEvent> &even
     const auto seconds = [sr](std::int64_t samples) { return static_cast<double>(samples) / sr; };
     labels.audio = "synthetic";
     labels.sample_rate = sr;
-    labels.grid = {params.bpm, seconds(lead_in)};
+    labels.grid = {params.bpm, seconds(lead_in_samples)};
     labels.regions.push_back({0.0, seconds(total_samples), true});
-    for (size_t beat = 0; beat < kick_onsets.size(); ++beat) {
-        const double t_s = seconds(kick_onsets[beat]);
+    for (size_t beat = 0; beat < kick_onset_samples.size(); ++beat) {
+        const double t_s = seconds(kick_onset_samples[beat]);
         if (params.kick) {
             labels.kicks.push_back({t_s});
         }
@@ -316,8 +328,8 @@ SynthOutput render(const SynthParams &params, const std::vector<BassEvent> &even
         }
     }
     for (const ResolvedNote &note : notes) {
-        labels.bass_notes.push_back({seconds(note.onset), seconds(note.gate_off), note.midi, 0.0,
-                                     note.slide_in, note.slide_out, note.velocity});
+        labels.bass_notes.push_back({seconds(note.onset_samples), seconds(note.gate_off_samples),
+                                     note.midi, 0.0, note.slide_in, note.slide_out, note.velocity});
     }
     return output;
 }

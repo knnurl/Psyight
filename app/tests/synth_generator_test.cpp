@@ -141,8 +141,9 @@ TEST_CASE("synth: the six patterns place notes on the documented slots") {
     CHECK(gallop[0].length_slots == doctest::Approx(0.5 * 4.0 / 3.0));
 
     const std::vector<BassEvent> ghost = make_pattern(Pattern::rolling_ghost, 1, 29, 0.5);
-    CHECK(ghost[0].velocity == 0.5);
-    CHECK(ghost[1].velocity == 1.0);
+    CHECK(ghost[0].velocity == 1.0);
+    CHECK(ghost[1].velocity == 0.4); // K B b B, as in the prototype.
+    CHECK(ghost[2].velocity == 1.0);
     const std::vector<BassEvent> jump = make_pattern(Pattern::rolling_octave_jump, 1, 29, 0.5);
     CHECK(jump[0].midi == 29);
     CHECK(jump[2].midi == 41);
@@ -320,4 +321,73 @@ TEST_CASE("synth: the full mix stays below full scale and its labels survive JSO
     const Result<Labels> parsed = parse_labels_json(json.value());
     REQUIRE(parsed.ok());
     CHECK(parsed.value() == out.labels);
+}
+
+TEST_CASE("synth: the bass decays with the configured time constant") {
+    SynthParams params = bass_only();
+    params.bass_decay_tau_ms = 200.0;
+    params.filter_start_hz =
+        300.0; // No filter envelope, so only the amplitude decay changes level.
+    params.filter_end_hz = 300.0;
+    const SynthOutput out = render(params, {{0.0, 12.0, 29, 1.0, false}});
+    const std::int64_t onset = to_samples(out.labels.bass_notes[0].onset_s);
+    // 200 ms apart: the level falls by e. Windows span a whole number of periods (4 x 1099.6
+    // samples at 43.65 Hz) so the waveform's phase does not bias their RMS.
+    const std::int64_t window = 4398;
+    const double ratio = rms(out.samples, onset + 19200, onset + 19200 + window) /
+                         rms(out.samples, onset + 9600, onset + 9600 + window);
+    CHECK(std::abs(ratio - std::exp(-1.0)) < 0.02);
+}
+
+TEST_CASE("synth: a slide glides over slide_time_ms instead of jumping") {
+    SynthParams params = bass_only();
+    params.bass_decay_tau_ms = 5000.0;
+    params.slide_time_ms = 200.0;
+    const SynthOutput out =
+        render(params, {{0.0, 4.0, 41, 1.0, false}, {4.0, 16.0, 53, 1.0, true}});
+    const std::int64_t boundary = to_samples(out.labels.bass_notes[1].onset_s);
+    // Over the first 100 ms of a 200 ms glide from 87 Hz to 175 Hz, the pitch is still low.
+    const double gliding_hz = autocorrelation_pitch_hz(out.samples, boundary, boundary + 4800);
+    CHECK(gliding_hz < 0.8 * midi_hz(53));
+    CHECK(gliding_hz > 1.05 * midi_hz(41));
+}
+
+TEST_CASE("synth: a slide note's label carries the sounding (previous) velocity") {
+    const SynthOutput out =
+        render(bass_only(), {{0.0, 4.0, 29, 1.0, false}, {4.0, 4.0, 36, 0.5, true}});
+    REQUIRE(out.labels.bass_notes.size() == 2);
+    CHECK(out.labels.bass_notes[1].velocity == 1.0);
+}
+
+TEST_CASE("synth: a slide flag on the first note is ignored and the output stays finite") {
+    const SynthOutput out = render(bass_only(), {{0.0, 4.0, 29, 1.0, true}});
+    REQUIRE(out.labels.bass_notes.size() == 1);
+    CHECK_FALSE(out.labels.bass_notes[0].slide_in);
+    CHECK(std::all_of(out.samples.begin(), out.samples.end(),
+                      [](float s) { return std::isfinite(s); }));
+}
+
+TEST_CASE("synth: notes running past the end are clipped to the audio") {
+    SynthParams params = bass_only();
+    params.tail_s = 0.1;
+    const SynthOutput out = render(params, {{60.0, 40.0, 29, 1.0, false}});
+    REQUIRE(out.labels.bass_notes.size() == 1);
+    CHECK(out.labels.bass_notes[0].offset_s <=
+          static_cast<double>(out.samples.size()) / kSampleRateHz);
+}
+
+TEST_CASE("synth: coincident events leave no zero-length note") {
+    const SynthOutput out =
+        render(bass_only(), {{2.0, 0.5, 29, 1.0, false}, {2.0, 0.5, 31, 1.0, false}});
+    REQUIRE(out.labels.bass_notes.size() == 1);
+    CHECK(out.labels.bass_notes[0].offset_s > out.labels.bass_notes[0].onset_s);
+}
+
+TEST_CASE("synth: hats stay finite at a sample rate where 8 kHz is near Nyquist") {
+    SynthParams params;
+    params.sample_rate_hz = 12000;
+    params.hats = true;
+    const SynthOutput out = render(params, {});
+    CHECK(std::all_of(out.samples.begin(), out.samples.end(),
+                      [](float s) { return std::isfinite(s); }));
 }

@@ -10,7 +10,11 @@
 //   notes are monophonic: a note's offset is clipped to the next onset.
 // - Slide: a note with slide_in glides from the previous pitch without re-attacking. The previous
 //   note's gate stays open until the slide note's onset and is labelled slide_out.
-// - Sidechain ducking changes the bass level only; it never ends a note.
+// - Sidechain ducking changes the bass level only; it never ends a note. It is keyed from the beat
+//   grid, not the rendered kick, so it also works with the kick off (isolated bass tests).
+// - Velocity is the attack's scale before ducking. A slide keeps the previous attack, so its own
+//   velocity field is ignored and its label carries the previous note's velocity.
+// - An event that a coincident event leaves with no length is dropped.
 // Rendering is a pure function of the parameters and events: same input, bit-identical output.
 #pragma once
 
@@ -61,7 +65,7 @@ struct SynthParams {
 // The six bass patterns from the browser prototype. K is the kick, B a bass note, - a rest.
 enum class Pattern {
     rolling,             // K B B B
-    rolling_ghost,       // K B B B, first B at half velocity
+    rolling_ghost,       // K B b B, the second B at 0.4 velocity (as in the prototype)
     rolling_octave_jump, // K B B B, last B an octave up
     triplet_gallop,      // K B B on a triplet grid
     offbeat_double,      // K - B B
