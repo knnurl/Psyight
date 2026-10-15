@@ -660,6 +660,7 @@ Initial metric targets are placeholders, marked **[Guessing]**. Replace them wit
 | 2026-10-15 | Three GUI depths: Operate, Tune, Engineer | Keeps "everything customisable" usable live |
 | 2026-10-15 | First milestone is the bass roll with ground truth | Accuracy is priority one and needs a measurement before any effects |
 | 2026-10-15 | Flash limiter on by default at 3 per second | Photosensitivity: rolling 16ths at 160 BPM are a 10.7 Hz strobe if mapped to brightness |
+| 2026-10-15 | Build with CMake presets (Ninja Multi-Config) and vcpkg manifest mode, triplet `x64-windows-static-md`. The registry baseline is pinned in `app/vcpkg-configuration.json` to the snapshot bundled with Visual Studio (`b1b19307`, 2025-08-30). vcpkg compiles the dependencies with the developer shell's Visual Studio instance | Ninja uses whichever MSVC the shell provides and exports `compile_commands.json`. The pinned baseline makes clean checkouts reproducible and matches the bundled vcpkg's scripts. Static third-party libraries with the shared CRT leave no third-party DLLs to ship; the target machine needs the VC++ 2015-2022 x64 redistributable. One toolset for app and dependencies avoids static-library link mismatches |
 
 Superseded during the conversation: an early suggestion to use JUCE for the C++ engine (replaced by the permissive stack) and an early "prototype in Python first" plan (replaced by the owner's choice of C++ from the start).
 
@@ -691,7 +692,7 @@ Superseded during the conversation: an early suggestion to use JUCE for the C++ 
 | A7 | ONNX Runtime with DirectML gives a few ms per frame for the student on a laptop GPU | [Guessing] | M4 and M5 latency |
 | A8 | mir_eval defaults: onset ±50 ms; note offset ratio 0.2 with 50 ms minimum | [Likely] | Metric cross-check |
 | A9 | The kick returning after 8 or more bars is a reliable drop detector in dark psy | [Likely] | Section detection |
-| A10 | vcpkg ports exist for imgui (docking), implot, miniaudio, pffft, nlohmann-json, spdlog, doctest, rtmidi; ONNX Runtime DirectML may need NuGet or a manual package | [Verify] | Build setup |
+| A10 | vcpkg ports exist for imgui (docking), implot, miniaudio, pffft, nlohmann-json, spdlog, doctest, rtmidi; ONNX Runtime DirectML may need NuGet or a manual package. The M1 set was verified on 2026-10-15 at baseline `b1b19307`: it builds and links with MSVC 19.44, and `ctest --preset windows-msvc-release` passes smoke tests for pffft, miniaudio and nlohmann-json. rtmidi and ONNX Runtime are not yet checked | [Certain] for the M1 set; [Verify] for rtmidi and ONNX Runtime | Build setup |
 | A11 | WASAPI loopback via miniaudio captures the laptop output reliably at 48 kHz | [Likely] | M5 |
 | A12 | Single-ended 5 V pixel data is reliable over only a few metres | [Likely] | Rig and node placement |
 

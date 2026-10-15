@@ -115,11 +115,11 @@ The owner hasn't decided whether this will be personal, open source or commercia
 
 ## Commands
 
-Create these presets during M1 scaffolding and keep this section accurate:
+Run these from `app/` in an x64 Visual Studio 2022 developer shell: the "x64 Native Tools Command Prompt for VS 2022", or PowerShell after `& "<VS 2022 dir>\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64`. The default Developer PowerShell targets x86, which the build rejects. The shell sets `VCPKG_ROOT` to the vcpkg bundled with Visual Studio, and the build makes vcpkg compile the dependencies with that same Visual Studio instance. A Visual Studio 2026 18.0 shell fails: its bundled vcpkg (2025-09-03) doesn't recognise the v145 toolset. Keep this section accurate.
 - Configure: `cmake --preset windows-msvc`
 - Build: `cmake --build --preset windows-msvc-release`
 - Test: `ctest --preset windows-msvc-release`
-- Run: `build/windows-msvc/release/psylight.exe`
+- Run: `build\windows-msvc\release\psylight.exe`
 
 ## Repository layout (target)
 
