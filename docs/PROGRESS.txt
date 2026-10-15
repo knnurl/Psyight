@@ -44,8 +44,8 @@ Last updated: 2026-10-15
 - Pending (blocked by a session limit on 2026-10-15): mir_eval cross-check on 300+ cases, mutation testing, review.
 
 ## Next M1 steps
-1. Core pieces: timebase, SPSC queue, minimal parameter registry. (in progress)
-2. Audio: decode to 48 kHz mono, WASAPI transport (play, pause, seek, loop).
+1. Done: core pieces (timebase and grid, SPSC queue, parameter registry with presets). 40 test cases, 464 assertions.
+2. Audio: decode to 48 kHz mono, WASAPI transport (play, pause, seek, loop). (next)
 3. Front end: STFT (pffft), filterbank and envelopes, spectrogram and band plots, manual grid.
 4. Bass roll and labelling tools; label about 60 s of `data/OculusDrift.mp3`.
 5. Bass tracker v0, golden-metric regression tests, and the baseline in `docs/results/M1.md`.
