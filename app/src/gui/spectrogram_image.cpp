@@ -23,4 +23,24 @@ std::vector<std::uint32_t> spectrogram_tile_rgba(const LogSpectrogram &spectrogr
     return pixels;
 }
 
+std::pair<float, float> display_range(const LogSpectrogram &image, double low_q, double high_q) {
+    constexpr size_t kSampleStride = 7; // Every 7th value is plenty and keeps this fast.
+    std::vector<float> sample;
+    for (size_t i = 0; i < image.db.size(); i += kSampleStride) {
+        sample.push_back(image.db[i]);
+    }
+    if (sample.empty()) {
+        return {0.0f, 1.0f};
+    }
+    const auto quantile = [&sample](double q) {
+        const auto index = static_cast<size_t>(q * static_cast<double>(sample.size() - 1));
+        std::nth_element(sample.begin(), sample.begin() + static_cast<std::ptrdiff_t>(index),
+                         sample.end());
+        return sample[index];
+    };
+    const float low = quantile(low_q);
+    const float high = quantile(high_q);
+    return {low, std::max(high, low + 1.0f)};
+}
+
 } // namespace psyight

@@ -2,6 +2,7 @@
 
 #include "core/paths.h"
 #include "core/pitch.h"
+#include "gui/spectrogram_image.h"
 #include "gui/time_plot.h"
 
 #include <imgui.h>
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <tuple>
 #include <vector>
 
 namespace psyight {
@@ -28,6 +30,10 @@ constexpr ImU32 kSlideLine = IM_COL32(150, 240, 225, 200);
 constexpr ImU32 kBlackKeyRow = IM_COL32(255, 255, 255, 10);
 constexpr ImU32 kCompleteRegion = IM_COL32(80, 200, 120, 28);
 constexpr ImU32 kIncompleteRegion = IM_COL32(200, 200, 200, 18);
+constexpr double kPitchRangeLowQuantile = 0.6; // Most frames are quiet: keep them dark.
+constexpr double kPitchRangeHighQuantile = 0.997;
+static_assert(kLowestMidi == kSalienceFirstMidi && kHighestMidi == kSalienceLastMidi,
+              "the bass roll rows and the salience rows must match");
 
 bool is_black_key(int midi) {
     const int pitch_class = midi % 12;
@@ -86,6 +92,29 @@ void BassRollView::draw_roll() {
     ImGui::TextDisabled(
         "Double-click: new note. Drag: move or resize. Right-click: delete. Middle-drag: pan. "
         "Ctrl+click: seek.");
+    ImGui::Checkbox("Pitch background", &show_pitch_);
+    if (show_pitch_) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(12.0f * ImGui::GetFontSize());
+        if (ImGui::DragFloatRange2("##pitch range", &pitch_min_db_, &pitch_max_db_, 0.25f, -120.0f,
+                                   0.0f, "%.0f dB", "%.0f dB", ImGuiSliderFlags_AlwaysClamp)) {
+            pitch_max_db_ = std::max(pitch_max_db_, pitch_min_db_ + 1.0f);
+            pitch_range_changed_ = true;
+        }
+    }
+    const FrontEndResult *analysis = track.analysis.get();
+    if (analysis != nullptr && !salience_textures_.built_for(&analysis->pitch_salience)) {
+        // A new track: start from its own value range (quiet frames dark, peaks bright).
+        std::tie(pitch_min_db_, pitch_max_db_) = display_range(
+            analysis->pitch_salience, kPitchRangeLowQuantile, kPitchRangeHighQuantile);
+        pitch_range_changed_ = true;
+    }
+    if (analysis != nullptr && pitch_range_changed_) {
+        salience_textures_.build(analysis->pitch_salience, analysis->hop_samples,
+                                 analysis->sample_rate_hz, pitch_min_db_, pitch_max_db_,
+                                 implot_colour_table(ImPlotColormap_Plasma));
+        pitch_range_changed_ = false;
+    }
     ImGui::SameLine();
     ImGui::Text("| %zu notes%s", labels.labels().bass_notes.size(),
                 labels.dirty() ? ", unsaved" : "");
@@ -117,7 +146,12 @@ void BassRollView::draw_roll() {
         const ImPlotRect limits = ImPlot::GetPlotLimits();
         ImPlot::PushPlotClipRect();
         ImDrawList *draw = ImPlot::GetPlotDrawList();
-        for (int midi = kLowestMidi; midi <= kHighestMidi; ++midi) {
+        if (show_pitch_ && analysis != nullptr) {
+            ImPlot::PopPlotClipRect();
+            salience_textures_.draw(limits.X.Min, limits.X.Max, kSalienceFirstMidi);
+            ImPlot::PushPlotClipRect();
+        }
+        for (int midi = kLowestMidi; midi <= kHighestMidi && !show_pitch_; ++midi) {
             if (is_black_key(midi)) {
                 draw->AddRectFilled(ImPlot::PlotToPixels(limits.X.Min, midi + 1),
                                     ImPlot::PlotToPixels(limits.X.Max, midi), kBlackKeyRow);

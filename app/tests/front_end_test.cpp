@@ -199,3 +199,42 @@ TEST_CASE("front end: invalid parameters are rejected") {
     bad_range.spectrogram_max_hz = 30000.0;
     CHECK_FALSE(analyse_front_end(x, kSampleRateHz, bad_range).ok());
 }
+
+namespace {
+
+int salience_peak_midi(const LogSpectrogram &salience, int frame) {
+    const float *row = salience.db.data() + static_cast<size_t>(frame) * salience.rows;
+    return kSalienceFirstMidi + static_cast<int>(std::max_element(row, row + salience.rows) - row);
+}
+
+} // namespace
+
+TEST_CASE("pitch salience: the brightest row of a held note is its exact semitone") {
+    for (const int midi : {26, 29, 30, 33, 36, 41}) { // D1 to F2.
+        CAPTURE(midi);
+        synth::SynthParams params;
+        params.kick = false;
+        params.bass_decay_tau_ms = 5000.0;
+        const synth::SynthOutput out = synth::render(params, {{0.0, 16.0, midi, 1.0, false}});
+        const Result<FrontEndResult> result = analyse_front_end(out.samples, kSampleRateHz, {});
+        REQUIRE(result.ok());
+        const int frame = frame_of(out.labels.bass_notes[0].onset_s + 0.5, 256);
+        CHECK(salience_peak_midi(result.value().pitch_salience, frame) == midi);
+    }
+}
+
+TEST_CASE("pitch salience: a rolling octave-jump bassline reads its labelled pitches") {
+    synth::SynthParams params; // Kick on: salience must see the bass between the kicks.
+    const synth::SynthOutput out =
+        synth::render(params, synth::make_pattern(synth::Pattern::rolling_octave_jump, 4, 29, 0.8));
+    const Result<FrontEndResult> result = analyse_front_end(out.samples, kSampleRateHz, {});
+    REQUIRE(result.ok());
+    int correct = 0;
+    for (const BassNoteLabel &note : out.labels.bass_notes) {
+        const int frame = frame_of((note.onset_s + note.offset_s) / 2.0, 256);
+        correct += salience_peak_midi(result.value().pitch_salience, frame) == note.midi ? 1 : 0;
+    }
+    const double accuracy = static_cast<double>(correct) / out.labels.bass_notes.size();
+    MESSAGE("mid-note salience pitch accuracy: " << accuracy);
+    CHECK(accuracy >= 0.9);
+}

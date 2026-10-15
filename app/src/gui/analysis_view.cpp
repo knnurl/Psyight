@@ -21,15 +21,6 @@ constexpr float kMaxDisplayDb = 0.0f;
 constexpr double kFrequencyTicksHz[] = {50, 100, 200, 500, 1000, 2000, 5000, 10000};
 constexpr const char *kFrequencyTickLabels[] = {"50", "100", "200", "500", "1k", "2k", "5k", "10k"};
 
-ColourTable viridis_table() {
-    ColourTable table{};
-    for (size_t i = 0; i < table.size(); ++i) {
-        table[i] = ImGui::ColorConvertFloat4ToU32(
-            ImPlot::SampleColormap(static_cast<float>(i) / 255.0f, ImPlotColormap_Viridis));
-    }
-    return table;
-}
-
 // Plots the visible part of a per-frame series, decimated to at most kMaxPlotPoints.
 void plot_series(const char *label, const std::vector<float> &values, double frame_s, double from_s,
                  double to_s) {
@@ -59,8 +50,9 @@ void AnalysisView::draw() {
         return;
     }
     draw_toolbar(track);
-    if (!textures_.built_for(analysis) || colours_changed_) {
-        textures_.build(*analysis, min_db_, max_db_, viridis_table());
+    if (!textures_.built_for(&analysis->spectrogram) || colours_changed_) {
+        textures_.build(analysis->spectrogram, analysis->hop_samples, analysis->sample_rate_hz,
+                        min_db_, max_db_, implot_colour_table(ImPlotColormap_Viridis));
         colours_changed_ = false;
     }
 

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <future>
 
 namespace psyight {
 
@@ -13,6 +14,7 @@ namespace {
 
 constexpr double kPowerFloor = 1e-12;      // -120 dB.
 constexpr float kFluxCompression = 100.0f; // log(1 + C * |X|) before differencing.
+constexpr double kSalienceFloor = 1e-5;    // -100 dB, so missing harmonics stay finite.
 
 float power_to_db(double power) {
     return static_cast<float>(10.0 * std::log10(std::max(power, kPowerFloor)));
@@ -100,6 +102,11 @@ Result<FrontEndResult> analyse_front_end(std::span<const float> mono, int sample
     if (Result<void> r = flux_stft.prepare(sample_rate_hz, params.flux_window_samples); !r) {
         return r.error();
     }
+    Stft salience_stft;
+    if (Result<void> r = salience_stft.prepare(sample_rate_hz, params.salience_window_samples);
+        !r) {
+        return r.error();
+    }
 
     const auto length = static_cast<SampleIndex>(mono.size());
     const int hop = params.hop_samples;
@@ -107,6 +114,14 @@ Result<FrontEndResult> analyse_front_end(std::span<const float> mono, int sample
     result.sample_rate_hz = sample_rate_hz;
     result.hop_samples = hop;
     result.frames = static_cast<int>((length + hop - 1) / hop);
+
+    // The four parts below are independent and each writes only its own members of `result`, so
+    // they run in parallel; each is a pure function of the input, so the output stays
+    // bit-identical.
+    result.bands.resize(params.bands.size());
+    for (size_t b = 0; b < params.bands.size(); ++b) {
+        result.bands[b].band = params.bands[b];
+    }
 
     // Log-frequency spectrogram.
     LogSpectrogram &spec = result.spectrogram;
@@ -120,14 +135,47 @@ Result<FrontEndResult> analyse_front_end(std::span<const float> mono, int sample
     const std::vector<RowMapping> rows =
         map_rows(spec.row_hz, spectrogram_stft.bin_hz(1), spectrogram_stft.bins());
     spec.db.resize(static_cast<size_t>(spec.frames) * spec.rows);
-    std::vector<float> magnitudes(spectrogram_stft.bins());
-    for (int frame = 0; frame < result.frames; ++frame) {
-        spectrogram_stft.process(mono, static_cast<SampleIndex>(frame) * hop, magnitudes);
-        for (int r = 0; r < spec.rows; ++r) {
-            spec.db[static_cast<size_t>(frame) * spec.rows + r] =
-                power_to_db(row_power(rows[r], magnitudes));
-        }
+
+    // Pitch salience, on the same frame clock with its own longer window.
+    LogSpectrogram &salience = result.pitch_salience;
+    salience.rows = kSalienceLastMidi - kSalienceFirstMidi + 1;
+    salience.frames = result.frames;
+    for (int midi = kSalienceFirstMidi; midi <= kSalienceLastMidi; ++midi) {
+        salience.row_hz.push_back(440.0 * std::pow(2.0, (midi - 69) / 12.0));
     }
+    salience.db.resize(static_cast<size_t>(salience.frames) * salience.rows);
+    const double bin_hz = salience_stft.bin_hz(1);
+    const int last_bin = salience_stft.bins() - 1;
+    std::vector<float> salience_magnitudes(salience_stft.bins());
+
+    auto spectrogram_task = std::async(std::launch::async, [&] {
+        std::vector<float> magnitudes(spectrogram_stft.bins());
+        for (int frame = 0; frame < result.frames; ++frame) {
+            spectrogram_stft.process(mono, static_cast<SampleIndex>(frame) * hop, magnitudes);
+            for (int r = 0; r < spec.rows; ++r) {
+                spec.db[static_cast<size_t>(frame) * spec.rows + r] =
+                    power_to_db(row_power(rows[r], magnitudes));
+            }
+        }
+    });
+    auto salience_task = std::async(std::launch::async, [&] {
+        for (int frame = 0; frame < result.frames; ++frame) {
+            salience_stft.process(mono, static_cast<SampleIndex>(frame) * hop, salience_magnitudes);
+            for (int r = 0; r < salience.rows; ++r) {
+                double log_sum = 0.0;
+                for (int k = 1; k <= kSalienceHarmonics; ++k) {
+                    const double position = k * salience.row_hz[r] / bin_hz;
+                    const int lower = std::min(last_bin - 1, static_cast<int>(position));
+                    const double weight = std::min(1.0, position - lower);
+                    const double magnitude = (1.0 - weight) * salience_magnitudes[lower] +
+                                             weight * salience_magnitudes[lower + 1];
+                    log_sum += std::log10(magnitude + kSalienceFloor);
+                }
+                salience.db[static_cast<size_t>(frame) * salience.rows + r] =
+                    static_cast<float>(20.0 * log_sum / kSalienceHarmonics);
+            }
+        }
+    });
 
     // Spectral flux: rectified increase of compressed magnitude, per band and over all bins.
     const int flux_bins = flux_stft.bins();
@@ -144,34 +192,34 @@ Result<FrontEndResult> analyse_front_end(std::span<const float> mono, int sample
         }
         band_bins.emplace_back(first, std::min(end, flux_bins));
     }
-    result.bands.resize(params.bands.size());
-    for (size_t b = 0; b < params.bands.size(); ++b) {
-        result.bands[b].band = params.bands[b];
-        result.bands[b].flux.resize(result.frames);
+    for (BandTrack &track : result.bands) {
+        track.flux.resize(result.frames);
     }
     result.flux_total.resize(result.frames);
-    for (int frame = 0; frame < result.frames; ++frame) {
-        flux_stft.process(mono, static_cast<SampleIndex>(frame) * hop, current);
-        for (float &m : current) {
-            m = std::log1p(kFluxCompression * m);
-        }
-        double total = 0.0;
-        for (int bin = 0; bin < flux_bins; ++bin) {
-            total += std::max(0.0f, current[bin] - previous[bin]);
-        }
-        result.flux_total[frame] = static_cast<float>(total / flux_bins);
-        for (size_t b = 0; b < band_bins.size(); ++b) {
-            double sum = 0.0;
-            for (int bin = band_bins[b].first; bin < band_bins[b].second; ++bin) {
-                sum += std::max(0.0f, current[bin] - previous[bin]);
+    auto flux_task = std::async(std::launch::async, [&] {
+        for (int frame = 0; frame < result.frames; ++frame) {
+            flux_stft.process(mono, static_cast<SampleIndex>(frame) * hop, current);
+            for (float &m : current) {
+                m = std::log1p(kFluxCompression * m);
             }
-            result.bands[b].flux[frame] =
-                static_cast<float>(sum / (band_bins[b].second - band_bins[b].first));
+            double total = 0.0;
+            for (int bin = 0; bin < flux_bins; ++bin) {
+                total += std::max(0.0f, current[bin] - previous[bin]);
+            }
+            result.flux_total[frame] = static_cast<float>(total / flux_bins);
+            for (size_t b = 0; b < band_bins.size(); ++b) {
+                double sum = 0.0;
+                for (int bin = band_bins[b].first; bin < band_bins[b].second; ++bin) {
+                    sum += std::max(0.0f, current[bin] - previous[bin]);
+                }
+                result.bands[b].flux[frame] =
+                    static_cast<float>(sum / (band_bins[b].second - band_bins[b].first));
+            }
+            std::swap(previous, current);
         }
-        std::swap(previous, current);
-    }
+    });
 
-    // Filterbank energies and envelopes, one band at a time to bound memory.
+    // Filterbank energies and envelopes (on this thread), one band at a time to bound memory.
     std::vector<float> filtered(mono.size());
     for (size_t b = 0; b < params.bands.size(); ++b) {
         BandFilter filter;
@@ -199,6 +247,9 @@ Result<FrontEndResult> analyse_front_end(std::span<const float> mono, int sample
             track.envelope[frame] = static_cast<float>(level);
         }
     }
+    spectrogram_task.get();
+    salience_task.get();
+    flux_task.get();
     return result;
 }
 

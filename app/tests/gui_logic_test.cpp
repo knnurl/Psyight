@@ -71,3 +71,21 @@ TEST_CASE("spectrogram tile: rows map bottom-up and dB clamps to the colour tabl
     CHECK(tail[1] == 0);
     CHECK(tail[2] == 0);
 }
+
+TEST_CASE("display range: quantiles of the image values, never an empty range") {
+    LogSpectrogram image;
+    image.rows = 1;
+    image.frames = 7001;
+    for (int i = 0; i <= 7000; ++i) { // -70 to 0 dB in 0.01 dB steps.
+        image.db.push_back(-70.0f + 0.01f * static_cast<float>(i));
+    }
+    const auto [low, high] = display_range(image, 0.5, 0.9);
+    CHECK(low == doctest::Approx(-35.0f).epsilon(0.01));
+    CHECK(high == doctest::Approx(-7.0f).epsilon(0.02));
+    LogSpectrogram flat;
+    flat.rows = 1;
+    flat.frames = 100;
+    flat.db.assign(100, -50.0f);
+    const auto [flat_low, flat_high] = display_range(flat, 0.1, 0.9);
+    CHECK(flat_high > flat_low);
+}

@@ -11,6 +11,9 @@
 
 namespace psyight {
 
+// 256 colours sampled from an ImPlot colormap (ImPlotColormap_Viridis and so on).
+ColourTable implot_colour_table(int colormap);
+
 class SpectrogramTextures {
   public:
     SpectrogramTextures() = default;
@@ -18,14 +21,15 @@ class SpectrogramTextures {
     SpectrogramTextures(const SpectrogramTextures &) = delete;
     SpectrogramTextures &operator=(const SpectrogramTextures &) = delete;
 
-    void build(const FrontEndResult &analysis, float min_db, float max_db,
-               const ColourTable &colours);
+    // Builds from any frame-major image on the analysis frame clock (spectrogram or pitch
+    // salience).
+    void build(const LogSpectrogram &image, int hop_samples, int sample_rate_hz, float min_db,
+               float max_db, const ColourTable &colours);
     void clear();
-    bool built_for(const FrontEndResult *analysis) const { return source_ == analysis; }
+    bool built_for(const LogSpectrogram *image) const { return source_ == image; }
 
-    // Draws the tiles overlapping [from_s, to_s]. The y axis is in spectrogram rows: row r spans
-    // [r, r + 1).
-    void draw(double from_s, double to_s) const;
+    // Draws the tiles overlapping [from_s, to_s], with row r spanning [y0 + r, y0 + r + 1).
+    void draw(double from_s, double to_s, double y0 = 0.0) const;
 
   private:
     struct Tile {
@@ -34,7 +38,7 @@ class SpectrogramTextures {
         int frame_count = 0;
     };
     std::vector<Tile> tiles_;
-    const FrontEndResult *source_ = nullptr;
+    const LogSpectrogram *source_ = nullptr;
     int rows_ = 0;
     double frame_s_ = 0.0;
 };

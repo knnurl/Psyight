@@ -6,9 +6,12 @@
 // move it, or its edges to resize it; right-click a note to delete it. Times snap to 16ths unless
 // snapping is off or Alt is held. Keys: Delete removes the selection, Up and Down move it a
 // semitone (Shift: an octave). Undo, redo and save shortcuts are global (see main.cpp).
+// Behind the notes, the pitch background shows how strongly each semitone sounds over time, so the
+// bassline appears as bright segments on its rows.
 #pragma once
 
 #include "gui/session.h"
+#include "gui/spectrogram_textures.h"
 
 #include <array>
 #include <string>
@@ -43,6 +46,13 @@ class BassRollView {
     std::array<char, 16> pitch_text_{};
     bool editing_pitch_ = false; // While typing, the field is not refilled from the note.
     std::string pitch_error_;
+    // Pitch background: harmonic-sum salience on the semitone rows
+    // (FrontEndResult::pitch_salience).
+    SpectrogramTextures salience_textures_;
+    bool show_pitch_ = true;
+    float pitch_min_db_ = -80.0f; // Set from the track's own values when it loads.
+    float pitch_max_db_ = -20.0f;
+    bool pitch_range_changed_ = false;
 };
 
 } // namespace psyight

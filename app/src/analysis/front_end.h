@@ -25,6 +25,9 @@ struct FrontEndParams {
     int hop_samples = 256;                 // 5.33 ms at 48 kHz.
     int flux_window_samples = 1024;        // Timing resolution.
     int spectrogram_window_samples = 4096; // Low-end resolution for display.
+    // Pitch salience needs sharper harmonics: at 4096 an F1 read as A0 (whose 8th harmonic meets
+    // F1's 5th inside the 23 Hz Hann main lobe); at 8192 (170 ms) all tested pitches are exact.
+    int salience_window_samples = 8192;
     int spectrogram_rows = 192;
     double spectrogram_min_hz = 30.0;
     double spectrogram_max_hz = 16000.0;
@@ -47,11 +50,23 @@ struct BandTrack {
     std::vector<float> flux;      // Rectified log-magnitude increase over the band's bins.
 };
 
+// Bass pitch salience on semitone rows (SPEC 6.3 step 5, harmonic sum), from its own STFT
+// (salience_window_samples) on the same frame clock. Row r is MIDI first_midi + r; its value is the
+// geometric mean of the magnitudes at the note's first kSalienceHarmonics harmonics, in dB. The log
+// domain makes a candidate an octave down (missing odd harmonics) or up (half the harmonics) score
+// below the true pitch. Resolution: with the default 8192-sample window bins are 5.9 Hz,
+// against 2.6 Hz per semitone at F1, so the pitch comes mostly from the upper harmonics (F1's 8th
+// is 349 Hz, semitones 21 Hz apart).
+inline constexpr int kSalienceFirstMidi = 21; // A0.
+inline constexpr int kSalienceLastMidi = 64;  // E4.
+inline constexpr int kSalienceHarmonics = 8;
+
 struct FrontEndResult {
     int sample_rate_hz = 0;
     int hop_samples = 0;
     int frames = 0;
     LogSpectrogram spectrogram;
+    LogSpectrogram pitch_salience; // Rows are semitones from kSalienceFirstMidi; values in dB.
     std::vector<BandTrack> bands;
     std::vector<float> flux_total; // Over all bins.
 };

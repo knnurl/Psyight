@@ -20,6 +20,15 @@ constexpr int kMaxTileFrames = 4096;
 
 } // namespace
 
+ColourTable implot_colour_table(int colormap) {
+    ColourTable table{};
+    for (size_t i = 0; i < table.size(); ++i) {
+        table[i] = ImGui::ColorConvertFloat4ToU32(
+            ImPlot::SampleColormap(static_cast<float>(i) / 255.0f, colormap));
+    }
+    return table;
+}
+
 SpectrogramTextures::~SpectrogramTextures() { clear(); }
 
 void SpectrogramTextures::clear() {
@@ -30,15 +39,15 @@ void SpectrogramTextures::clear() {
     source_ = nullptr;
 }
 
-void SpectrogramTextures::build(const FrontEndResult &analysis, float min_db, float max_db,
+void SpectrogramTextures::build(const LogSpectrogram &spectrogram, int hop_samples,
+                                int sample_rate_hz, float min_db, float max_db,
                                 const ColourTable &colours) {
     clear();
-    const LogSpectrogram &spectrogram = analysis.spectrogram;
     GLint max_texture_size = 0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
     const int tile_frames = std::min(kMaxTileFrames, static_cast<int>(max_texture_size));
     rows_ = spectrogram.rows;
-    frame_s_ = static_cast<double>(analysis.hop_samples) / analysis.sample_rate_hz;
+    frame_s_ = static_cast<double>(hop_samples) / sample_rate_hz;
     for (int first = 0; first < spectrogram.frames; first += tile_frames) {
         const int count = std::min(tile_frames, spectrogram.frames - first);
         const std::vector<std::uint32_t> pixels =
@@ -56,10 +65,10 @@ void SpectrogramTextures::build(const FrontEndResult &analysis, float min_db, fl
         tiles_.push_back(tile);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
-    source_ = &analysis;
+    source_ = &spectrogram;
 }
 
-void SpectrogramTextures::draw(double from_s, double to_s) const {
+void SpectrogramTextures::draw(double from_s, double to_s, double y0) const {
     for (const Tile &tile : tiles_) {
         // Frame k is centred on k * hop, so a tile spans half a frame either side of its centres.
         const double start_s = (tile.first_frame - 0.5) * frame_s_;
@@ -70,8 +79,8 @@ void SpectrogramTextures::draw(double from_s, double to_s) const {
         // Texel row 0 holds the lowest frequency. ImPlot draws uv0 at the top-left corner of the
         // bounds, so v is flipped to put row 0 at the bottom (low frequencies low).
         ImPlot::PlotImage("##spectrogram", static_cast<ImTextureID>(tile.texture),
-                          ImPlotPoint(start_s, 0.0), ImPlotPoint(end_s, rows_), ImVec2(0.0f, 1.0f),
-                          ImVec2(1.0f, 0.0f));
+                          ImPlotPoint(start_s, y0), ImPlotPoint(end_s, y0 + rows_),
+                          ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
     }
 }
 
