@@ -41,11 +41,11 @@ Last updated: 2026-10-15
 - Commits: `1c93a0f` Result<T> and labels file, `7d55c4a` scoring, `b1457ce` synthetic generator.
 - SPEC A8 verified against the mir_eval source: onset window 50 ms default (we use 20 ms), inclusive after rounding to 0.1 ms; offset tolerance max(0.2 x duration, 50 ms); pitch 50 cents; maximum matching; empty lists give 0.
 - 30 test cases, 386 assertions, Release and Debug.
-- Pending (blocked by a session limit on 2026-10-15): mir_eval cross-check on 300+ cases, mutation testing, review.
+- Independent checks done: C++ matched counts and P/R/F identical to mir_eval 0.8.2 on 3576 cases; mutation testing (47 mutants, 17 initially survived); review. All 25 confirmed findings fixed (closest pairing among maximum matchings, region-edge matching, half-to-even rounding, labels hardening, generator edge cases, ghost pattern as in the prototype) with tests.
 
 ## Next M1 steps
 1. Done: core pieces (timebase and grid, SPSC queue, parameter registry with presets). 40 test cases, 464 assertions.
 2. Done: audio decode (WAV/FLAC/MP3 to 48 kHz) and WASAPI transport with a GUI panel: drop a file or pass it on the command line, Space to play, click the overview to seek, draggable loop, volume. 45 test cases. Not yet checked by ear; FLAC decode untested (no FLAC file locally).
-3. Front end: STFT (pffft), filterbank and envelopes, spectrogram and band plots, manual grid. (next)
+3. Front end. Done: STFT (pffft), filterbank and envelopes, spectral flux, log-frequency spectrogram (398 s track in 2.35 s, 170x real time). Next: spectrogram and band plot views, manual grid.
 4. Bass roll and labelling tools; label about 60 s of `data/OculusDrift.mp3`.
 5. Bass tracker v0, golden-metric regression tests, and the baseline in `docs/results/M1.md`.
