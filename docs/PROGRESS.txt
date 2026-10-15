@@ -1,0 +1,51 @@
+# Psyight progress
+
+Last updated: 2026-10-15
+
+## Repository
+- GitHub: https://github.com/knnurl/Psyight (private), branch `main`
+- Commits pushed:
+  - `fa7c75e` Import design handoff: CLAUDE.md, spec, conversation export, prototypes
+  - `5ec2ce6` Scaffold the M1 CMake project
+  - `3e4ef95` Rename the project to Psyight
+  - `3711a16` Pace the GUI on the compositor instead of driver vsync
+  - `8935012` Track VS Code settings with a portable CMake source path
+- Private audio lives in `data/` and is gitignored. The duplicate `Psyight-handoff/` folder was removed.
+
+## Toolchain
+- Use the x64 **VS 2022 Build Tools** developer shell (MSVC 19.44, v143).
+  - `& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64`
+- VS 2026 18.0 fails on this machine.
+  - Its bundled vcpkg (2025-09-03) doesn't know the v145 toolset.
+  - Its VS 2022 compiler folder is a broken leftover with no `cl.exe`.
+  - To switch later: update VS 2026, remove that leftover in the VS Installer, and change the preset toolset hint `v143` to `v145`.
+- vcpkg manifest mode with triplet `x64-windows-static-md`.
+  - The registry baseline is pinned to `b1b19307`, the snapshot bundled with Visual Studio.
+  - The build points vcpkg at the developer shell's VS instance (`VCPKG_VISUAL_STUDIO_PATH`).
+- Keep the repo at a short path. Paths around 120 characters deep hit MAX_PATH (`C1083`).
+- VS Code's CMake extension reconfigures automatically when `CMakeLists.txt` is saved. Don't configure from the command line at the same time.
+
+## Commands (from `app/`)
+- Configure: `cmake --preset windows-msvc`
+- Build: `cmake --build --preset windows-msvc-release`
+- Test: `ctest --preset windows-msvc-release`
+- Run: `build\windows-msvc\release\psyight.exe`
+
+## Done (M1 checkbox 1, build half)
+- The app opens maximised in a GLFW + OpenGL 3.3 core window with a Dear ImGui docking workspace and ImPlot.
+- GUI pacing uses `DwmFlush()`. CPU dropped from 104% of a core to about 8% at 60 fps on the Intel iGPU.
+- Smoke tests pass for pffft and miniaudio (44.1 to 48 kHz decode). SPEC A10 is verified for the M1 dependencies.
+- A clean clone builds and passes its tests with zero warnings under `/W4 /WX`.
+
+## Done: synthetic generator, labels and scoring (tests pass; independent checks pending)
+- Commits: `1c93a0f` Result<T> and labels file, `7d55c4a` scoring, `b1457ce` synthetic generator.
+- SPEC A8 verified against the mir_eval source: onset window 50 ms default (we use 20 ms), inclusive after rounding to 0.1 ms; offset tolerance max(0.2 x duration, 50 ms); pitch 50 cents; maximum matching; empty lists give 0.
+- 30 test cases, 386 assertions, Release and Debug.
+- Pending (blocked by a session limit on 2026-10-15): mir_eval cross-check on 300+ cases, mutation testing, review.
+
+## Next M1 steps
+1. Core pieces: timebase, SPSC queue, minimal parameter registry. (in progress)
+2. Audio: decode to 48 kHz mono, WASAPI transport (play, pause, seek, loop).
+3. Front end: STFT (pffft), filterbank and envelopes, spectrogram and band plots, manual grid.
+4. Bass roll and labelling tools; label about 60 s of `data/OculusDrift.mp3`.
+5. Bass tracker v0, golden-metric regression tests, and the baseline in `docs/results/M1.md`.
