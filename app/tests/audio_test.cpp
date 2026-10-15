@@ -1,10 +1,12 @@
 #include "audio/audio_file.h"
+#include "audio/stretch_renderer.h"
 #include "audio/transport.h"
 
 #include <doctest/doctest.h>
 #include <miniaudio.h>
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <thread>
@@ -167,4 +169,102 @@ TEST_CASE("transport: a device thread plays, pauses, seeks, loops and stops (nul
     CHECK(transport.position() == 48000 * 4);
     transport.close();
     CHECK_FALSE(transport.is_open());
+}
+
+namespace {
+
+AudioBuffer sine_buffer(double frequency_hz, double seconds, float amplitude) {
+    AudioBuffer buffer;
+    const auto frames = static_cast<SampleIndex>(seconds * 48000);
+    for (SampleIndex i = 0; i < frames; ++i) {
+        const auto s = static_cast<float>(
+            amplitude * std::sin(2.0 * 3.14159265358979323846 * frequency_hz * i / 48000.0));
+        buffer.samples.push_back(s);
+        buffer.samples.push_back(s);
+    }
+    return buffer;
+}
+
+double upward_crossing_hz(const std::vector<float> &left, size_t begin, size_t end) {
+    size_t first = 0;
+    size_t last = 0;
+    int crossings = 0;
+    for (size_t i = begin + 1; i < end; ++i) {
+        if (left[i - 1] < 0.0f && left[i] >= 0.0f) {
+            first = crossings == 0 ? i : first;
+            last = i;
+            ++crossings;
+        }
+    }
+    return crossings < 2 ? 0.0 : (crossings - 1) * 48000.0 / static_cast<double>(last - first);
+}
+
+} // namespace
+
+TEST_CASE("stretch: half speed advances half as fast and keeps the pitch") {
+    const AudioBuffer buffer = sine_buffer(110.0, 3.0, 0.5f);
+    StretchRenderer renderer;
+    renderer.prepare(48000);
+    TransportState state;
+    state.playing = true;
+    state.speed = 0.5f;
+    std::vector<float> out(2 * 48000);
+    for (SampleIndex done = 0; done < 48000; done += 480) { // Device-sized blocks.
+        renderer.render(state, buffer, out.data() + 2 * done, 480);
+    }
+    CHECK(state.position == 24000); // 1 s of output consumed exactly 0.5 s of input.
+    CHECK(renderer.heard_position(state) < state.position);
+
+    std::vector<float> left;
+    for (size_t i = 0; i < out.size(); i += 2) {
+        left.push_back(out[i]);
+    }
+    // After the stretcher's pre-roll the tone is back at full level and the same pitch.
+    CHECK(upward_crossing_hz(left, 14400, 48000) == doctest::Approx(110.0).epsilon(0.01));
+    double sum = 0.0;
+    for (size_t i = 14400; i < 48000; ++i) {
+        sum += static_cast<double>(left[i]) * left[i];
+    }
+    const double rms = std::sqrt(sum / (48000 - 14400));
+    CHECK(rms == doctest::Approx(0.5 / std::sqrt(2.0)).epsilon(0.15));
+}
+
+TEST_CASE("stretch: transport rules apply at half speed (loop wrap and stop at the end)") {
+    AudioBuffer buffer = sine_buffer(110.0, 1.0, 0.5f);
+    StretchRenderer renderer;
+    renderer.prepare(48000);
+    TransportState state;
+    state.playing = true;
+    state.speed = 0.5f;
+    state.position = 10000;
+    state.loop_start = 10000;
+    state.loop_end = 12000;
+    std::vector<float> out(2 * 9600);
+    renderer.render(state, buffer, out.data(), 9600); // Reads 4800 input frames.
+    CHECK(state.position >= 10000);
+    CHECK(state.position < 12000);
+
+    state.loop_start = state.loop_end = 0;
+    state.position = buffer.frames() - 100;
+    renderer.render(state, buffer, out.data(), 9600);
+    CHECK_FALSE(state.playing);
+    CHECK(state.position == buffer.frames());
+}
+
+TEST_CASE("transport: set_speed(0.5) halves the playhead rate on a device thread") {
+    Transport transport({true});
+    REQUIRE(transport.open(sine_buffer(110.0, 10.0, 0.5f)).ok());
+    transport.set_speed(0.5f);
+    transport.play();
+    REQUIRE(wait_until([&] { return transport.position() > 4800; }, 3000));
+    const SampleIndex before = transport.position();
+    const auto start = std::chrono::steady_clock::now();
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    const SampleIndex after = transport.position();
+    const double elapsed_s =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    const double rate = static_cast<double>(after - before) / 48000.0 / elapsed_s;
+    CHECK(transport.speed() == 0.5f);
+    CHECK(rate == doctest::Approx(0.5).epsilon(0.2)); // Wall-clock jitter on a test machine.
+    transport.close();
 }

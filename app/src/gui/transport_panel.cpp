@@ -15,6 +15,7 @@ constexpr float kMinVolumeDb = -60.0f; // The bottom of the slider mutes.
 constexpr float kMaxVolumeDb = 6.0f;
 constexpr double kDefaultLoopLengthS = 6.0; // Four bars at 160 BPM.
 constexpr float kHandleGrabPixels = 6.0f;
+constexpr float kAuditionSpeed = 0.5f; // Labelling audition: 16ths at 160 BPM become 188 ms.
 
 std::string format_time(double seconds) {
     const int total_ms = static_cast<int>(std::lround(std::max(0.0, seconds) * 1000.0));
@@ -71,6 +72,11 @@ void TransportPanel::draw() {
     if (loop.enabled) {
         ImGui::SameLine();
         ImGui::Text("%s to %s", format_time(loop.start_s).c_str(), format_time(loop.end_s).c_str());
+    }
+    ImGui::SameLine();
+    bool half_speed = transport.speed() < 1.0f;
+    if (ImGui::Checkbox("Half speed (pitch kept)", &half_speed)) {
+        transport.set_speed(half_speed ? kAuditionSpeed : 1.0f);
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(10.0f * ImGui::GetFontSize());

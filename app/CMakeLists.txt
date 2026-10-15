@@ -44,15 +44,23 @@ add_library(psyight_miniaudio STATIC src/audio/miniaudio_impl.c)
 target_include_directories(psyight_miniaudio SYSTEM PUBLIC "${MINIAUDIO_INCLUDE_DIR}")
 set_target_properties(psyight_miniaudio PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
 
+# Signalsmith Stretch 1.4.0 with Signalsmith Linear 0.6.4 (the version it pins), MIT, header-only,
+# vendored: see third_party/README.md. SYSTEM keeps the project warning policy off their headers.
+add_library(signalsmith_stretch INTERFACE)
+target_include_directories(signalsmith_stretch SYSTEM INTERFACE
+                           third_party/signalsmith-stretch-1.4.0/include
+                           third_party/signalsmith-linear-0.6.4/include)
+
 # Platform-independent app code, shared by the app and the tests.
 add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/labels.cpp
                                src/io/label_editor.cpp src/analysis/scoring.cpp
                                src/audio/audio_file.cpp src/audio/transport.cpp
+                               src/audio/transport_render.cpp src/audio/stretch_renderer.cpp
                                src/analysis/stft.cpp src/analysis/filterbank.cpp
                                src/analysis/front_end.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
-                                          psyight_miniaudio pffft::pffft)
+                                          psyight_miniaudio pffft::pffft signalsmith_stretch)
 
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
                        src/gui/session.cpp src/gui/layout.cpp src/gui/transport_panel.cpp

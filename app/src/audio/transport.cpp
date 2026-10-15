@@ -1,38 +1,22 @@
 #include "audio/transport.h"
 
+#include "audio/stretch_renderer.h"
+
 #include <miniaudio.h>
 
 #include <algorithm>
 
 namespace psyight {
 
-void render_transport(TransportState &state, const AudioBuffer &buffer, float *out,
-                      SampleIndex frame_count) {
-    const SampleIndex total = buffer.frames();
-    const bool looping = state.loop_end > state.loop_start;
-    for (SampleIndex frame = 0; frame < frame_count; ++frame) {
-        float *frame_out = out + frame * kPlaybackChannels;
-        // Wrap when playback reaches loop_end. A seek beyond the loop plays on to the end.
-        if (state.playing && looping && state.position == state.loop_end) {
-            state.position = state.loop_start;
-        }
-        if (!state.playing || state.position < 0 || state.position >= total) {
-            if (state.position >= total) {
-                state.playing = false;
-            }
-            frame_out[0] = 0.0f;
-            frame_out[1] = 0.0f;
-            continue;
-        }
-        const float *in = buffer.samples.data() + state.position * kPlaybackChannels;
-        frame_out[0] = state.gain * in[0];
-        frame_out[1] = state.gain * in[1];
-        ++state.position;
-    }
-}
+namespace {
+
+constexpr float kMinSpeed = 0.25f;
+
+} // namespace
 
 struct Transport::Impl {
     AudioBuffer buffer;
+    StretchRenderer stretch;
     ma_context context{};
     ma_device device{};
     bool context_ready = false;
@@ -47,9 +31,11 @@ Result<void> Transport::open(AudioBuffer buffer) {
     close();
     impl_ = std::make_unique<Impl>();
     impl_->buffer = std::move(buffer);
+    impl_->stretch.prepare(impl_->buffer.sample_rate_hz); // Allocates: before the device starts.
     state_ = TransportState{};
     position_.store(0, std::memory_order_release);
     playing_.store(false, std::memory_order_release);
+    speed_.store(1.0f, std::memory_order_release);
     Command discarded;
     while (commands_.try_pop(discarded)) {
     }
@@ -115,6 +101,7 @@ void Transport::set_loop(SampleIndex start, SampleIndex end) {
     send({Command::Kind::set_loop, start, end});
 }
 void Transport::set_gain(float gain) { send({Command::Kind::set_gain, 0, 0, gain}); }
+void Transport::set_speed(float speed) { send({Command::Kind::set_speed, 0, 0, speed}); }
 
 void Transport::send(const Command &command) {
     // The queue holds 256 commands and the audio thread drains it every period; a full queue
@@ -143,18 +130,30 @@ void Transport::on_audio(float *out, SampleIndex frame_count) {
             break;
         case Command::Kind::seek:
             state_.position = std::clamp<SampleIndex>(command.a, 0, impl_->buffer.frames());
+            impl_->stretch.reset(); // Do not smear the old position into the new one.
             break;
         case Command::Kind::set_loop:
             state_.loop_start = command.a;
             state_.loop_end = command.b;
             break;
         case Command::Kind::set_gain:
-            state_.gain = command.gain;
+            state_.gain = command.value;
+            break;
+        case Command::Kind::set_speed:
+            state_.speed = std::clamp(command.value, kMinSpeed, 1.0f);
+            impl_->stretch.reset();
             break;
         }
     }
-    render_transport(state_, impl_->buffer, out, frame_count);
-    position_.store(state_.position, std::memory_order_release);
+    if (state_.speed < 1.0f) {
+        impl_->stretch.render(state_, impl_->buffer, out, frame_count);
+        position_.store(state_.playing ? impl_->stretch.heard_position(state_) : state_.position,
+                        std::memory_order_release);
+    } else {
+        render_transport(state_, impl_->buffer, out, frame_count);
+        position_.store(state_.position, std::memory_order_release);
+    }
+    speed_.store(state_.speed, std::memory_order_release);
     playing_.store(state_.playing, std::memory_order_release);
 }
 
