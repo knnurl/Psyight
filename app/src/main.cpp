@@ -1,5 +1,7 @@
 // Psyight entry point: opens the main window with a Dear ImGui docking workspace.
 
+#include "gui/frame_pacing.h"
+
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -43,7 +45,9 @@ int main() {
         return 1;
     }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(psyight::kGuiSwapInterval);
+    spdlog::info("OpenGL {} on {}", reinterpret_cast<const char *>(glGetString(GL_VERSION)),
+                 reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -104,6 +108,7 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
+        psyight::wait_for_display_refresh();
     }
 
     ImGui_ImplOpenGL3_Shutdown();

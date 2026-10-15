@@ -44,9 +44,10 @@ add_library(psyight_miniaudio STATIC src/audio/miniaudio_impl.c)
 target_include_directories(psyight_miniaudio SYSTEM PUBLIC "${MINIAUDIO_INCLUDE_DIR}")
 set_target_properties(psyight_miniaudio PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
 
-add_executable(psyight src/main.cpp)
+add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp)
+target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options imgui::imgui implot::implot glfw
-                                      OpenGL::GL spdlog::spdlog)
+                                      OpenGL::GL spdlog::spdlog dwmapi)
 
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp)
