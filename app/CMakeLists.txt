@@ -45,7 +45,7 @@ target_include_directories(psyight_miniaudio SYSTEM PUBLIC "${MINIAUDIO_INCLUDE_
 set_target_properties(psyight_miniaudio PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
 
 # Platform-independent app code, shared by the app and the tests.
-add_library(psyight_lib STATIC src/io/labels.cpp)
+add_library(psyight_lib STATIC src/io/labels.cpp src/analysis/scoring.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json)
 
@@ -56,7 +56,7 @@ target_link_libraries(psyight PRIVATE psyight_options imgui::imgui implot::implo
 
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
-                             tests/labels_test.cpp)
+                             tests/labels_test.cpp tests/scoring_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)
