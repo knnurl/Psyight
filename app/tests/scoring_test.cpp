@@ -165,3 +165,95 @@ TEST_CASE("scoring: percentile matches numpy's linear interpolation") {
     CHECK(percentile({7.0}, 0.9) == 7.0);
     CHECK(std::isnan(percentile({}, 0.5)));
 }
+
+TEST_CASE("scoring: matching is one-to-one") {
+    // One estimate inside both references' windows may match only one of them.
+    CHECK(match_note_onsets({note(1.000, 1.05), note(1.030, 1.08)}, {note(1.015, 1.05)}, 0.020)
+              .size() == 1);
+}
+
+TEST_CASE("scoring: among maximum matchings, the closest pairing wins over a double trigger") {
+    // An early, octave-wrong double trigger and an exact estimate both reach the reference.
+    const std::vector<BassNoteLabel> reference{note(1.0, 1.09375, 40)};
+    const std::vector<BassNoteLabel> estimates{note(0.985, 1.09375, 52), note(1.0, 1.09375, 40)};
+    const std::vector<NoteMatch> matches = match_note_onsets(reference, estimates, 0.020);
+    REQUIRE(matches.size() == 1);
+    CHECK(matches[0].estimate_index == 1);
+    const NoteScore score = score_notes(reference, estimates, kSlotLenS, {});
+    CHECK(score.pitch_correct_count == 1);
+    CHECK(score.octave_error_count == 0);
+    CHECK(score.onset_precision == doctest::Approx(0.5));
+}
+
+TEST_CASE("scoring: estimates but no references give zero P, R and F") {
+    const NoteScore score = score_notes({}, {note(1.0, 1.05)}, kSlotLenS, {});
+    CHECK(score.onset_precision == 0.0);
+    CHECK(score.onset_recall == 0.0);
+    CHECK(score.onset_f == 0.0);
+}
+
+TEST_CASE("scoring: offset distances are rounded to 0.1 ms, halves to even, like numpy") {
+    // 2.2 - 2.0 is 0.20000000000000018 in doubles: a hit only after rounding.
+    CHECK(score_notes({note(1.0, 2.0)}, {note(1.0, 2.2)}, kSlotLenS, {}).offset_hit_rate == 1.0);
+    // Distance exactly 500.5 tenths of a millisecond: half-to-even gives 500, a hit at 50 ms.
+    CHECK(score_notes({note(0.0, 0.1)}, {note(0.0, 0.04995000000000001)}, kSlotLenS, {})
+              .offset_hit_rate == 1.0);
+}
+
+TEST_CASE("scoring: an octave plus more than the tolerance is neither correct nor an octave") {
+    const NoteScore score =
+        score_notes({note(1.0, 1.05, 29, 0.0)}, {note(1.0, 1.05, 29, 1270.0)}, kSlotLenS, {});
+    CHECK(score.pitch_correct_count == 0);
+    CHECK(score.octave_error_count == 0);
+}
+
+TEST_CASE("scoring: score_track measures gate ratio in 16ths of the labelled BPM") {
+    Labels reference;
+    reference.grid.bpm = 160.0;
+    reference.regions = {{0.0, 10.0, true}};
+    reference.bass_notes = {note(1.0, 1.0 + 0.5 * kSlotLenS)};
+    const TrackScore track = score_track(reference, {note(1.0, 1.0 + kSlotLenS)}, {});
+    CHECK(track.total.gate_ratio_mae == doctest::Approx(0.5));
+}
+
+TEST_CASE("scoring: regions are half-open and estimates just outside an edge still match") {
+    Labels reference;
+    reference.grid.bpm = 160.0;
+    reference.regions = {{0.0, 10.0, true}, {10.0, 20.0, true}};
+    reference.bass_notes = {note(0.0, 0.05), note(10.0, 10.05), note(19.999, 20.04)};
+    // 9.997 is outside region 2 but within 20 ms of its first reference; 20.001 likewise for the
+    // last one. -0.003 matches the reference at 0.0.
+    const std::vector<BassNoteLabel> estimates{note(-0.003, 0.05), note(9.997, 10.05),
+                                               note(20.001, 20.04)};
+    const TrackScore track = score_track(reference, estimates, {});
+    REQUIRE(track.regions.size() == 2);
+    CHECK(track.regions[0].score.reference_count == 1);
+    CHECK(track.regions[1].score.reference_count == 2);
+    CHECK(track.regions[0].score.onset_recall == 1.0);
+    // 9.997 lies inside region 1 but detects the note at 10.0 in region 2, so region 1 ignores it.
+    CHECK(track.regions[0].score.onset_precision == 1.0);
+    CHECK(track.regions[1].score.onset_recall == 1.0);
+    CHECK(track.regions[1].score.onset_precision == 1.0);
+    CHECK(track.total.matched_count == 3);
+    CHECK(track.total.onset_f == 1.0);
+
+    // An unmatched estimate just outside a region is not a false positive of that region.
+    const TrackScore stray = score_track(reference, {note(20.010, 20.05)}, {});
+    CHECK(stray.regions[1].score.estimate_count == 1); // It matches 19.999 (11 ms), so counts.
+    const TrackScore outside = score_track(reference, {note(20.015, 20.05), note(-0.015, 0.0)}, {});
+    CHECK(outside.regions[1].score.matched_count == 1);
+    CHECK(outside.regions[0].score.matched_count == 1);
+}
+
+TEST_CASE("scoring: an unmatched estimate just outside a region is not its false positive") {
+    Labels reference;
+    reference.grid.bpm = 160.0;
+    reference.regions = {{0.0, 10.0, true}};
+    reference.bass_notes = {note(5.0, 5.05)};
+    const TrackScore track = score_track(reference, {note(5.0, 5.05), note(-0.01, 0.05)}, {});
+    CHECK(track.total.estimate_count == 1);
+    CHECK(track.total.onset_precision == 1.0);
+    const TrackScore inside = score_track(reference, {note(5.0, 5.05), note(0.01, 0.05)}, {});
+    CHECK(inside.total.estimate_count == 2);
+    CHECK(inside.total.onset_precision == 0.5);
+}

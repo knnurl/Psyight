@@ -13,10 +13,10 @@ constexpr double kNan = std::numeric_limits<double>::quiet_NaN();
 constexpr double kCentsPerSemitone = 100.0;
 constexpr double kCentsPerOctave = 1200.0;
 
-// mir_eval rounds time distances to 4 decimals (0.1 ms) before comparing, so that a distance of
-// exactly the tolerance still matches despite floating-point error.
+// mir_eval rounds time distances to 4 decimals (0.1 ms) with np.around, which rounds halves to
+// even, before comparing. std::nearbyint in the default rounding mode does the same.
 double rounded_distance_s(double a_s, double b_s) {
-    return std::round(std::abs(a_s - b_s) * 1e4) / 1e4;
+    return std::nearbyint(std::abs(a_s - b_s) * 1e4) / 1e4;
 }
 
 std::vector<int> indices_sorted_by_onset(const std::vector<BassNoteLabel> &notes) {
@@ -33,60 +33,103 @@ double f_measure(double precision, double recall) {
     return precision + recall == 0.0 ? 0.0 : 2.0 * precision * recall / (precision + recall);
 }
 
-std::vector<BassNoteLabel> notes_in(const std::vector<BassNoteLabel> &notes,
-                                    const std::vector<LabelRegion> &regions) {
-    std::vector<BassNoteLabel> selected;
+// Best matching of one cluster: refs and ests are sorted by onset, and only pairs within the
+// tolerance may match. An optimal matching never crosses (swapping two crossing pairs keeps both
+// feasible and does not increase the total distance), so a DP over prefixes finds the maximum
+// count, then the least total distance.
+void match_cluster(const std::vector<BassNoteLabel> &references,
+                   const std::vector<BassNoteLabel> &estimates, const std::vector<int> &refs,
+                   const std::vector<int> &ests, double tolerance_s,
+                   std::vector<NoteMatch> &matches) {
+    enum class Step : unsigned char { skip_ref, skip_est, pair };
+    struct Cell {
+        int count = 0;
+        double cost = 0.0;
+        Step step = Step::skip_ref;
+        bool better_than(const Cell &other) const {
+            return count != other.count ? count > other.count : cost < other.cost;
+        }
+    };
+    const size_t n = refs.size();
+    const size_t m = ests.size();
+    std::vector<Cell> dp((n + 1) * (m + 1));
+    const auto at = [m](size_t i, size_t j) { return i * (m + 1) + j; };
+    for (size_t j = 1; j <= m; ++j) {
+        dp[at(0, j)].step = Step::skip_est;
+    }
+    for (size_t i = 1; i <= n; ++i) {
+        for (size_t j = 1; j <= m; ++j) {
+            Cell best = dp[at(i - 1, j)];
+            best.step = Step::skip_ref;
+            if (dp[at(i, j - 1)].better_than(best)) {
+                best = dp[at(i, j - 1)];
+                best.step = Step::skip_est;
+            }
+            const double r = references[refs[i - 1]].onset_s;
+            const double e = estimates[ests[j - 1]].onset_s;
+            if (rounded_distance_s(r, e) <= tolerance_s) {
+                const Cell paired{dp[at(i - 1, j - 1)].count + 1,
+                                  dp[at(i - 1, j - 1)].cost + std::abs(r - e), Step::pair};
+                if (paired.better_than(best)) {
+                    best = paired;
+                }
+            }
+            dp[at(i, j)] = best;
+        }
+    }
+    std::vector<NoteMatch> cluster_matches;
+    for (size_t i = n, j = m; i > 0 && j > 0;) {
+        switch (dp[at(i, j)].step) {
+        case Step::pair:
+            cluster_matches.push_back({refs[i - 1], ests[j - 1]});
+            --i;
+            --j;
+            break;
+        case Step::skip_ref:
+            --i;
+            break;
+        case Step::skip_est:
+            --j;
+            break;
+        }
+    }
+    matches.insert(matches.end(), cluster_matches.rbegin(), cluster_matches.rend());
+}
+
+struct Selection {
+    std::vector<BassNoteLabel> notes;
+    std::vector<bool> inside; // Onset inside a region, not only within the margin.
+};
+
+Selection select_notes(const std::vector<BassNoteLabel> &notes,
+                       const std::vector<LabelRegion> &regions, double margin_s) {
+    Selection selection;
     for (const BassNoteLabel &note : notes) {
-        const bool inside = std::any_of(regions.begin(), regions.end(), [&](const LabelRegion &r) {
-            return note.onset_s >= r.start_s && note.onset_s < r.end_s;
-        });
-        if (inside) {
-            selected.push_back(note);
+        bool in_margin = false;
+        bool inside = false;
+        for (const LabelRegion &r : regions) {
+            inside = inside || (note.onset_s >= r.start_s && note.onset_s < r.end_s);
+            in_margin = in_margin ||
+                        (note.onset_s >= r.start_s - margin_s && note.onset_s < r.end_s + margin_s);
+        }
+        if (in_margin) {
+            selection.notes.push_back(note);
+            selection.inside.push_back(inside);
         }
     }
-    return selected;
+    return selection;
 }
 
-} // namespace
-
-std::vector<NoteMatch> match_note_onsets(const std::vector<BassNoteLabel> &references,
-                                         const std::vector<BassNoteLabel> &estimates,
-                                         double onset_tolerance_s) {
-    // Each note's match window is an interval of equal width on the time line. For such interval
-    // graphs, matching every reference (in time order) to the earliest still-unmatched estimate
-    // inside its window gives a maximum-cardinality matching, the same count as mir_eval's
-    // Hopcroft-Karp matching.
-    const std::vector<int> refs = indices_sorted_by_onset(references);
-    const std::vector<int> ests = indices_sorted_by_onset(estimates);
-    std::vector<NoteMatch> matches;
-    size_t next_est = 0;
-    for (const int ref : refs) {
-        const double ref_onset_s = references[ref].onset_s;
-        // Estimates too early for this reference are too early for every later one as well.
-        while (next_est < ests.size() && estimates[ests[next_est]].onset_s < ref_onset_s &&
-               rounded_distance_s(estimates[ests[next_est]].onset_s, ref_onset_s) >
-                   onset_tolerance_s) {
-            ++next_est;
-        }
-        if (next_est < ests.size() && rounded_distance_s(estimates[ests[next_est]].onset_s,
-                                                         ref_onset_s) <= onset_tolerance_s) {
-            matches.push_back({ref, ests[next_est]});
-            ++next_est;
-        }
-    }
-    return matches;
-}
-
-NoteScore score_notes(const std::vector<BassNoteLabel> &references,
-                      const std::vector<BassNoteLabel> &estimates, double slot_len_s,
-                      const ScoringParams &params) {
+// Fills every statistic from a matching. The counts are the recall and precision denominators.
+NoteScore score_matches(const std::vector<BassNoteLabel> &references,
+                        const std::vector<BassNoteLabel> &estimates,
+                        const std::vector<NoteMatch> &matches, int reference_count,
+                        int estimate_count, double slot_len_s, const ScoringParams &params) {
     NoteScore score;
-    score.reference_count = static_cast<int>(references.size());
-    score.estimate_count = static_cast<int>(estimates.size());
-    const std::vector<NoteMatch> matches =
-        match_note_onsets(references, estimates, params.onset_tolerance_s);
+    score.reference_count = reference_count;
+    score.estimate_count = estimate_count;
     score.matched_count = static_cast<int>(matches.size());
-    if (!references.empty() && !estimates.empty()) {
+    if (score.reference_count > 0 && score.estimate_count > 0) {
         score.onset_precision = static_cast<double>(score.matched_count) / score.estimate_count;
         score.onset_recall = static_cast<double>(score.matched_count) / score.reference_count;
         score.onset_f = f_measure(score.onset_precision, score.onset_recall);
@@ -144,23 +187,121 @@ NoteScore score_notes(const std::vector<BassNoteLabel> &references,
     return score;
 }
 
+// Scores the references inside the regions. Matching sees every reference and estimate within one
+// tolerance of a region, so detections at an edge pair with the right note: an estimate matched
+// to a reference outside the regions is neither a hit nor a false positive here.
+NoteScore score_in_regions(const std::vector<BassNoteLabel> &reference_notes,
+                           const std::vector<BassNoteLabel> &estimates,
+                           const std::vector<LabelRegion> &regions, double slot_len_s,
+                           const ScoringParams &params) {
+    const double margin_s = params.onset_tolerance_s;
+    const Selection refs = select_notes(reference_notes, regions, margin_s);
+    const Selection ests = select_notes(estimates, regions, margin_s);
+    const std::vector<NoteMatch> all_matches =
+        match_note_onsets(refs.notes, ests.notes, params.onset_tolerance_s);
+
+    std::vector<NoteMatch> matches; // Pairs whose reference is inside.
+    std::vector<bool> est_matched(ests.notes.size(), false);
+    for (const NoteMatch &match : all_matches) {
+        est_matched[match.estimate_index] = true;
+        if (refs.inside[match.reference_index]) {
+            matches.push_back(match);
+        }
+    }
+    int reference_count = 0;
+    for (const bool inside : refs.inside) {
+        reference_count += inside ? 1 : 0;
+    }
+    int estimate_count = static_cast<int>(matches.size());
+    for (size_t i = 0; i < ests.notes.size(); ++i) {
+        estimate_count += (!est_matched[i] && ests.inside[i]) ? 1 : 0; // False positives.
+    }
+    return score_matches(refs.notes, ests.notes, matches, reference_count, estimate_count,
+                         slot_len_s, params);
+}
+
+} // namespace
+
+std::vector<NoteMatch> match_note_onsets(const std::vector<BassNoteLabel> &references,
+                                         const std::vector<BassNoteLabel> &estimates,
+                                         double onset_tolerance_s) {
+    // Group notes into clusters connected by feasible pairs (union-find), then match each cluster
+    // optimally. Clusters are tiny on real data: a note's window rarely reaches past its
+    // neighbours.
+    const std::vector<int> refs = indices_sorted_by_onset(references);
+    const std::vector<int> ests = indices_sorted_by_onset(estimates);
+    const size_t ref_count = refs.size();
+    std::vector<size_t> parent(ref_count + ests.size()); // Refs first, then ests.
+    std::iota(parent.begin(), parent.end(), size_t{0});
+    const auto find = [&parent](size_t x) {
+        while (parent[x] != x) {
+            x = parent[x] = parent[parent[x]];
+        }
+        return x;
+    };
+    size_t first_candidate = 0; // Earliest estimate that a later reference could still reach.
+    for (size_t r = 0; r < ref_count; ++r) {
+        const double ref_onset_s = references[refs[r]].onset_s;
+        while (first_candidate < ests.size() &&
+               estimates[ests[first_candidate]].onset_s < ref_onset_s &&
+               rounded_distance_s(estimates[ests[first_candidate]].onset_s, ref_onset_s) >
+                   onset_tolerance_s) {
+            ++first_candidate;
+        }
+        for (size_t e = first_candidate; e < ests.size(); ++e) {
+            if (rounded_distance_s(estimates[ests[e]].onset_s, ref_onset_s) > onset_tolerance_s) {
+                if (estimates[ests[e]].onset_s > ref_onset_s) {
+                    break;
+                }
+                continue;
+            }
+            parent[find(r)] = find(ref_count + e);
+        }
+    }
+    std::vector<std::vector<int>> cluster_refs(parent.size());
+    std::vector<std::vector<int>> cluster_ests(parent.size());
+    for (size_t r = 0; r < ref_count; ++r) {
+        cluster_refs[find(r)].push_back(refs[r]);
+    }
+    for (size_t e = 0; e < ests.size(); ++e) {
+        cluster_ests[find(ref_count + e)].push_back(ests[e]);
+    }
+    std::vector<NoteMatch> matches;
+    for (size_t root = 0; root < parent.size(); ++root) {
+        if (!cluster_refs[root].empty() && !cluster_ests[root].empty()) {
+            match_cluster(references, estimates, cluster_refs[root], cluster_ests[root],
+                          onset_tolerance_s, matches);
+        }
+    }
+    std::sort(matches.begin(), matches.end(), [&](const NoteMatch &a, const NoteMatch &b) {
+        return references[a.reference_index].onset_s < references[b.reference_index].onset_s;
+    });
+    return matches;
+}
+
+NoteScore score_notes(const std::vector<BassNoteLabel> &references,
+                      const std::vector<BassNoteLabel> &estimates, double slot_len_s,
+                      const ScoringParams &params) {
+    return score_matches(references, estimates,
+                         match_note_onsets(references, estimates, params.onset_tolerance_s),
+                         static_cast<int>(references.size()), static_cast<int>(estimates.size()),
+                         slot_len_s, params);
+}
+
 TrackScore score_track(const Labels &reference, const std::vector<BassNoteLabel> &estimates,
                        const ScoringParams &params) {
     const double slot_len_s = 60.0 / reference.grid.bpm / 4.0;
     TrackScore track;
     std::vector<LabelRegion> complete_regions;
     for (const LabelRegion &region : reference.regions) {
-        if (!region.complete) {
-            continue;
+        if (region.complete) {
+            complete_regions.push_back(region);
+            track.regions.push_back({region, score_in_regions(reference.bass_notes, estimates,
+                                                              {region}, slot_len_s, params)});
         }
-        complete_regions.push_back(region);
-        const std::vector<LabelRegion> just_this{region};
-        track.regions.push_back(
-            {region, score_notes(notes_in(reference.bass_notes, just_this),
-                                 notes_in(estimates, just_this), slot_len_s, params)});
     }
-    track.total = score_notes(notes_in(reference.bass_notes, complete_regions),
-                              notes_in(estimates, complete_regions), slot_len_s, params);
+    track.total =
+        score_in_regions(reference.bass_notes, estimates, complete_regions, slot_len_s, params);
     return track;
 }
 

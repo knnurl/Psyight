@@ -1,13 +1,19 @@
 // Bass note scoring against ground-truth labels (SPEC section 6.10).
 //
-// Conventions follow mir_eval.transcription (checked against its source, 2026-10-15) so that the
-// Python cross-check can reproduce the numbers:
-// - Notes match one-to-one on onset only: |est - ref| <= onset tolerance, distances rounded to
-//   0.1 ms, inclusive. The matching has maximum cardinality.
-// - Offset hit: |est offset - ref offset| <= max(offset_ratio * ref duration, min tolerance).
+// Matching and counts follow mir_eval.transcription (checked against its source, and against
+// mir_eval 0.8.2 itself on 3576 cases with identical matched counts and P/R/F, 2026-10-15):
+// - Notes match one-to-one on onset only: |est - ref| <= onset tolerance, with distances rounded
+//   half-to-even to 0.1 ms (numpy's np.around), inclusive. The matching has maximum cardinality.
+// - Offset hit: |est offset - ref offset| <= max(offset_ratio * ref duration, min tolerance),
+//   rounded the same way.
 // - P, R and F are 0 when either list is empty.
-// Pitch, offset and gate-ratio statistics are computed over matched pairs. Statistics with no
-// matched pairs are NaN.
+// Where mir_eval stops:
+// - Among the maximum matchings, mir_eval's pairing is arbitrary. Here the pairing is the one with
+//   the least total onset distance, so an exact estimate wins over an early double trigger.
+//   Pitch, offset and gate-ratio statistics use these pairs; a cross-check must use the same rule.
+// - Pitch is compared in exact cents (midi * 100 + cents), inclusive at the tolerance; mir_eval
+//   converts to Hz and back, which puts an exact 50-cent error just outside.
+// Statistics with no matched pairs are NaN.
 #pragma once
 
 #include "io/labels.h"
@@ -70,9 +76,13 @@ NoteScore score_notes(const std::vector<BassNoteLabel> &references,
                       const std::vector<BassNoteLabel> &estimates, double slot_len_s,
                       const ScoringParams &params);
 
-// Scores each complete region of the reference labels, and all complete regions together. A note
-// belongs to a region when its onset lies in [start_s, end_s). Incomplete regions are skipped
-// because unlabelled notes there would count as false positives.
+// Scores each complete region of the reference labels, and all complete regions together.
+// A note belongs to a region when its onset lies in [start_s, end_s). Matching also sees notes up
+// to one onset tolerance outside the region, so a detection at an edge pairs with the right note:
+// an estimate just outside matching a reference inside is a hit, and an estimate inside matching a
+// reference just outside is ignored (it belongs to the neighbouring note). Unmatched estimates are
+// false positives only inside the region. Incomplete regions are skipped because unlabelled
+// notes there would count as false positives.
 TrackScore score_track(const Labels &reference, const std::vector<BassNoteLabel> &estimates,
                        const ScoringParams &params);
 
