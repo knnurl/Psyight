@@ -9,7 +9,6 @@ imgui.ini
 
 # Private data: never commit audio, stems, labels for private tracks, or trained weights
 data/
-Reference_tracks/
 *.wav
 *.flac
 *.mp3

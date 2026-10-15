@@ -1,4 +1,4 @@
-// PsyLight entry point: opens the main window with a Dear ImGui docking workspace.
+// Psyight entry point: opens the main window with a Dear ImGui docking workspace.
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -37,7 +37,7 @@ int main() {
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
     glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE); // The scaled size can exceed small screens.
     GLFWwindow *window =
-        glfwCreateWindow(kInitialWidthPixels, kInitialHeightPixels, "PsyLight", nullptr, nullptr);
+        glfwCreateWindow(kInitialWidthPixels, kInitialHeightPixels, "Psyight", nullptr, nullptr);
     if (window == nullptr) {
         glfwTerminate();
         return 1;

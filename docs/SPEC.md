@@ -1,4 +1,4 @@
-# PsyLight specification
+# Psyight specification
 
 Version 0.1, 15 October 2026. Derived from the design conversation in `docs/CONVERSATION_EXPORT.md`.
 
@@ -661,6 +661,7 @@ Initial metric targets are placeholders, marked **[Guessing]**. Replace them wit
 | 2026-10-15 | First milestone is the bass roll with ground truth | Accuracy is priority one and needs a measurement before any effects |
 | 2026-10-15 | Flash limiter on by default at 3 per second | Photosensitivity: rolling 16ths at 160 BPM are a 10.7 Hz strobe if mapped to brightness |
 | 2026-10-15 | Build with CMake presets (Ninja Multi-Config) and vcpkg manifest mode, triplet `x64-windows-static-md`. The registry baseline is pinned in `app/vcpkg-configuration.json` to the snapshot bundled with Visual Studio (`b1b19307`, 2025-08-30). vcpkg compiles the dependencies with the developer shell's Visual Studio instance | Ninja uses whichever MSVC the shell provides and exports `compile_commands.json`. The pinned baseline makes clean checkouts reproducible and matches the bundled vcpkg's scripts. Static third-party libraries with the shared CRT leave no third-party DLLs to ship; the target machine needs the VC++ 2015-2022 x64 redistributable. One toolset for app and dependencies avoids static-library link mismatches |
+| 2026-10-15 | Project name is Psyight (replaces the working name PsyLight) | Owner decision |
 
 Superseded during the conversation: an early suggestion to use JUCE for the C++ engine (replaced by the permissive stack) and an early "prototype in Python first" plan (replaced by the owner's choice of C++ from the start).
 

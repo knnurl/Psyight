@@ -6,7 +6,7 @@ Instructions for Claude Code in this repository. Read this file fully before wri
 
 A Windows C++ application that listens to music, detects musical events with high accuracy, and turns them into LED pixel shows. The initial genre is dark psytrance at around 160 BPM. The detectors cover kick, beat, bar, phrase and section, with the bassline getting the most attention: onset, duration, gate length, decay, pitch, octave, slides and rests. Output goes over sACN or Art-Net to a custom STM32F767 pixel node driving WS2812-class strips. Home testing comes first, event production later.
 
-The working name is **PsyLight**. Rename it freely.
+The project is named **Psyight** (the design conversation used the working name PsyLight).
 
 The owner is Kaan Ural: a robotics and embedded engineer working in C/C++, Python, ROS 2, STM32, KiCad and control systems. Treat him as an expert. Be direct, skip the basics, and flag uncertainty explicitly.
 
@@ -119,7 +119,7 @@ Run these from `app/` in an x64 Visual Studio 2022 developer shell: the "x64 Nat
 - Configure: `cmake --preset windows-msvc`
 - Build: `cmake --build --preset windows-msvc-release`
 - Test: `ctest --preset windows-msvc-release`
-- Run: `build\windows-msvc\release\psylight.exe`
+- Run: `build\windows-msvc\release\psyight.exe`
 
 ## Repository layout (target)
 
