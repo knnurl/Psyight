@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype 2: colour and motion modes</title>
+<style>
+:root{--text-primary:#1f1f1e;--text-secondary:#5f5e5a;--border:rgba(0,0,0,.15);--radius:8px;color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root{--text-primary:#f1efe8;--text-secondary:#b4b2a9;--border:rgba(255,255,255,.18)}}
+body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:var(--text-primary);background:Canvas;line-height:1.6}
+button,select{font:inherit;font-size:14px;padding:6px 12px;border-radius:var(--radius);border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer}
+.row{display:flex;align-items:center;gap:12px;margin:0 0 12px;flex-wrap:wrap}
+.lbl{font-size:13px;color:var(--text-secondary);min-width:60px}
+.val{font-size:13px;font-weight:500}
+</style>
+</head>
+<body>
+<h1 style="font-size:20px;font-weight:500">Prototype 2: colour and motion modes</h1>
+<p style="font-size:14px;color:var(--text-secondary)">From the PsyLight design conversation. Events are sequenced perfectly (no detection) to judge the aesthetics of structure-locked effects: kick, bass 16ths, hats, bar-level root changes, phrase-level palettes, and an ambient fallback when the kick disappears. Behavioural reference only.</p>
+<div class="row">
+<button id="play" style="min-width:90px">Play</button>
+<select id="mode">
+<option value="shock">Kick shockwave + bass conveyor</option>
+<option value="wave">Beat-phase waves, pitch to hue</option>
+<option value="trail">Feedback trails</option>
+<option value="pitch">Bassline note history</option>
+</select>
+<button id="sec">Switch to breakdown</button>
+</div>
+<div class="row"><span class="lbl">Tempo</span><input type="range" id="bpm" min="136" max="170" step="1" value="160" style="flex:1"><span class="val" id="bpmv" style="min-width:64px">160 BPM</span></div>
+<canvas id="strip" style="width:100%;height:56px;display:block;border-radius:var(--radius)"></canvas>
+<div class="row" style="margin-top:12px"><span class="lbl">State</span><span class="val" id="st">Stopped</span><span class="lbl" style="margin-left:auto">Flashes</span><span class="val" id="fr">0 /s</span></div>
+<script>
+const $=id=>document.getElementById(id);
+const N=96,C=(N-1)/2,NOTES=[0,0,3,-2],PAL=[285,190,320,150];
+let ctx,master,noise,timer,playing=false,nextT=0,step=0,section='drop',events=[],lastKickA=-10;
+let beatPos=0,baseHue=285,kickEnv=0,bassEnv=0,conv=0,note=0,amb=1,acc=0,rings=[],hi=false,flashes=[],last=performance.now();
+const R=new Float32Array(N),G=new Float32Array(N),B=new Float32Array(N),sp=new Float32Array(N);
+let fR=new Float32Array(N),fG=new Float32Array(N),fB=new Float32Array(N);let hist=new Array(12).fill(285);
+function init(){ctx=new (window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=0.45;master.connect(ctx.destination);const len=Math.floor(ctx.sampleRate*0.3);noise=ctx.createBuffer(1,len,ctx.sampleRate);const d=noise.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;}
+function kick(t){const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(170,t);o.frequency.exponentialRampToValueAtTime(45,t+0.11);g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.32);o.connect(g);g.connect(master);o.start(t);o.stop(t+0.35);}
+function bass(t,s,dur){const o=ctx.createOscillator(),lp=ctx.createBiquadFilter(),g=ctx.createGain();o.type='sawtooth';o.frequency.value=43.65*Math.pow(2,s/12);lp.type='lowpass';lp.Q.value=4;lp.frequency.setValueAtTime(1400,t);lp.frequency.exponentialRampToValueAtTime(220,t+dur*0.8);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.5,t+0.004);g.gain.exponentialRampToValueAtTime(0.001,t+dur*0.92);o.connect(lp);lp.connect(g);g.connect(master);o.start(t);o.stop(t+dur);}
+function hat(t){const n=ctx.createBufferSource();n.buffer=noise;const h=ctx.createBiquadFilter();h.type='highpass';h.frequency.value=7000;const g=ctx.createGain();g.gain.setValueAtTime(0.25,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.06);n.connect(h);h.connect(g);g.connect(master);n.start(t);n.stop(t+0.08);}
+function pad(t,s,dur){const lp=ctx.createBiquadFilter(),g=ctx.createGain();lp.type='lowpass';lp.frequency.value=900;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.07,t+0.5);g.gain.setValueAtTime(0.07,t+dur-0.4);g.gain.linearRampToValueAtTime(0,t+dur);lp.connect(g);g.connect(master);[1,1.006,0.994,1.5].forEach(m=>{const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=43.65*4*Math.pow(2,s/12)*m;o.connect(lp);o.start(t);o.stop(t+dur);});}
+function sched(){const sd=60/(+$('bpm').value)/4;while(nextT<ctx.currentTime+0.1){const bar=Math.floor(step/16),s=NOTES[bar%4],q=step%4;
+if(section==='drop'){if(q===0){kick(nextT);events.push({t:nextT,k:'K'});}else{bass(nextT,s,sd);events.push({t:nextT,k:'B',n:s});}if(q===2){hat(nextT);events.push({t:nextT,k:'H'});}}
+else if(step%16===0)pad(nextT,s,sd*16);nextT+=sd;step++;}}
+$('play').onclick=()=>{if(!ctx)init();if(!playing){ctx.resume();nextT=ctx.currentTime+0.05;step=0;events=[];timer=setInterval(sched,25);playing=true;$('play').textContent='Stop';}else{clearInterval(timer);playing=false;$('play').textContent='Play';}};
+$('sec').onclick=()=>{section=section==='drop'?'break':'drop';$('sec').textContent=section==='drop'?'Switch to breakdown':'Switch to drop';};
+$('bpm').oninput=()=>$('bpmv').textContent=$('bpm').value+' BPM';
+const cv=$('strip'),cx=cv.getContext('2d');function fit(){const r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);}fit();window.addEventListener('resize',fit);
+function hsv(h,s,v){h=((h%360)+360)%360/60;const i=Math.floor(h)%6,f=h-Math.floor(h),p=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));return [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i];}
+function add(i,c,k){R[i]+=c[0]*k;G[i]+=c[1]*k;B[i]+=c[2]*k;}
+function nh(s){return s*28;}
+function fire(e,now){if(e.k==='K'){lastKickA=e.t;kickEnv=1;rings.push({t:now,h:baseHue});for(const j of [Math.floor(C),Math.ceil(C)]){fR[j]=1;fG[j]=1;fB[j]=1;}}
+else if(e.k==='B'){bassEnv=1;conv++;note=e.n;const h=baseHue+180+nh(note);hist.unshift(h);hist.length=12;const c=hsv(h,1,0.9);for(const j of [Math.floor(C),Math.ceil(C)]){fR[j]=Math.max(fR[j],c[0]);fG[j]=Math.max(fG[j],c[1]);fB[j]=Math.max(fB[j],c[2]);}}
+else if(e.k==='H'){for(let k=0;k<3;k++)sp[Math.floor(Math.random()*N)]=1;}}
+function shiftOut(){const nR=new Float32Array(N),nG=new Float32Array(N),nB=new Float32Array(N);for(let i=0;i<N;i++){const src=i<C?i+1:i>C?i-1:i;const j=Math.min(N-1,Math.max(0,src));nR[i]=fR[j]*0.97;nG[i]=fG[j]*0.97;nB[i]=fB[j]*0.97;}fR=nR;fG=nG;fB=nB;}
+function frame(now){const dt=Math.min(0.05,(now-last)/1000);last=now;const bpm=+$('bpm').value;
+if(ctx&&playing){const ct=ctx.currentTime;while(events.length&&events[0].t<=ct)fire(events.shift(),now);beatPos+=dt*bpm/60;}
+const drop=ctx&&playing&&(ctx.currentTime-lastKickA)<60/bpm*1.5;amb+=((drop?0:1)-amb)*Math.min(1,dt*1.5);
+const bar=Math.floor(beatPos/4),target=PAL[Math.floor(bar/4)%4];baseHue+=((((target-baseHue)%360)+540)%360-180)*Math.min(1,dt*0.8);
+kickEnv*=Math.exp(-dt/0.12);bassEnv*=Math.exp(-dt/0.06);for(let i=0;i<N;i++)sp[i]*=Math.exp(-dt/0.08);
+R.fill(0);G.fill(0);B.fill(0);const mode=$('mode').value,tS=now/1000;
+if(mode==='trail'){acc+=dt*bpm/60*12;while(acc>=1){shiftOut();acc-=1;}}
+rings=rings.filter(r=>(now-r.t)<800);
+for(let i=0;i<N;i++){const d=Math.abs(i-C);
+if(mode==='shock'){for(const r of rings){const a=(now-r.t)/1000,rad=a*70;add(i,hsv(r.h,0.55,1),Math.exp(-((d-rad)*(d-rad))/6)*(1-a/0.8));}
+if((((d-conv*3)%12)+12)%12<4)add(i,hsv(baseHue+180+nh(note),1,1),0.18+0.5*bassEnv);}
+else if(mode==='wave'){let v=0.5+0.5*Math.sin(2*Math.PI*(d/16-beatPos));v=v*v*v*v;add(i,hsv(baseHue+nh(note)+d*1.5,0.95,1),v*(0.3+0.7*kickEnv));}
+else if(mode==='trail'){R[i]+=fR[i];G[i]+=fG[i];B[i]+=fB[i];}
+else{const seg=Math.floor(i/8),idx=bar%2?seg:11-seg;add(i,hsv(hist[idx],1,1),(0.12+0.5*Math.exp(-idx*0.25))*(idx===0?0.5+0.5*bassEnv:1));if(i%8===0)add(i,[1,1,1],kickEnv);}
+add(i,[1,1,1],sp[i]*0.8);
+const k=1-amb;R[i]*=k;G[i]*=k;B[i]*=k;
+const v1=Math.sin(i*0.15+tS*0.7),v2=Math.sin(i*0.07-tS*0.43);add(i,hsv(baseHue+60*v1+40*v2,0.7,1),(0.22+0.12*v1*v2)*amb*(playing?1:0.6));}
+const W=cv.width,H=cv.height,pw=W/N;cx.clearRect(0,0,W,H);let sum=0;
+for(let i=0;i<N;i++){cx.fillStyle='rgba(128,128,128,0.16)';cx.fillRect(i*pw+0.5,3,pw-1,H-6);const r=Math.min(1,R[i]),g=Math.min(1,G[i]),b=Math.min(1,B[i]),a=Math.max(r,g,b);sum+=(r+g+b)/3;
+if(a>0.01){cx.fillStyle='rgba('+Math.round(r/a*255)+','+Math.round(g/a*255)+','+Math.round(b/a*255)+','+a.toFixed(3)+')';cx.fillRect(i*pw+0.5,3,pw-1,H-6);}}
+const m=sum/N;if(!hi&&m>0.45){hi=true;flashes.push(now);}if(hi&&m<0.2)hi=false;flashes=flashes.filter(t=>now-t<1000);$('fr').textContent=flashes.length+' /s';
+$('st').textContent=!playing?'Stopped, idle ambient':'Bar '+(bar%16+1)+' of 16, '+(amb>0.5?'ambient flow':'rhythm layers')+', palette '+(Math.floor(bar/4)%4+1);
+requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

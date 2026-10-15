@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype 1: psytrance bassline reaction simulator</title>
+<style>
+:root{--text-primary:#1f1f1e;--text-secondary:#5f5e5a;--text-accent:#185FA5;--text-danger:#A32D2D;--surface-1:#f1efe8;--border:rgba(0,0,0,.15);--radius:8px;color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root{--text-primary:#f1efe8;--text-secondary:#b4b2a9;--text-accent:#85B7EB;--text-danger:#F09595;--surface-1:#2c2c2a;--border:rgba(255,255,255,.18)}}
+body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:var(--text-primary);background:Canvas;line-height:1.6}
+button,select{font:inherit;font-size:14px;padding:6px 12px;border-radius:var(--radius);border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer}
+.row{display:flex;align-items:center;gap:12px;margin:0 0 12px;flex-wrap:wrap}
+.lbl{font-size:13px;color:var(--text-secondary);min-width:72px}
+.val{font-size:13px;font-weight:500;min-width:60px}
+.meters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:12px 0}
+.m{background:var(--surface-1);border-radius:var(--radius);padding:8px 10px}
+.m span{font-size:12px;color:var(--text-secondary)}
+.bar{height:6px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden}
+.fill{height:100%;width:0;background:var(--text-accent)}
+</style>
+</head>
+<body>
+<h1 style="font-size:20px;font-weight:500">Prototype 1: bassline reaction simulator</h1>
+<p style="font-size:14px;color:var(--text-secondary)">From the PsyLight design conversation. Web Audio synthesises a psytrance kick and saw bass; real FFT analysis drives four LED mapping modes. Behavioural reference only: the C++ app replaces this.</p>
+<div class="row">
+<button id="play" style="min-width:90px">Play</button>
+<select id="pat">
+<option value="rolling">Rolling KBBB</option>
+<option value="ghost">Rolling with ghost note</option>
+<option value="octave">Rolling, octave jump</option>
+<option value="gallop">Triplet gallop KBB</option>
+<option value="double">Offbeat double K-BB</option>
+<option value="offbeat">Offbeat K-B-</option>
+</select>
+<select id="map">
+<option value="raw">Raw low band</option>
+<option value="smooth">Low band, smoothed</option>
+<option value="kick">Kick only (click onset)</option>
+<option value="split">Split: kick burst + bass chase</option>
+</select>
+</div>
+<div class="row"><span class="lbl">Tempo</span><input type="range" id="bpm" min="136" max="170" step="1" value="160" style="flex:1"><span class="val" id="bpmv">160 BPM</span></div>
+<div class="row"><span class="lbl">Release</span><input type="range" id="rel" min="10" max="400" step="10" value="80" style="flex:1"><span class="val" id="relv">80 ms</span></div>
+<canvas id="strip" style="width:100%;height:36px;display:block;border-radius:var(--radius)"></canvas>
+<div class="meters">
+<div class="m"><span>Sub 30 to 90 Hz</span><div class="bar"><div class="fill" id="b0"></div></div></div>
+<div class="m"><span>Bass body 90 to 250 Hz</span><div class="bar"><div class="fill" id="b1"></div></div></div>
+<div class="m"><span>Mids 250 Hz to 1 kHz</span><div class="bar"><div class="fill" id="b2"></div></div></div>
+<div class="m"><span>Kick click 2.5 to 6 kHz</span><div class="bar"><div class="fill" id="b3"></div></div></div>
+</div>
+<canvas id="spec" style="width:100%;height:110px;display:block"></canvas>
+<div class="row" style="margin-top:12px"><span class="lbl">Flash rate</span><span class="val" id="fr">0 /s</span><span id="warn" style="font-size:13px"></span></div>
+<script>
+const $=id=>document.getElementById(id);
+const P={rolling:{d:4,s:'KBBB'},ghost:{d:4,s:'KBbB'},octave:{d:4,s:'KBBO'},gallop:{d:3,s:'KBB'},double:{d:4,s:'K-BB'},offbeat:{d:4,s:'K-B-'}};
+const F=43.65;
+let ctx,an,master,noise,timer,playing=false,nextT=0,step=0;
+function init(){ctx=new (window.AudioContext||window.webkitAudioContext)();an=ctx.createAnalyser();an.fftSize=2048;an.smoothingTimeConstant=0;master=ctx.createGain();master.gain.value=0.5;master.connect(an);an.connect(ctx.destination);
+const len=Math.floor(ctx.sampleRate*0.02);noise=ctx.createBuffer(1,len,ctx.sampleRate);const d=noise.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;}
+function kick(t){const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.setValueAtTime(170,t);o.frequency.exponentialRampToValueAtTime(45,t+0.11);g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.32);o.connect(g);g.connect(master);o.start(t);o.stop(t+0.35);
+const n=ctx.createBufferSource();n.buffer=noise;const h=ctx.createBiquadFilter();h.type='highpass';h.frequency.value=3000;const ng=ctx.createGain();ng.gain.setValueAtTime(0.6,t);ng.gain.exponentialRampToValueAtTime(0.001,t+0.015);n.connect(h);h.connect(ng);ng.connect(master);n.start(t);}
+function bass(t,f,v,dur){const o=ctx.createOscillator(),lp=ctx.createBiquadFilter(),g=ctx.createGain();o.type='sawtooth';o.frequency.value=f;lp.type='lowpass';lp.Q.value=4;lp.frequency.setValueAtTime(1400,t);lp.frequency.exponentialRampToValueAtTime(220,t+dur*0.8);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.55*v,t+0.004);g.gain.exponentialRampToValueAtTime(0.001,t+dur*0.92);o.connect(lp);lp.connect(g);g.connect(master);o.start(t);o.stop(t+dur);}
+function sched(){const p=P[$('pat').value],sd=60/(+$('bpm').value)/p.d;while(nextT<ctx.currentTime+0.1){const c=p.s[step%p.s.length];if(c==='K')kick(nextT);else if(c==='B')bass(nextT,F,1,sd);else if(c==='b')bass(nextT,F,0.4,sd);else if(c==='O')bass(nextT,F*2,1,sd);nextT+=sd;step++;}}
+$('play').onclick=()=>{if(!ctx)init();if(!playing){ctx.resume();nextT=ctx.currentTime+0.05;step=0;timer=setInterval(sched,25);playing=true;$('play').textContent='Stop';}else{clearInterval(timer);playing=false;$('play').textContent='Play';}};
+$('bpm').oninput=()=>$('bpmv').textContent=$('bpm').value+' BPM';
+$('rel').oninput=()=>$('relv').textContent=$('rel').value+' ms';
+const strip=$('strip'),sc=strip.getContext('2d'),spec=$('spec'),pc=spec.getContext('2d');
+function fit(c){const r=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);}
+fit(strip);fit(spec);window.addEventListener('resize',()=>{fit(strip);fit(spec);});
+const BANDS=[[30,90],[90,250],[250,1000],[2500,6000]];let peaks=[1e-6,1e-6,1e-6,1e-6],prev=[0,0,0,0];
+let buf=null,env=0,kEnv=0,bEnv=0,chase=0,lastKick=0,hi=false,flashes=[],last=performance.now();
+const NPX=72;
+function bandVal(lo,hi){const bw=ctx.sampleRate/an.fftSize;const i0=Math.max(1,Math.floor(lo/bw)),i1=Math.min(buf.length-1,Math.ceil(hi/bw));let s=0;for(let i=i0;i<=i1;i++)s+=Math.pow(10,buf[i]/20);return s/(i1-i0+1);}
+function hsl(h,l){return 'hsl('+h+',90%,'+l+'%)';}
+function frame(now){const dt=Math.min(0.05,(now-last)/1000);last=now;const rel=(+$('rel').value)/1000,dec=Math.exp(-dt/rel);
+let n=[0,0,0,0];
+if(ctx){if(!buf)buf=new Float32Array(an.frequencyBinCount);an.getFloatFrequencyData(buf);
+const raw=BANDS.map(b=>bandVal(b[0],b[1]));for(let k=0;k<4;k++){peaks[k]=Math.max(raw[k],peaks[k]*0.997);n[k]=Math.min(1,raw[k]/peaks[k]);}
+const kickOn=n[3]>0.45&&n[3]>prev[3]*1.8;if(kickOn){kEnv=1;lastKick=now;}
+const bassOn=n[1]>0.45&&n[1]>prev[1]*1.5&&now-lastKick>40&&n[3]<0.3;if(bassOn){bEnv=1;chase=(chase+9)%NPX;}
+prev=n.slice();}
+kEnv*=dec;bEnv*=dec;
+const low=Math.min(1,(n[0]+n[1])/2);env=low>env?low:env*dec;
+for(let k=0;k<4;k++)$('b'+k).style.width=Math.round(n[k]*100)+'%';
+const mode=$('map').value,W=strip.width,H=strip.height,pw=W/NPX;sc.clearRect(0,0,W,H);let sum=0;
+for(let i=0;i<NPX;i++){let h=300,b=0;const c=Math.abs(i-NPX/2)/(NPX/2);
+if(mode==='raw'){b=Math.pow(low,1.5);h=200+100*c;}
+else if(mode==='smooth'){b=env;h=200+100*c;}
+else if(mode==='kick'){b=c<kEnv?kEnv:0;h=310;}
+else{const kb=c<kEnv*0.5?kEnv:0;let d=(chase-i+NPX)%NPX;const cb=d<10?bEnv*(1-d/10):0;if(kb>=cb){b=kb;h=310;}else{b=cb;h=185;}}
+sum+=b;sc.fillStyle='rgba(128,128,128,0.18)';sc.fillRect(i*pw+1,2,pw-2,H-4);if(b>0.02){sc.fillStyle=hsl(h,20+45*b);sc.globalAlpha=Math.min(1,b);sc.fillRect(i*pw+1,2,pw-2,H-4);sc.globalAlpha=1;}}
+const m=sum/NPX;if(!hi&&m>0.5){hi=true;flashes.push(now);}if(hi&&m<0.2)hi=false;flashes=flashes.filter(t=>now-t<1000);
+$('fr').textContent=flashes.length+' /s';const w=$('warn');if(flashes.length>3){w.textContent='Above 3 flashes per second';w.style.color='var(--text-danger)';}else{w.textContent='';}
+const cs=getComputedStyle(document.documentElement),SW=spec.width,SH=spec.height;pc.clearRect(0,0,SW,SH);const fx=f=>Math.log(f/20)/Math.log(8000/20)*SW;
+pc.fillStyle='rgba(128,128,128,0.12)';BANDS.forEach(b=>pc.fillRect(fx(b[0]),0,fx(b[1])-fx(b[0]),SH));
+if(ctx&&buf){pc.strokeStyle=cs.getPropertyValue('--text-accent').trim()||'#378ADD';pc.lineWidth=1.5*(window.devicePixelRatio||1);pc.beginPath();const bw=ctx.sampleRate/an.fftSize;let first=true;for(let i=1;i<buf.length;i++){const f=i*bw;if(f<20)continue;if(f>8000)break;const y=SH-Math.max(0,Math.min(1,(buf[i]+100)/80))*SH;const x=fx(f);if(first){pc.moveTo(x,y);first=false;}else pc.lineTo(x,y);}pc.stroke();}
+pc.fillStyle=cs.getPropertyValue('--text-secondary').trim()||'#888';pc.font=(11*(window.devicePixelRatio||1))+'px sans-serif';[50,100,250,1000,2500,6000].forEach(f=>pc.fillText(f>=1000?(f/1000)+'k':String(f),fx(f)+3,SH-4));
+requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

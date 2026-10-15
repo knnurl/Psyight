@@ -1,0 +1,23 @@
+# Build output
+build/
+out/
+.vs/
+*.user
+vcpkg_installed/
+
+# Private data: never commit audio, stems, labels for private tracks, or trained weights
+data/
+*.wav
+*.flac
+*.mp3
+*.aiff
+*.onnx
+*.pt
+*.ckpt
+
+# Session recordings
+sessions/
+
+# Python
+__pycache__/
+.venv/
