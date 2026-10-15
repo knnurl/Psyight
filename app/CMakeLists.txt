@@ -56,7 +56,8 @@ target_link_libraries(psyight PRIVATE psyight_options imgui::imgui implot::implo
 
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
-                             tests/labels_test.cpp tests/scoring_test.cpp)
+                             tests/labels_test.cpp tests/scoring_test.cpp
+                             tests/synth_generator.cpp tests/synth_generator_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)
