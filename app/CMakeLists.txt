@@ -44,13 +44,19 @@ add_library(psyight_miniaudio STATIC src/audio/miniaudio_impl.c)
 target_include_directories(psyight_miniaudio SYSTEM PUBLIC "${MINIAUDIO_INCLUDE_DIR}")
 set_target_properties(psyight_miniaudio PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
 
+# Platform-independent app code, shared by the app and the tests.
+add_library(psyight_lib STATIC src/io/labels.cpp)
+target_include_directories(psyight_lib PUBLIC src)
+target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json)
+
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options imgui::imgui implot::implot glfw
                                       OpenGL::GL spdlog::spdlog dwmapi)
 
 enable_testing()
-add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp)
-target_link_libraries(psyight_tests PRIVATE psyight_options psyight_miniaudio doctest::doctest
-                                            nlohmann_json::nlohmann_json pffft::pffft)
+add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
+                             tests/labels_test.cpp)
+target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
+                                            doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)

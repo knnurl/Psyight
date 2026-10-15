@@ -4,7 +4,6 @@
 
 #include <doctest/doctest.h>
 #include <miniaudio.h>
-#include <nlohmann/json.hpp>
 #include <pffft/pffft.h>
 
 #include <algorithm>
@@ -93,15 +92,4 @@ TEST_CASE("miniaudio: decodes an in-memory WAV and resamples 44.1 kHz to 48 kHz"
     CHECK((result == MA_SUCCESS || result == MA_AT_END));
     CHECK(frames_read == kTargetRateHz / 10);
     CHECK(samples[frames_read / 2] == doctest::Approx(0.5f));
-}
-
-TEST_CASE("nlohmann-json: parses an excerpt of the SPEC 6.10 labels example") {
-    const auto labels = nlohmann::json::parse(R"({
-        "schema": 1,
-        "grid": { "bpm": 160.0, "first_downbeat_s": 0.000 },
-        "bass_notes": [ { "onset_s": 60.105, "offset_s": 60.171, "midi": 29, "cents": 0 } ]
-    })");
-    CHECK(labels.at("schema").get<int>() == 1);
-    CHECK(labels.at("grid").at("bpm").get<double>() == 160.0);
-    CHECK(labels.at("bass_notes").at(0).at("midi").get<int>() == 29);
 }
