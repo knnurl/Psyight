@@ -315,7 +315,9 @@ TEST_CASE("synth: the full mix stays below full scale and its labels survive JSO
     params.noise_level = 0.01;
     const SynthOutput out = render(params, make_pattern(Pattern::rolling, 4, 29, 0.6));
     CHECK(max_abs(out.samples, 0, static_cast<std::int64_t>(out.samples.size())) < 1.0);
-    const Result<Labels> parsed = parse_labels_json(to_labels_json(out.labels));
+    const Result<std::string> json = to_labels_json(out.labels);
+    REQUIRE(json.ok());
+    const Result<Labels> parsed = parse_labels_json(json.value());
     REQUIRE(parsed.ok());
     CHECK(parsed.value() == out.labels);
 }

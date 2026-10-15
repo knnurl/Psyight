@@ -70,12 +70,13 @@ struct Labels {
 };
 
 // Parses labels JSON. Fails on malformed JSON, a schema other than kLabelsSchemaVersion, or a
-// missing or wrongly typed field. Optional fields: slide_in, slide_out (false), velocity (1.0),
-// cents (0) and every event list (empty).
+// missing or wrongly typed field (integer fields must not have a fractional part). Optional fields:
+// slide_in, slide_out (false), velocity (1.0), cents (0) and every event list (empty).
 Result<Labels> parse_labels_json(std::string_view json);
 
-// Serialises labels as schema-1 JSON. parse_labels_json(to_labels_json(x)) reproduces x exactly.
-std::string to_labels_json(const Labels &labels);
+// Serialises labels as schema-1 JSON. Fails on a non-finite number or a string that is not valid
+// UTF-8. Otherwise parse_labels_json reproduces the labels exactly.
+Result<std::string> to_labels_json(const Labels &labels);
 
 // "<dir>/<name>.<ext>" becomes "<dir>/<name>.<ext>.labels.json".
 std::filesystem::path labels_path_for(const std::filesystem::path &audio_path);
