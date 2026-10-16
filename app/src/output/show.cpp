@@ -60,21 +60,30 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     }
 
     ShowFrame out;
-    out.index = index_++;
-    out.t_s = t_s;
-    if (config.analysis != nullptr) {
+    if (config.hold && !config.blackout && held_.frame.size() == config.rig.pixels.size()) {
+        out = held_; // The look, frozen; the limiters and automation are skipped.
+    } else if (config.analysis != nullptr) {
         const EngineInputs inputs = inputs_at(*config.analysis, config.grid, t_s);
         out.mix = automate(config.scenes, *config.analysis, config.grid, inputs, config.automation,
                            config.manual_scene);
-        out.frame =
-            render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes, config.seed);
         out.section = inputs.section;
         out.beat_in_bar = inputs.beat_in_bar;
+        if (config.blackout) {
+            out.frame.assign(config.rig.pixels.size(), Rgb{});
+        } else {
+            out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
+                                   config.seed);
+        }
     } else {
         out.frame.assign(config.rig.pixels.size(), Rgb{});
     }
-    out.report = limiters_.process(out.frame, t_s);
-    flashes_limited_ += out.report.flash_limited;
+    if (!config.hold || config.blackout || held_.frame.size() != config.rig.pixels.size()) {
+        out.report = limiters_.process(out.frame, t_s);
+        flashes_limited_ += out.report.flash_limited;
+        held_ = out;
+    }
+    out.index = index_++;
+    out.t_s = t_s;
     out.flashes_limited = flashes_limited_;
     const std::vector<std::uint8_t> bytes = to_bytes(out.frame, config.limiter.gamma);
     Tee tee(node_, socket_.get());

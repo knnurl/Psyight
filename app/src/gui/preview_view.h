@@ -5,6 +5,10 @@
 // the playhead (SPEC 4.3).
 // The panel owns the show thread: it publishes a new config when a setting, the track or the grid
 // changes, and draws the latest frame; neither side waits for the other.
+// It also owns the top bar's show controls (SPEC 9.1 and 9.3): the state ladder (Preflight and
+// Preview keep the network off, Ambient sends the ambient scene only, React sends with scenes
+// held by hand, Show runs the section automation) and Blackout (B) and Hold (H), fixed at the
+// right and acting at once. The app starts in Preview.
 #pragma once
 
 #include "gui/project_state.h"
@@ -24,9 +28,15 @@ class PreviewView {
     PreviewView(Session &session, ProjectState &project);
 
     void draw();
+    // Inside the main menu bar.
+    void draw_top_bar();
     bool sending() const { return config_.send_to_network; }
 
   private:
+    enum class Ladder { preflight, preview, ambient, react, show };
+
+    void set_ladder(Ladder step);
+    int ambient_scene() const;
     void sync_config(); // Publishes config_ when it or the track changed.
     void draw_controls(const ShowFrame &frame);
     void draw_scene_cards(const ShowFrame &frame);
@@ -43,6 +53,8 @@ class PreviewView {
     std::uint64_t version_ = 0;
     int edit_scene_ = 0;        // Whose layers and palette the controls show.
     bool scene_edited_ = false; // A scene changed this frame: the project is told once.
+    Ladder ladder_ = Ladder::preview;
+    int playing_scene_ = 0; // The automation's current scene, from the latest frame.
     std::string address_text_ = "127.0.0.1";
     bool address_active_ = false;
     // Measured frame rate, from the frame index over about a second.

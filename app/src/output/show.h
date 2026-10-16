@@ -45,6 +45,10 @@ struct ShowConfig {
     Patch patch = build_patch(default_rig());
     OutputSettings output;
     bool send_to_network = false;
+    // Safety controls (SPEC 9.1): blackout sends black (through the limiters, so the way back up
+    // counts as a flash); hold keeps sending the last frame shown. Blackout wins over hold.
+    bool blackout = false;
+    bool hold = false;
     std::uint64_t seed = 1;
 };
 
@@ -82,6 +86,7 @@ class ShowRenderer {
     std::int64_t index_ = 0;
     std::int64_t send_errors_ = 0;
     std::int64_t flashes_limited_ = 0;
+    ShowFrame held_; // The last frame shown, for hold.
     std::string network_error_;
 };
 

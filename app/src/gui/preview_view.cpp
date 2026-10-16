@@ -32,6 +32,85 @@ PreviewView::PreviewView(Session &session, ProjectState &project)
     : session_(session), project_(project),
       show_([&session] { return session.transport().position(); }) {}
 
+void PreviewView::set_ladder(Ladder step) {
+    ladder_ = step;
+    config_.send_to_network = step >= Ladder::ambient;
+    if (step == Ladder::ambient) {
+        config_.manual_scene = ambient_scene();
+    } else if (step == Ladder::react && config_.manual_scene < 0) {
+        config_.manual_scene = playing_scene_;
+    } else if (step == Ladder::show) {
+        config_.manual_scene = -1;
+    }
+    dirty_ = true;
+}
+
+int PreviewView::ambient_scene() const {
+    for (const char *label : {"breakdown", "intro"}) {
+        for (size_t i = 0; i < config_.scenes.size(); ++i) {
+            const std::vector<std::string> &s = config_.scenes[i].sections;
+            if (std::find(s.begin(), s.end(), label) != s.end()) {
+                return static_cast<int>(i);
+            }
+        }
+    }
+    return 0;
+}
+
+void PreviewView::draw_top_bar() {
+    struct Step {
+        Ladder step;
+        const char *name;
+        const char *meaning;
+    };
+    static constexpr Step kSteps[] = {
+        {Ladder::preflight, "Preflight", "Checks; nothing is sent to the network."},
+        {Ladder::preview, "Preview", "The engine runs for the preview (virtual node) only."},
+        {Ladder::ambient, "Ambient", "Sends to the network: the ambient scene only."},
+        {Ladder::react, "React", "Sends to the network: scenes chosen by hand."},
+        {Ladder::show, "Show", "Sends to the network: scenes follow the sections."},
+    };
+    ImGui::TextDisabled("|");
+    for (const Step &s : kSteps) {
+        ImGui::SameLine();
+        if (ImGui::RadioButton(s.name, ladder_ == s.step)) {
+            set_ladder(s.step);
+        }
+        ImGui::SetItemTooltip("%s", s.meaning);
+    }
+    // Blackout and Hold: fixed at the right, with hotkeys, no confirmation (SPEC 9.1).
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float buttons = ImGui::CalcTextSize("Blackout (B)").x +
+                          ImGui::CalcTextSize("Hold (H)").x + 4.0f * style.FramePadding.x +
+                          style.ItemSpacing.x;
+    ImGui::SameLine(ImGui::GetWindowWidth() - buttons - style.WindowPadding.x);
+    const auto toggle = [this](const char *label, bool &on, const ImVec4 &colour) {
+        if (on) {
+            ImGui::PushStyleColor(ImGuiCol_Button, colour);
+        }
+        if (ImGui::Button(label)) {
+            on = !on;
+            dirty_ = true;
+        }
+        if (on) {
+            ImGui::PopStyleColor();
+        }
+    };
+    toggle("Blackout (B)", config_.blackout, ImVec4(0.8f, 0.15f, 0.1f, 1.0f));
+    ImGui::SameLine();
+    toggle("Hold (H)", config_.hold, ImVec4(0.8f, 0.55f, 0.1f, 1.0f));
+    if (!ImGui::GetIO().WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_B, false)) {
+            config_.blackout = !config_.blackout;
+            dirty_ = true;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_H, false)) {
+            config_.hold = !config_.hold;
+            dirty_ = true;
+        }
+    }
+}
+
 void PreviewView::sync_config() {
     std::shared_ptr<const TrackAnalysis> analysis =
         session_.has_track() ? session_.track().track_analysis : nullptr;
@@ -83,10 +162,14 @@ void PreviewView::draw() {
         rate_index_ = frame->index;
         rate_since_ = now;
     }
+    playing_scene_ = std::max(0, frame->mix.to);
 
     draw_controls(*frame);
-    ImGui::Text("%s, beat %d of the bar, %.1f A estimated%s", frame->section.c_str(),
-                frame->beat_in_bar + 1, frame->report.current_a,
+    ImGui::Text("%s%s, beat %d of the bar, %.1f A estimated%s",
+                config_.blackout ? "Blackout: "
+                : config_.hold   ? "Hold: "
+                                 : "",
+                frame->section.c_str(), frame->beat_in_bar + 1, frame->report.current_a,
                 frame->report.power_scale < 1.0 ? " (power limited)" : "");
     draw_rig(*frame);
     ImGui::End();
@@ -394,6 +477,7 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
     const ImGuiStyle &style = ImGui::GetStyle();
     const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
     const bool manual = config_.manual_scene >= 0;
+    ImGui::BeginDisabled(ladder_ == Ladder::ambient); // Ambient plays the ambient scene only.
     for (int i = 0; i < static_cast<int>(config_.scenes.size()); ++i) {
         const std::string &name = config_.scenes[static_cast<size_t>(i)].name;
         const float width = ImGui::CalcTextSize(name.c_str()).x + 2.0f * style.FramePadding.x;
@@ -411,6 +495,9 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
         if (ImGui::Button(name.c_str())) {
             config_.manual_scene = i;
             edit_scene_ = i;
+            if (ladder_ == Ladder::show) {
+                ladder_ = Ladder::react; // A scene held by hand.
+            }
             dirty_ = true;
         }
         ImGui::PopID();
@@ -427,8 +514,14 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
     bool automatic = !manual;
     if (ImGui::Checkbox("Auto (by section)", &automatic)) {
         config_.manual_scene = automatic ? -1 : std::max(0, frame.mix.to);
+        if (ladder_ == Ladder::react && automatic) {
+            ladder_ = Ladder::show;
+        } else if (ladder_ == Ladder::show && !automatic) {
+            ladder_ = Ladder::react;
+        }
         dirty_ = true;
     }
+    ImGui::EndDisabled();
     ImGui::SetItemTooltip("Scenes follow the sections; clicking a scene holds it until this is "
                           "ticked again.");
     if (frame.mix.from >= 0) {
@@ -446,8 +539,12 @@ void PreviewView::draw_output(const ShowFrame &frame) {
     OutputSettings o = project_.project().output;
     int first_universe = project_.project().first_universe;
     bool changed = false;
-    dirty_ |= ImGui::Checkbox("Send to network", &config_.send_to_network);
-    ImGui::SetItemTooltip("Off: packets go to the virtual node (this preview) only.");
+    if (config_.send_to_network) {
+        ImGui::TextColored(kWarning, "Sending to the network (top bar: Ambient, React or Show).");
+    } else {
+        ImGui::TextUnformatted("Not sending: the virtual node (this preview) only. The top bar's "
+                               "Ambient, React and Show send.");
+    }
     int protocol = o.protocol == OutputProtocol::sacn ? 0 : 1;
     ImGui::SetNextItemWidth(8.5f * em);
     if (ImGui::Combo("Protocol", &protocol, "sACN (E1.31)\0Art-Net 4\0")) {

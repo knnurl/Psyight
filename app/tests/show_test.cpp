@@ -147,6 +147,45 @@ TEST_CASE("show renderer: deterministic, and the node shows the limited frame's 
     CHECK(std::all_of(black.node_rgb.begin(), black.node_rgb.end(), [](auto v) { return v == 0; }));
 }
 
+TEST_CASE("show renderer: blackout sends black, hold freezes the look") {
+    auto analysis = std::make_shared<TrackAnalysis>();
+    analysis->sample_rate_hz = 48000;
+    analysis->duration_s = 20.0;
+    analysis->grid = {150.0, seconds_to_samples(1.0, 48000), 48000};
+    for (int k = 0; k < 40; ++k) {
+        analysis->bass.kick_times_s.push_back(1.0 + 0.4 * k);
+    }
+    analysis->sections = {{0.0, 20.0, "groove", 1.0}};
+    ShowConfig config;
+    config.analysis = analysis;
+    config.grid = analysis->grid;
+    ShowRenderer r;
+    const auto lit = [](const ShowFrame &f) {
+        return std::any_of(f.node_rgb.begin(), f.node_rgb.end(), [](auto v) { return v > 0; });
+    };
+    CHECK(lit(r.render(config, 1.05)));
+    config.blackout = true;
+    ++config.version;
+    for (int f = 0; f < 10; ++f) {
+        const ShowFrame black = r.render(config, 1.1 + f / 60.0);
+        CHECK_FALSE(lit(black));
+        CHECK(black.packets_sent == 4); // Still sent: nodes get black, not silence.
+    }
+    config.blackout = false;
+    ++config.version;
+    const ShowFrame before = r.render(config, 1.3);
+    config.hold = true;
+    ++config.version;
+    for (int f = 1; f < 30; ++f) {
+        const ShowFrame held = r.render(config, 1.3 + f / 60.0); // Kicks pass meanwhile.
+        CHECK(held.node_rgb == before.node_rgb);
+        CHECK(held.index > before.index);
+    }
+    config.hold = false;
+    ++config.version;
+    CHECK(r.render(config, 1.85).node_rgb != before.node_rgb);
+}
+
 TEST_CASE("UDP socket: an Art-Net packet over loopback, and IPv4 parsing") {
     CHECK(parse_ipv4("192.168.1.50") == std::array<std::uint8_t, 4>{192, 168, 1, 50});
     CHECK_FALSE(parse_ipv4("192.168.1").has_value());

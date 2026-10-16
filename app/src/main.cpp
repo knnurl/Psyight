@@ -154,6 +154,7 @@ int main() {
                     ImGui::MenuItem("ImPlot demo", nullptr, &show_implot_demo);
                     ImGui::EndMenu();
                 }
+                preview_view.draw_top_bar();
                 ImGui::EndMainMenuBar();
             }
             // Bump the version when panels are added, so saved layouts get the new default once.
