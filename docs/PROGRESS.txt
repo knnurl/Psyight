@@ -8,8 +8,8 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - Private audio and labels live in `data/` (gitignored): `OculusDrift.mp3`, `Hagios.mp3`, `Hall of Purity.wav`, `Phase Change.mp3`.
 
 ## Owner's labelling state (2026-10-16)
-- `data/OculusDrift.mp3.labels.json`: grid **150 BPM** (not 160), first downbeat 16.017 s, one region 93.217 to 154.44 s, **marked complete**: 452 notes, all E1 (MIDI 28), on the grid, gate 1.0 (rolling K-B-B-B, 100 ms slots).
-- **The grid is about 25 ms early against the audio**: detected kicks sit +25.0 ms (p5 to p95 within 0.4 ms) after its beats, so the grid-snapped labels inherit that offset. Owner to decide how to correct it (see next step 1). Do not edit the owner's labels without asking.
+- `data/OculusDrift.mp3.labels.json`: grid **150 BPM** (not 160), first downbeat 16.042 s, one region 93.242 to 154.465 s, **marked complete**: 452 notes, all E1 (MIDI 28), on the grid, gate 1.0 (rolling K-B-B-B, 100 ms slots).
+- The grid was 25 ms early against the detected kicks; with the owner's approval the grid, region and all 475 notes were shifted +25.0 ms on 2026-10-16 (now kick minus beat: median 0.0 ms). Original kept as `data/OculusDrift.mp3.labels.before-shift.json`. Do not edit the owner's labels without asking.
 
 ## Toolchain (this machine)
 - Use the x64 **VS 2022 Build Tools** shell (MSVC 19.44, v143), inside the same PowerShell call as the build:
@@ -48,14 +48,14 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - Multi-note editing in the bass roll: drag a box on empty space (Shift adds), Shift+click toggles, Ctrl+A selects the notes in view, Escape clears. Drag, Up/Down (Shift: octave) and Delete act on the whole selection. Ctrl+C, Ctrl+V (at the mouse, else the playhead), Ctrl+D or Duplicate with "Repeat every" (Auto, 1/16 to 4 bars) and a count, and "Fill to region end". Rules in `src/io/note_pattern.h`: anchor at the slot nearest the first onset (off-grid offsets kept), Auto period = slots covered by onsets rounded up to whole beats (a K-B-B-B bar repeats per bar), placing replaces the notes in the covered slots (half-slot margins). Each operation is one undo step (`LabelEditor::insert_notes`, `move_notes`, `delete_notes`); undo, redo and track loads clear the selection. Verified in the app on a scratch copy, through the saved labels file.
 - **Bass tracker v0** (`src/analysis/bass_tracker.*`, SPEC 6.3 updated): kicks (click flux, broadband ratio, low rise, near a grid beat), onsets (per-bin magnitudes averaged over one period, centred difference), offsets (k x peak with window lag removed, next onset, next kick), pitch (front-end salience, central half), slides (salience changepoint, 20 ms bias), gate ratio, slot index, long notes, velocity, decay tau, confidence. Every threshold is a registry parameter (`bass.*`, `declare_bass_tracker_params`). Tracker takes the mono audio plus the front-end features and a Grid.
 - Synthetic set (`tests/synthetic_set.*`, 13 cases) with exact labels: onset F 1.000 on every case, gate MAE 0.100 pooled (SPEC target 0.10 just met), pitch >= 0.90 except 28 ms notes (physics; low confidence). Full table in `docs/results/M1.md`.
-- `psyight_eval` CLI and first real numbers (`docs/results/M1.md`): OculusDrift region as labelled F 0.858, pitch 0.987, gate MAE 0.037; with the labels shifted +25 ms to the kicks, F 0.994 (452/452 matched), so the gap is the grid offset, not tracker scatter.
+- `psyight_eval` CLI and the **M1 baseline** (`docs/results/M1.md`): OculusDrift region F 0.994 (452/452 matched, 5 false positives), pitch 0.989, gate MAE 0.037, offsets -6.8 ms median. Before the grid fix it scored F 0.858: the gap was the grid offset, not tracker scatter.
 - Tests: 110 doctest cases, 4183 assertions, Release.
 
 ## Next steps, in order
-1. **Owner decision: fix the OculusDrift grid offset.** Options: set the first downbeat +25 ms and shift every label by the same amount (a precise "shift all labels by N ms" action in the inspector would make this one step), or relabel. Then record the official baseline in `docs/results/M1.md`.
-2. **Detected notes in the bass roll** (second colour, opacity is confidence; kicks as markers) and a "pre-fill labels from detections" button. Run the tracker in `Session::load` after the front end.
-3. **Scoring panel**: per complete region and total, the psyight_eval metrics, plus jump to the worst errors.
-4. **Golden-metric regression test** on the synthetic set (a metric that worsens fails), and a Python cross-check `tools/python/eval_mir.py` using the same closest-pairing rule.
+1. **Detected notes in the bass roll** (second colour, opacity is confidence; kicks as markers) and a "pre-fill labels from detections" button. Run the tracker in `Session::load` after the front end.
+2. **Scoring panel**: per complete region and total, the psyight_eval metrics, plus jump to the worst errors.
+3. **Golden-metric regression test** on the synthetic set (a metric that worsens fails), and a Python cross-check `tools/python/eval_mir.py` using the same closest-pairing rule.
+4. A "shift all labels by N ms" action in the inspector (a grid fix was a script this time).
 5. Open questions in SPEC 18: A13 (kick click ratio on real kicks), A14 (slide bias), A15 (are detected onsets 7 ms early on real attacks, or is the bass ahead of the 16ths?). Label a second track before tuning on real audio; the OculusDrift minute is the evaluation set, so don't tune on it.
 
 ## Known issues
