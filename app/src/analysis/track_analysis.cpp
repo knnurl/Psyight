@@ -5,6 +5,8 @@
 #include "core/paths.h"
 #include "io/stems.h"
 
+#include <cmath>
+
 namespace psyight {
 
 namespace {
@@ -80,6 +82,21 @@ Result<TrackAnalysis> analyse_track(const std::filesystem::path &audio_path,
         analysis.stems_lag_s = static_cast<double>(lag) / stem_rate;
         drums = shifted(drums, lag);
         bass_stem = shifted(bass_stem, lag);
+        decoded = decode_mono(stems.other, stem_rate);
+        if (!decoded) {
+            return decoded.error();
+        }
+        Result<FrontEndResult> other_features =
+            analyse_front_end(shifted(decoded.value(), lag), stem_rate, options.front_end);
+        if (!other_features) {
+            return other_features.error();
+        }
+        Result<ResidualFeatures> residual =
+            analyse_residual(other_features.value(), options.residual);
+        if (!residual) {
+            return residual.error();
+        }
+        analysis.residual = std::move(residual.value());
         Result<FrontEndResult> features = analyse_front_end(drums, stem_rate, options.front_end);
         if (!features) {
             return features.error();
@@ -133,6 +150,22 @@ Result<TrackAnalysis> analyse_track(const std::filesystem::path &audio_path,
         return sections.error();
     }
     analysis.sections = std::move(sections.value());
+
+    // Hats from the beat source (mix or drums); the residual from the mix unless the "other" stem
+    // gave it above.
+    Result<ResidualFeatures> hats = analyse_residual(beat_features, options.residual);
+    if (!hats) {
+        return hats.error();
+    }
+    if (options.source == AnalysisSource::stems) {
+        analysis.residual.hats = std::move(hats.value().hats);
+    } else {
+        analysis.residual = std::move(hats.value());
+    }
+    analysis.aggregates =
+        aggregate_bass(analysis.bass.notes, analysis.grid, analysis.duration_s,
+                       static_cast<int>(std::lround(options.beats.bars_per_phrase)),
+                       analysis.beats.phrase_bar_offset);
     return analysis;
 }
 

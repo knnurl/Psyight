@@ -249,6 +249,41 @@ int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions 
     std::printf("\n");
 
     {
+        // Hats: how many, and the share on offbeat 8ths (where psytrance puts them).
+        int offbeat = 0;
+        for (const HatOnset &hat : a.residual.hats) {
+            const double beats_in = beat_offset_s(grid, hat.t_s - 0.5 * beat_s) / beat_s;
+            offbeat += std::abs(beats_in) < 0.1;
+        }
+        std::vector<float> centroid;
+        std::vector<float> flatness;
+        for (size_t i = 0; i < a.residual.centroid_hz.size(); ++i) {
+            if (a.residual.centroid_hz[i] > 0.0f) {
+                centroid.push_back(a.residual.centroid_hz[i]);
+                flatness.push_back(a.residual.flatness[i]);
+            }
+        }
+        std::printf("  hats: %zu (%.0f%% on offbeats); residual centroid median %.0f Hz, "
+                    "flatness median %.2f\n",
+                    a.residual.hats.size(),
+                    100.0 * offbeat / std::max<size_t>(1, a.residual.hats.size()),
+                    quantile(centroid, 0.5), quantile(flatness, 0.5));
+        std::vector<double> bar_notes;
+        std::vector<double> bar_rests;
+        std::vector<double> bar_gates;
+        for (const BassAggregate &bar : a.aggregates.bars) {
+            bar_notes.push_back(bar.notes);
+            bar_rests.push_back(bar.rests);
+            if (bar.notes > 0) {
+                bar_gates.push_back(bar.gate_mean);
+            }
+        }
+        std::printf("  per bar (median of %zu bars): %.0f notes, %.0f rests, gate mean %.2f; "
+                    "%zu phrases\n",
+                    a.aggregates.bars.size(), median(bar_notes), median(bar_rests),
+                    median(bar_gates), a.aggregates.phrases.size());
+    }
+    {
         std::printf("  sections:");
         for (const DetectedSection &section : a.sections) {
             std::printf(" %s %.0f-%.0f s (%.2f);", section.label.c_str(), section.start_s,
