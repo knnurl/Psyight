@@ -80,11 +80,6 @@ ColourOrder parse_order(const std::string &name) {
     throw FieldError{"unknown colour order " + name};
 }
 
-std::string address_text(const std::array<std::uint8_t, 4> &a) {
-    return std::to_string(a[0]) + "." + std::to_string(a[1]) + "." + std::to_string(a[2]) + "." +
-           std::to_string(a[3]);
-}
-
 } // namespace
 
 const char *colour_order_name(ColourOrder order) {
@@ -306,7 +301,7 @@ Result<std::string> to_project_json(const Project &p) {
             {"output",
              {{"protocol", p.output.protocol == OutputProtocol::sacn ? "sacn" : "art_net"},
               {"multicast", p.output.multicast},
-              {"address", address_text(p.output.address)},
+              {"address", ipv4_text(p.output.address)},
               {"sync", p.output.sync},
               {"sync_universe", p.output.sync_universe},
               {"priority", p.output.priority},

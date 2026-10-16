@@ -23,6 +23,7 @@ class PreviewView {
     PreviewView(Session &session, ProjectState &project);
 
     void draw();
+    bool sending() const { return config_.send_to_network; }
 
   private:
     void sync_config(); // Publishes config_ when it or the track changed.

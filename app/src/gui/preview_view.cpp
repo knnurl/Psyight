@@ -231,9 +231,7 @@ void PreviewView::draw_output(const ShowFrame &frame) {
     if (o.protocol == OutputProtocol::art_net || !o.multicast) {
         ImGui::SetNextItemWidth(8.0f * em);
         if (!address_active_ && parse_ipv4(address_text_) != o.address) {
-            address_text_ = std::to_string(o.address[0]) + "." + std::to_string(o.address[1]) +
-                            "." + std::to_string(o.address[2]) + "." +
-                            std::to_string(o.address[3]); // Loaded or reset elsewhere.
+            address_text_ = ipv4_text(o.address); // Loaded or reset elsewhere.
         }
         if (ImGui::InputText("Node address", &address_text_)) {
             if (const auto address = parse_ipv4(address_text_)) {

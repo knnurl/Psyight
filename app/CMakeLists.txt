@@ -70,18 +70,20 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/output/patch.cpp src/output/packets.cpp
                                src/output/sender.cpp src/output/virtual_node.cpp
                                src/output/show.cpp src/output/udp_socket_win32.cpp
-                               src/output/precise_sleep_win32.cpp)
+                               src/output/precise_sleep_win32.cpp src/output/art_poll.cpp
+                               src/output/discovery.cpp src/output/preflight.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch
-                                          ws2_32)
+                                          ws2_32 iphlpapi)
 
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
                        src/gui/session.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
                        src/gui/analysis_view.cpp src/gui/bass_roll_view.cpp src/gui/time_plot.cpp
                        src/gui/spectrogram_textures.cpp
                        src/gui/spectrogram_image.cpp src/gui/preview_view.cpp
-                       src/gui/project_state.cpp src/gui/rig_view.cpp)
+                       src/gui/project_state.cpp src/gui/rig_view.cpp
+                       src/gui/preflight_view.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32)
@@ -110,7 +112,8 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/align_test.cpp tests/residual_test.cpp
                              tests/engine_test.cpp tests/limiters_test.cpp
                              tests/output_test.cpp tests/show_test.cpp
-                             tests/automation_test.cpp tests/project_test.cpp)
+                             tests/automation_test.cpp tests/project_test.cpp
+                             tests/preflight_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)

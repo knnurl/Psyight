@@ -33,6 +33,7 @@ void apply_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderDockWindow("Transport", top);
     ImGui::DockBuilderDockWindow("Note inspector", inspector);
     ImGui::DockBuilderDockWindow("Rig", preview); // Tabbed behind the preview.
+    ImGui::DockBuilderDockWindow("Preflight", preview);
     ImGui::DockBuilderDockWindow("Preview", preview);
     ImGui::DockBuilderDockWindow("Analysis", analysis);
     ImGui::DockBuilderDockWindow("Bass roll", bass_roll);

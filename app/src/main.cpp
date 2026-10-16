@@ -6,6 +6,7 @@
 #include "gui/command_line.h"
 #include "gui/frame_pacing.h"
 #include "gui/layout.h"
+#include "gui/preflight_view.h"
 #include "gui/preview_view.h"
 #include "gui/project_state.h"
 #include "gui/rig_view.h"
@@ -123,6 +124,7 @@ int main() {
         psyight::ProjectState project;
         psyight::PreviewView preview_view(session, project);
         psyight::RigView rig_view(project);
+        psyight::PreflightView preflight_view(session, project, preview_view);
         glfwSetWindowUserPointer(window, &session);
         glfwSetDropCallback(window, on_files_dropped);
         if (const auto paths = psyight::command_line_paths(); !paths.empty()) {
@@ -155,7 +157,7 @@ int main() {
                 ImGui::EndMainMenuBar();
             }
             // Bump the version when panels are added, so saved layouts get the new default once.
-            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v4");
+            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v5");
             if (reset_layout || ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
                 psyight::apply_default_layout(dockspace_id); // First run, or View > Reset layout.
                 reset_layout = false;
@@ -169,6 +171,7 @@ int main() {
             bass_roll_view.draw_inspector();
             preview_view.draw();
             rig_view.draw();
+            preflight_view.draw();
             if (focus_preview) { // Show the preview's tab, not the rig's, after a new layout.
                 ImGui::SetWindowFocus("Preview");
                 focus_preview = false;
