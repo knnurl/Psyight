@@ -89,9 +89,9 @@ void BassRollView::draw_roll() {
     LabelEditor &labels = session_.labels();
     ImGui::Checkbox("Snap to 1/16 (hold Alt for free)", &snap_);
     ImGui::SameLine();
-    ImGui::TextDisabled(
-        "Double-click: new note. Drag: move or resize. Right-click: delete. Middle-drag: pan. "
-        "Ctrl+click: seek.");
+    ImGui::TextDisabled("Double-click: new note. Drag: move or resize. Right-click: delete. "
+                        "Middle-drag: pan. Middle double-click: fit. "
+                        "Ctrl+click: seek.");
     ImGui::Checkbox("Pitch background", &show_pitch_);
     if (show_pitch_) {
         ImGui::SameLine();
@@ -119,10 +119,12 @@ void BassRollView::draw_roll() {
     ImGui::Text("| %zu notes%s", labels.labels().bass_notes.size(),
                 labels.dirty() ? ", unsaved" : "");
 
-    // In the bass roll the left button edits, so panning moves to the middle button here only.
+    // In the bass roll the left button edits, so panning and fit-to-data (ImPlot's double-click,
+    // which would reset the view whenever a note is created) move to the middle button here only.
     ImPlotInputMap &input = ImPlot::GetInputMap();
-    const ImGuiMouseButton pan_button = input.Pan;
+    const ImPlotInputMap saved_input = input;
     input.Pan = ImGuiMouseButton_Middle;
+    input.Fit = ImGuiMouseButton_Middle;
     if (ImPlot::BeginPlot("##bass roll", ImVec2(-1, -1),
                           ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect)) {
         setup_time_axis(session_.view);
@@ -168,7 +170,7 @@ void BassRollView::draw_roll() {
         handle_mouse(track);
         ImPlot::EndPlot();
     }
-    input.Pan = pan_button;
+    input = saved_input;
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
         handle_keys();
     }
