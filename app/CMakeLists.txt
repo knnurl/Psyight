@@ -85,7 +85,7 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/spectrogram_textures.cpp
                        src/gui/spectrogram_image.cpp src/gui/preview_view.cpp
                        src/gui/project_state.cpp src/gui/rig_view.cpp
-                       src/gui/preflight_view.cpp)
+                       src/gui/preflight_view.cpp src/gui/tier.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32)

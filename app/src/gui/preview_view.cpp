@@ -1,6 +1,7 @@
 #include "gui/preview_view.h"
 
 #include "engine/effect_spec.h"
+#include "gui/tier.h"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -77,6 +78,25 @@ void PreviewView::draw_top_bar() {
             set_ladder(s.step);
         }
         ImGui::SetItemTooltip("%s", s.meaning);
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(6.5f * ImGui::GetFontSize());
+    if (ImGui::BeginCombo("##tier", tier_name(current_tier()))) {
+        for (const Tier t : {Tier::operate, Tier::tune, Tier::engineer}) {
+            if (ImGui::Selectable(tier_name(t), t == current_tier())) {
+                set_current_tier(t);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Depth of control (SPEC 9.1): Operate shows scenes and master "
+                          "controls, Tune adds scene, layer and output settings, Engineer adds "
+                          "everything else, including the flash limiter switch and the rig.");
+    if (!project_.project().limiter.flash_limiter) { // Persistent, at every tier (SPEC 7.7).
+        ImGui::SameLine();
+        ImGui::TextColored(kWarning, "FLASH LIMITER OFF");
     }
     // Blackout and Hold: fixed at the right, with hotkeys, no confirmation (SPEC 9.1).
     const ImGuiStyle &style = ImGui::GetStyle();
@@ -186,19 +206,21 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     }
     ImGui::SetItemTooltip("Render time minus playhead. About 2.9 ms per metre from the speakers "
                           "(SPEC 4.3).");
-    std::vector<Scene> &scenes = project_.edit().scenes;
-    edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(scenes.size()) - 1);
-    const std::string scene_label =
-        "Scene: " + scenes[static_cast<size_t>(edit_scene_)].name + "###scene";
-    if (ImGui::TreeNode(scene_label.c_str())) {
-        draw_scene_editor(scenes);
-        ImGui::TreePop();
+    if (tier_at_least(Tier::tune)) {
+        std::vector<Scene> &scenes = project_.edit().scenes;
+        edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(scenes.size()) - 1);
+        const std::string scene_label =
+            "Scene: " + scenes[static_cast<size_t>(edit_scene_)].name + "###scene";
+        if (ImGui::TreeNode(scene_label.c_str())) {
+            draw_scene_editor(scenes);
+            ImGui::TreePop();
+        }
+        if (scene_edited_) {
+            project_.changed();
+            scene_edited_ = false;
+        }
+        draw_palettes();
     }
-    if (scene_edited_) {
-        project_.changed();
-        scene_edited_ = false;
-    }
-    draw_palettes();
     if (ImGui::TreeNode("Limiters")) {
         LimiterParams p = project_.project().limiter;
         bool changed = false;
@@ -208,13 +230,20 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
             p.brightness_cap = cap;
             changed = true;
         }
-        float budget = static_cast<float>(p.budget_a);
-        ImGui::SetNextItemWidth(8.0f * em);
-        if (ImGui::DragFloat("Power budget (A, 0: off)", &budget, 0.1f, 0.0f, 100.0f, "%.1f")) {
-            p.budget_a = budget;
-            changed = true;
+        if (tier_at_least(Tier::tune)) {
+            float budget = static_cast<float>(p.budget_a);
+            ImGui::SetNextItemWidth(8.0f * em);
+            if (ImGui::DragFloat("Power budget (A, 0: off)", &budget, 0.1f, 0.0f, 100.0f, "%.1f")) {
+                p.budget_a = budget;
+                changed = true;
+            }
         }
-        changed |= ImGui::Checkbox("Flash limiter (3 per second)", &p.flash_limiter);
+        if (tier_at_least(Tier::engineer)) { // Disabling it is an Engineer action (SPEC 7.7).
+            changed |= ImGui::Checkbox("Flash limiter (3 per second)", &p.flash_limiter);
+        } else {
+            ImGui::TextDisabled("Flash limiter %s (its switch is in the Engineer tier).",
+                                p.flash_limiter ? "on" : "off");
+        }
         if (changed) {
             project_.edit().limiter = p;
             project_.changed();
@@ -642,6 +671,7 @@ void PreviewView::draw_output(const ShowFrame &frame) {
         ImGui::TextUnformatted("Not sending: the virtual node (this preview) only. The top bar's "
                                "Ambient, React and Show send.");
     }
+    ImGui::BeginDisabled(!tier_at_least(Tier::tune));
     int protocol = o.protocol == OutputProtocol::sacn ? 0 : 1;
     ImGui::SetNextItemWidth(8.5f * em);
     if (ImGui::Combo("Protocol", &protocol, "sACN (E1.31)\0Art-Net 4\0")) {
@@ -686,6 +716,7 @@ void PreviewView::draw_output(const ShowFrame &frame) {
             changed = true;
         }
     }
+    ImGui::EndDisabled();
     if (changed) {
         Project &p = project_.edit();
         p.output = o;
@@ -700,6 +731,9 @@ void PreviewView::draw_output(const ShowFrame &frame) {
     ImGui::Text("Universes %d to %d, %d packets a frame, %.1f fps",
                 universes.empty() ? 0 : universes.front(), universes.empty() ? 0 : universes.back(),
                 frame.packets_sent, measured_fps_);
+    if (!tier_at_least(Tier::engineer)) {
+        return;
+    }
     ImGui::Text("Frame cost %.2f ms, %lld late frames", frame.render_ms,
                 static_cast<long long>(frame.late_frames));
     ImGui::SetItemTooltip("Render, limiters, patch and send, measured on the show thread.");

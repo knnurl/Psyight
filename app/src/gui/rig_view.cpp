@@ -1,6 +1,7 @@
 #include "gui/rig_view.h"
 
 #include "core/paths.h"
+#include "gui/tier.h"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -63,11 +64,17 @@ void RigView::draw() {
         path_text_ = path_to_utf8(project_.path());
         texts_version_ = project_.version();
     }
+    const bool engineer = tier_at_least(Tier::engineer);
+    if (!engineer) {
+        ImGui::TextDisabled("Editing the rig needs the Engineer tier (top bar).");
+    }
+    ImGui::BeginDisabled(!engineer);
     draw_project();
     ImGui::Separator();
     draw_strips();
     ImGui::Separator();
     draw_patch();
+    ImGui::EndDisabled();
     ImGui::End();
 }
 
