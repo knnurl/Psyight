@@ -55,7 +55,7 @@ struct ShockwaveParams {
 struct ConveyorParams {
     int segment_pixels = 12; // A stripe period along the strip.
     double hue_per_semitone_deg = 28.0;
-    double hue_offset_deg = 270.0; // Hue of MIDI 0 (C-1); E1 lands near violet.
+    double hue_offset_deg = 270.0; // Hue of MIDI 0 (C-1); E1 (28) lands at 334, magenta.
     double release_s = 0.03;       // Fade after the note ends.
 };
 
