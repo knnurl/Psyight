@@ -29,6 +29,7 @@ class PreviewView {
     void sync_config(); // Publishes config_ when it or the track changed.
     void draw_controls(const ShowFrame &frame);
     void draw_scene_cards(const ShowFrame &frame);
+    void draw_routes(Scene &scene);
     void draw_output(const ShowFrame &frame);
     void draw_rig(const ShowFrame &frame);
 

@@ -123,6 +123,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
             dirty_ |= ImGui::SliderFloat("opacity", &layer.opacity, 0.0f, 1.0f, "%.2f");
             ImGui::PopID();
         }
+        draw_routes(scene);
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Limiters")) {
@@ -149,13 +150,104 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
             ImGui::TextColored(kWarning, "Flash limiter off: photosensitive epilepsy risk "
                                          "(SPEC 7.7).");
         }
-        ImGui::Text("Flashes held back so far: %lld", static_cast<long long>(frame.flashes_limited));
+        ImGui::Text("Flashes held back so far: %lld",
+                    static_cast<long long>(frame.flashes_limited));
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Output")) {
         draw_output(frame);
         ImGui::TreePop();
     }
+}
+
+void PreviewView::draw_routes(Scene &scene) {
+    if (!ImGui::TreeNode("Modulation")) {
+        return;
+    }
+    const float em = ImGui::GetFontSize();
+    int remove = -1;
+    for (size_t i = 0; i < scene.routes.size(); ++i) {
+        ModRoute &r = scene.routes[i];
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::SetNextItemWidth(8.0f * em);
+        if (ImGui::BeginCombo("##source", mod_source_name(r.source))) {
+            for (const ModSource s : kModSources) {
+                if (ImGui::Selectable(mod_source_name(s), s == r.source)) {
+                    r.source = s;
+                    dirty_ = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(6.0f * em);
+        if (ImGui::BeginCombo("##curve", mod_curve_name(r.curve))) {
+            for (const ModCurve c : kModCurves) {
+                if (ImGui::Selectable(mod_curve_name(c), c == r.curve)) {
+                    r.curve = c;
+                    dirty_ = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        dirty_ |= ImGui::Checkbox("invert", &r.invert);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("x")) {
+            remove = static_cast<int>(i);
+        }
+        ImGui::SetItemTooltip("Remove this route.");
+        ImGui::Indent();
+        ImGui::SetNextItemWidth(7.0f * em);
+        if (ImGui::BeginCombo("##target", mod_target_name(r.target))) {
+            for (const ModTarget t : kModTargets) {
+                if (ImGui::Selectable(mod_target_name(t), t == r.target)) {
+                    r.target = t;
+                    r.amount = t == ModTarget::hue_shift ? 60.0 : 0.5;
+                    dirty_ = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (r.target != ModTarget::brightness && !scene.layers.empty()) {
+            r.layer = std::clamp(r.layer, 0, static_cast<int>(scene.layers.size()) - 1);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(8.0f * em);
+            if (ImGui::BeginCombo("##layer",
+                                  scene.layers[static_cast<size_t>(r.layer)].effect->name())) {
+                for (int k = 0; k < static_cast<int>(scene.layers.size()); ++k) {
+                    if (ImGui::Selectable(scene.layers[static_cast<size_t>(k)].effect->name(),
+                                          k == r.layer)) {
+                        r.layer = k;
+                        dirty_ = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(6.0f * em);
+        float amount = static_cast<float>(r.amount);
+        const bool hue = r.target == ModTarget::hue_shift;
+        if (ImGui::SliderFloat("amount", &amount, hue ? -180.0f : -1.0f, hue ? 180.0f : 1.0f,
+                               hue ? "%.0f deg" : "%.2f")) {
+            r.amount = amount;
+            dirty_ = true;
+        }
+        ImGui::Unindent();
+        ImGui::PopID();
+    }
+    if (remove >= 0) {
+        scene.routes.erase(scene.routes.begin() + remove);
+        dirty_ = true;
+    }
+    if (ImGui::Button("Add route")) {
+        scene.routes.push_back({});
+        dirty_ = true;
+    }
+    ImGui::SetItemTooltip("Source, curve and amount onto a layer's opacity or hue, or the "
+                          "scene's brightness (SPEC 7.4). Routes to one target add up.");
+    ImGui::TreePop();
 }
 
 void PreviewView::draw_scene_cards(const ShowFrame &frame) {
@@ -284,8 +376,7 @@ void PreviewView::draw_output(const ShowFrame &frame) {
                 static_cast<long long>(frame.node.bad_packets));
     if (frame.send_errors > 0 || !frame.network_error.empty()) {
         ImGui::TextColored(kWarning, "Network: %lld send errors. %s",
-                           static_cast<long long>(frame.send_errors),
-                           frame.network_error.c_str());
+                           static_cast<long long>(frame.send_errors), frame.network_error.c_str());
     }
 }
 

@@ -22,6 +22,7 @@
 
 #include "engine/colour.h"
 #include "engine/inputs.h"
+#include "engine/modulation.h"
 #include "engine/rig.h"
 
 #include <cstdint>
@@ -112,12 +113,13 @@ struct Layer {
 
 struct Scene {
     std::string name;
-    std::vector<Layer> layers; // Bottom first.
-    int palette = 0;           // Into the palette list.
+    std::vector<Layer> layers;         // Bottom first.
+    int palette = 0;                   // Into the palette list.
     std::vector<std::string> sections; // Section labels this scene suits (automation, SPEC 7.6).
+    std::vector<ModRoute> routes;      // Modulation (SPEC 7.4).
 };
 
-// Renders the layers bottom to top onto black.
+// Renders the layers bottom to top onto black, with the scene's modulation applied.
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
                    const std::vector<Palette> &palettes, std::uint64_t seed);
 // The same with an explicit palette instead of the scene's.

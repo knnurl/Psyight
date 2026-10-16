@@ -255,13 +255,44 @@ Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &input
     Frame frame(rig.pixels.size());
     const EffectContext context{rig, inputs, palette, seed};
     Frame layer(rig.pixels.size());
-    for (const Layer &l : scene.layers) {
+    double brightness = 1.0;
+    for (const ModRoute &r : scene.routes) {
+        if (r.target == ModTarget::brightness) {
+            brightness += r.amount * (route_value(r, inputs, seed) - 1.0);
+        }
+    }
+    for (size_t k = 0; k < scene.layers.size(); ++k) {
+        const Layer &l = scene.layers[k];
         if (!l.enabled || l.effect == nullptr) {
             continue;
         }
+        double opacity = l.opacity;
+        double hue_deg = 0.0;
+        for (const ModRoute &r : scene.routes) {
+            if (r.layer != static_cast<int>(k)) {
+                continue;
+            }
+            if (r.target == ModTarget::opacity) {
+                opacity += r.amount * route_value(r, inputs, seed);
+            } else if (r.target == ModTarget::hue_shift) {
+                hue_deg += r.amount * route_value(r, inputs, seed);
+            }
+        }
+        opacity = std::clamp(opacity, 0.0, 1.0);
+        if (opacity <= 0.0) {
+            continue;
+        }
         l.effect->render(context, layer);
+        const bool rotate = std::abs(hue_deg) > 1e-9;
         for (size_t i = 0; i < frame.size(); ++i) {
-            frame[i] = blend(frame[i], layer[i], l.blend, l.opacity);
+            const Rgb c = rotate ? rotate_hue(layer[i], hue_deg) : layer[i];
+            frame[i] = blend(frame[i], c, l.blend, static_cast<float>(opacity));
+        }
+    }
+    brightness = std::clamp(brightness, 0.0, 1.0);
+    if (brightness < 1.0) {
+        for (Rgb &c : frame) {
+            c = scaled(c, brightness);
         }
     }
     return frame;
@@ -305,6 +336,9 @@ std::vector<Scene> default_scenes() {
     ambient.layers.push_back({make_shimmer(), BlendMode::add, 1.0f, true});
     ambient.layers.push_back({make_sparkle(), BlendMode::add, 0.5f, true});
     ambient.layers.push_back({make_conveyor(), BlendMode::add, 0.4f, true});
+    // The plasma's hue drifts 60 degrees and back over each phrase (SPEC 7.5).
+    ambient.routes.push_back(
+        {ModSource::lfo_phrase, ModCurve::s_curve, false, ModTarget::hue_shift, 0, 60.0});
     scenes.push_back(ambient);
 
     Scene build;
