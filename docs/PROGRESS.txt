@@ -111,7 +111,8 @@ M3 progress (2026-10-16):
   - State ladder and safety controls (b860bc6): Preflight, Preview, Ambient, React, Show in the top bar; Blackout (B) and Hold (H) fixed at the right.
   - Group masks and palette editor: a layer can be limited to one strip group; palettes are edited in the Preview's Palettes section; both saved.
   - Tiers: Operate, Tune and Engineer in the top bar (Tune by default); the flash limiter switch is Engineer-only, with a persistent warning while it is off.
-  - Not yet: per-group brightness caps, the recorder (SPEC 11).
+  - Recorder and replay (26ee901): Record in the top bar writes recordings/<date_time>/ (meta, frames, params, events; gitignored); psyight_replay re-renders a session and diffs it: 767 of 767 frames byte-identical on a session with seeks, blackout, hold and a held scene. Not yet: audio.wav, features.bin, live-mode recording.
+  - Not yet: per-group brightness caps.
 
 ## Known issues
 - The show thread reads the transport position, which advances once per audio device period: 480 frames (10 ms) on this laptop's WASAPI device (app log on load). At 60 fps render time then moves 10 or 20 ms a frame instead of 16.7, a jitter of up to 5 ms; about 3 cm on the 6 m/s shockwave, invisible on the slower effects. Fix if it shows on real strips: publish a timestamp with the position (seqlock) and extrapolate while playing.

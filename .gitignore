@@ -17,8 +17,9 @@ data/
 *.pt
 *.ckpt
 
-# Session recordings
+# Session recordings (detections of private tracks)
 sessions/
+recordings/
 
 # Python
 __pycache__/
