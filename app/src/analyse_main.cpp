@@ -14,6 +14,7 @@
 #include "analysis/bass_tracker.h"
 #include "analysis/beat_tracker.h"
 #include "analysis/front_end.h"
+#include "analysis/sections.h"
 #include "analysis/series.h"
 #include "audio/audio_file.h"
 #include "core/paths.h"
@@ -206,10 +207,10 @@ int analyse(const std::filesystem::path &audio_path, bool kick_features, bool lo
     const double first_downbeat_s = samples_to_seconds(grid.first_downbeat, sample_rate_hz);
     std::printf("  analysed in %.1f s\n", analysis_s);
     std::printf("  tempo %.3f BPM (confidence %.2f); first downbeat %.3f s (confidence %.2f, "
-                "%d kick breaks); phrases of 8 bars start %d bars later (confidence %.2f, %d "
+                "%d kick cues); phrases of 8 bars start %d bars later (confidence %.2f, %d "
                 "breaks)\n",
-                b.bpm, b.tempo_confidence, first_downbeat_s, b.downbeat_confidence,
-                b.downbeat_breaks, b.phrase_bar_offset, b.phrase_confidence, b.phrase_breaks);
+                b.bpm, b.tempo_confidence, first_downbeat_s, b.downbeat_confidence, b.downbeat_cues,
+                b.phrase_bar_offset, b.phrase_confidence, b.phrase_cues);
 
     // Kicks against the grid: coverage of beats, and timing.
     const std::vector<double> &kicks = bass.value().kick_times_s;
@@ -259,11 +260,33 @@ int analyse(const std::filesystem::path &audio_path, bool kick_features, bool lo
     }
     std::printf("\n");
 
+    if (const Result<std::vector<DetectedSection>> sections =
+            detect_sections(features.value(), b, {});
+        sections) {
+        std::printf("  sections:");
+        for (const DetectedSection &section : sections.value()) {
+            std::printf(" %s %.0f-%.0f s (%.2f);", section.label.c_str(), section.start_s,
+                        section.end_s, section.confidence);
+        }
+        std::printf("\n");
+    }
     if (local_tempo) {
         print_local_tempo(features.value());
     }
     if (kick_features) {
         print_kick_features(features.value(), grid);
+        // Kicks per beat, one bar per group from the first grid beat: K kick, . none.
+        std::printf("  kick timeline from %.3f s (bars of 4 beats from the first downbeat):\n  ",
+                    b.first_kick_beat_s);
+        const auto lead =
+            static_cast<int>(std::lround((first_downbeat_s - b.first_kick_beat_s) / beat_s));
+        for (int k = 0; k < static_cast<int>(b.beat_has_kick.size()); ++k) {
+            if (k >= lead && (k - lead) % 4 == 0) {
+                std::printf((k - lead) % 64 == 0 ? "\n  %4d: " : " ", (k - lead) / 4);
+            }
+            std::printf("%c", b.beat_has_kick[k] ? 'K' : '.');
+        }
+        std::printf("\n");
     }
     const std::filesystem::path labels_path = labels_path_for(audio_path);
     if (std::filesystem::exists(labels_path)) {
