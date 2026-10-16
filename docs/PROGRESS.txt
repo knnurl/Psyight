@@ -18,7 +18,8 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - vcpkg manifest mode, triplet `x64-windows-static-md`, baseline pinned to `b1b19307` (the snapshot bundled with VS). CMakeLists.txt sets `VCPKG_VISUAL_STUDIO_PATH` from the shell's `VSINSTALLDIR` (trailing backslash stripped) so dependencies and app share one toolset.
 - Commands (from `app/`): `cmake --preset windows-msvc`, `cmake --build --preset windows-msvc-release`, `ctest --preset windows-msvc-release`. Run from the repo root: `app\build\windows-msvc\release\psyight.exe data\OculusDrift.mp3`.
 - Score the tracker on a labelled track (repo root): `app\build\windows-msvc\release\psyight_eval.exe data\OculusDrift.mp3 [labels.json] [--detail]`. Local only, never in CI.
-- Unlabelled analysis report: `appuild\windows-msvcelease\psyight_analyse.exe [--stems] [--kicks] [--tempo] <audio...>`. Stems: `tools\python\.venv\Scripts\python tools\python\separate.py <audio...>` (setup in tools/python/README.md).
+- Unlabelled analysis report: `appuild\windows-msvc
+elease\psyight_analyse.exe [--stems] [--kicks] [--tempo] <audio...>`. Stems: `tools\python\.venv\Scripts\python tools\python\separate.py <audio...>` (setup in tools/python/README.md).
 - Tracker tuning tools (skipped by default; from `app/`): `build\windows-msvc\release\psyight_tests.exe -tc="bass tracker: table" --no-skip`; also "bass tracker: errors", "bass tracker: sweep", "bass tracker: click ratio".
 
 ## Gotchas learned the hard way
@@ -52,7 +53,7 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - **Bass tracker v0** (`src/analysis/bass_tracker.*`, SPEC 6.3 updated): kicks (click flux, broadband ratio, low rise, near a grid beat), onsets (per-bin magnitudes averaged over one period, centred difference), offsets (k x peak with window lag removed, next onset, next kick), pitch (front-end salience, central half), slides (salience changepoint, 20 ms bias), gate ratio, slot index, long notes, velocity, decay tau, confidence. Every threshold is a registry parameter (`bass.*`, `declare_bass_tracker_params`). Tracker takes the mono audio plus the front-end features and a Grid.
 - Synthetic set (`tests/synthetic_set.*`, 13 cases) with exact labels: onset F 1.000 on every case, gate MAE 0.100 pooled (SPEC target 0.10 just met), pitch >= 0.90 except 28 ms notes (physics; low confidence). Full table in `docs/results/M1.md`.
 - `psyight_eval` CLI and the **M1 baseline** (`docs/results/M1.md`): OculusDrift region F 0.994 (452/452 matched, 5 false positives), pitch 0.989, gate MAE 0.037, offsets -6.8 ms median. Before the grid fix it scored F 0.858: the gap was the grid offset, not tracker scatter.
-- Tests: 122 doctest cases, 4756 assertions, Release.
+- Tests: 127 doctest cases, 4938 assertions, Release.
 
 ## Parked M1 to-dos (owner, 2026-10-16: "keep as a note for later")
 - Detected notes in the bass roll (second colour, opacity is confidence; kicks as markers), the inspector showing every tracker field, and a "pre-fill labels from detections" button. Run the tracker in `Session::load` after the front end.
@@ -68,13 +69,14 @@ Done (details in docs/results/M2.md and SPEC 6.4 to 6.6, decision log 2026-10-16
 - Kick detection loosened on real-track evidence (rise 1 dB, click ratio 0.1), kicks in runs.
 - Demucs stems: `tools/python` venv (torch 2.5.1 cu124, demucs 4.0.1; README), `separate.py` writes `data/stems/htdemucs/<track>/`; app pipeline `src/analysis/track_analysis.*` (mix or stems; stems aligned by cross-correlation, `src/analysis/align.*`). OculusDrift labelled minute: stems F 0.999 / pitch 1.000 against mix 0.994 / 0.989.
 - Tools: `psyight_analyse [--stems] [--kicks] [--tempo]` (unlabelled report, kick timeline, per-minute tempo), `psyight_eval [--stems] [--detail]`.
+- Hats, residual and bass aggregates (`src/analysis/residual.*`, `src/analysis/bass_aggregates.*`), run by `analyse_track` (stems: hats from drums, residual from the "other" stem). Every reference track: median 12 bass notes and 4 rests per bar.
 - Owner facts: Hagios is a single track at about 187 BPM (long beatless intro and outro); Hall of Purity is A# minor and really that low (A#0 is plausible).
 
 Next, in order:
 1. Owner: one downbeat by ear for Phase Change, Hall of Purity and Hagios (set the grid's first downbeat in the app; it saves to the labels file). Then compare with `psyight_analyse` (it reads the labels' grid).
-2. Hats and residual detectors (SPEC 6.4); bass aggregates per bar and phrase (SPEC 6.2).
-3. GUI: run `analyse_track` in `Session::load` (mix, or stems when present); automatic grid option; beats, downbeats, phrases, sections and detected notes on the time plots and bass roll. Overlaps the parked M1 item "detected notes in the bass roll".
-4. Phrase reset on section changes (SPEC 6.5); build detection with spectral flatness (SPEC 6.6).
+2. GUI: run `analyse_track` in `Session::load` (mix, or stems when present); automatic grid option; beats, downbeats, phrases, sections and detected notes on the time plots and bass roll. Overlaps the parked M1 item "detected notes in the bass roll".
+3. Phrase reset on section changes (SPEC 6.5); build detection with spectral flatness (SPEC 6.6).
+4. Hat labels or another check of the hats (about 12 per bar found, a quarter on offbeats: 16th hats, unverified).
 5. With owner labels later: the M2 exit table for all four tracks, DSP against Demucs-assisted.
 - Open: Hall of Purity's drums stem finds fewer kicks (40%) than its mix (61%); Hagios tempo 187.65 (mix) against 189.13 (stems), weak in both.
 

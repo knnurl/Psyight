@@ -212,8 +212,9 @@ When a slot is a rest, the residual features (non-bass content) drive the residu
 ### 6.4 Kick, hats and residual
 
 - **Kick:** click-band onset plus low-band rise, within ±35 ms of a grid beat, in runs (another candidate one beat away). Real kicks forced looser gates than the synthetic ones: sidechained mixes barely raise the low band at a kick (Phase Change: 2.3 dB median) and distorted kicks carry low-mid energy (Hall of Purity click ratio 0.19), so the rise gate is 1 dB and the click ratio 0.1. With Demucs stems, kicks come from the drums stem.
-- **Hats:** 8 to 12 kHz onsets with a minimum gap, used for sparkle and detail layers.
-- **Residual:** content outside the bass and kick bands: centroid, flux, flatness, energy. With stems available, use the "other" stem instead.
+- **Hats:** 8 to 12 kHz onsets with a minimum gap, used for sparkle and detail layers. Built (`app/src/analysis/residual.*`); kick clicks also reach this band and are kept. With stems, from the drums stem.
+- **Residual:** content outside the bass and kick bands: centroid, flux, flatness, energy. With stems available, use the "other" stem instead. Built: per frame above 400 Hz (`app/src/analysis/residual.*`).
+- **Bass aggregates** (SPEC 6.2): built per bar and phrase (`app/src/analysis/bass_aggregates.*`).
 
 ### 6.5 Beat, bar and phrase
 
