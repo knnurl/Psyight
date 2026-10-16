@@ -148,7 +148,7 @@ TEST_CASE("shockwave: a ring at speed times time since the kick, nothing before 
 TEST_CASE("conveyor: lit only while a note sounds; the pattern steps per note; gate sets length") {
     const Rig rig = default_rig();
     const Palette palette = default_palettes()[0];
-    const auto effect = make_conveyor({12, 28.0, 270.0, 0.03});
+    const auto effect = make_conveyor({12, 5, 28.0, 270.0, 0.03});
     std::vector<Rgb> out(rig.pixels.size());
     EngineInputs in;
     effect->render({rig, in, palette, 1}, out);
@@ -169,21 +169,24 @@ TEST_CASE("conveyor: lit only while a note sounds; the pattern steps per note; g
         first.push_back(luminance(out[i]) > 0.0f);
         lit += first.back();
     }
-    // Gate 1.0 lights half of each 12-pixel period: 72 to 78 of 150 pixels (12.5 periods).
-    CHECK(lit >= 72);
-    CHECK(lit <= 78);
+    // Gate 1.0 lights one 12-pixel segment in each 60: 24 to 36 of 150 pixels (2.5 periods).
+    CHECK(lit >= 24);
+    CHECK(lit <= 36);
     in.bass_notes_so_far = 2;
     effect->render({rig, in, palette, 1}, out);
-    for (size_t i = 0; i + 6 < 150; ++i) {
-        CHECK((luminance(out[i]) > 0.0f) == first[i + 6]); // One step: half a period.
+    int newly_lit = 0;
+    for (size_t i = 0; i + 12 < 150; ++i) {
+        CHECK((luminance(out[i]) > 0.0f) == first[i + 12]); // One step: one segment.
+        newly_lit += luminance(out[i]) > 0.0f && !first[i];
     }
+    CHECK(newly_lit < 150 / 4); // A step never lights a quarter of the strip.
     in.bass_gate_ratio = 0.5;
     effect->render({rig, in, palette, 1}, out);
     lit = 0;
     for (size_t i = 0; i < 150; ++i) {
         lit += luminance(out[i]) > 0.0f;
     }
-    CHECK(lit < 72);
+    CHECK(lit < 24);
     in.bass_active = false;
     in.since_bass_offset_s = 0.3; // Ten release time constants later.
     effect->render({rig, in, palette, 1}, out);
@@ -220,12 +223,23 @@ TEST_CASE("sparkle and shimmer: hats light a seeded few; the residual lights onl
     }
     CHECK(total == 0.0f);
     in.bass_active = false;
+    in.since_bass_offset_s = 0.0; // Fades in after the note ends.
     shimmer->render({rig, in, palette, 3}, out);
     total = 0.0f;
     for (const Rgb &c : out) {
         total += luminance(c);
     }
-    CHECK(total > 10.0f);
+    CHECK(total == 0.0f);
+    in.since_bass_offset_s = 0.1;
+    shimmer->render({rig, in, palette, 3}, out);
+    total = 0.0f;
+    lit = 0;
+    for (const Rgb &c : out) {
+        total += luminance(c);
+        lit += luminance(c) > 0.0f;
+    }
+    CHECK(total > 2.0f);
+    CHECK(lit < 444 / 4); // A sparse subset, never a quarter of the field.
 }
 
 TEST_CASE("scene: rendering is a pure function of the inputs and seed") {

@@ -93,12 +93,13 @@ class Conveyor final : public Effect {
         const Rgb colour = hsv(p_.hue_offset_deg +
                                    p_.hue_per_semitone_deg * (in.bass_midi + in.bass_cents / 100.0),
                                1.0, 1.0);
-        const int period = std::max(2, p_.segment_pixels);
-        const double lit = std::clamp(in.bass_gate_ratio, 0.1, 1.0) * 0.5 * period;
+        const int segment = std::max(1, p_.segment_pixels);
+        const int period = segment * std::max(2, p_.period_segments);
+        const double lit = std::clamp(in.bass_gate_ratio, 0.1, 1.0) * segment;
         for (size_t i = 0; i < out.size(); ++i) {
             const Pixel &px = c.rig.pixels[i];
             // The pattern steps one segment per note; alternate strips run the other way.
-            const long long shift = in.bass_notes_so_far * (period / 2);
+            const long long shift = in.bass_notes_so_far * segment;
             const long long position = (px.strip % 2 == 0 ? px.index : -px.index) + shift;
             const long long phase = ((position % period) + period) % period;
             out[i] = phase < lit ? scaled(colour, level) : Rgb{};
@@ -139,10 +140,16 @@ class Shimmer final : public Effect {
         // Dark sounds lean violet, bright ones cyan (SPEC 7.5).
         const double brightness = std::clamp(c.in.residual_centroid_hz / 6000.0, 0.0, 1.0);
         const Rgb colour = hsv(270.0 - 90.0 * brightness, 0.8, 1.0);
-        const auto tick = static_cast<std::uint64_t>(std::floor(c.in.t_s * p_.rate_hz));
+        const double fade = 1.0 - std::exp(-c.in.since_bass_offset_s / p_.fade_s);
+        const double level = p_.level * c.in.residual_level * fade;
         for (size_t i = 0; i < out.size(); ++i) {
-            const double flicker = hash01(c.seed, tick, i);
-            out[i] = scaled(colour, p_.level * c.in.residual_level * flicker * flicker);
+            if (hash01(c.seed, i, 11) >= p_.density) {
+                out[i] = Rgb{};
+                continue;
+            }
+            const double twinkle =
+                0.5 + 0.5 * std::sin(2.0 * kPi * (p_.rate_hz * c.in.t_s + hash01(c.seed, i, 12)));
+            out[i] = scaled(colour, level * twinkle * twinkle);
         }
     }
 
@@ -282,7 +289,7 @@ std::vector<Scene> default_scenes() {
     staccato.name = "Groove, staccato";
     staccato.sections = {"groove"};
     staccato.palette = 1;
-    staccato.layers[1].effect = make_conveyor({6, 28.0, 270.0, 0.02});
+    staccato.layers[1].effect = make_conveyor({6, 5, 28.0, 270.0, 0.02});
     scenes.push_back(staccato);
 
     Scene drop = default_scene();

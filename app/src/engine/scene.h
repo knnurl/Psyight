@@ -6,10 +6,14 @@
 // Effect library v0, after the browser prototypes:
 // - plasma: two sine fields at different speeds (ambient; brighter outside grooves);
 // - shockwave: a white ring from the rig's centre at each kick (white is for kicks, SPEC 7.5);
-// - conveyor: stripes stepping one segment per bass note along each strip, hue from pitch
-//   (28 degrees per semitone), stripe length from gate ratio, brightness from velocity and decay;
+// - conveyor: one lit segment in every period_segments, stepping one segment per bass note along
+//   each strip, hue from pitch (28 degrees per semitone), lit length from gate ratio, brightness
+//   from velocity and decay. At most 1 / period_segments of a strip is lit, so neither a step nor
+//   a note's attack brightens a quarter of the field at the 16th rate (SPEC 7.2: motion steps,
+//   never full-field brightness);
 // - sparkle: random pixels flashing on each hat;
-// - shimmer: lights the rests from the residual (non-bass) level, hue from its centroid;
+// - shimmer: a sparse seeded subset of pixels twinkling smoothly in the rests, from the residual
+//   (non-bass) level, hue from its centroid; it fades in after each note rather than switching;
 // - build compression: rings contracting toward the centre during builds, speeding up and
 //   brightening through the section (the speed ramp is integrated, so the motion never jumps);
 // - drop burst: a white disc released from the centre at the start of a drop (white is for
@@ -57,7 +61,8 @@ struct ShockwaveParams {
 };
 
 struct ConveyorParams {
-    int segment_pixels = 12; // A stripe period along the strip.
+    int segment_pixels = 12; // One step along the strip per note.
+    int period_segments = 5; // One lit segment in this many.
     double hue_per_semitone_deg = 28.0;
     double hue_offset_deg = 270.0; // Hue of MIDI 0 (C-1); E1 (28) lands at 334, magenta.
     double release_s = 0.03;       // Fade after the note ends.
@@ -70,7 +75,9 @@ struct SparkleParams {
 
 struct ShimmerParams {
     double level = 0.6;
-    double rate_hz = 12.0; // Speed of the shimmer's flicker pattern.
+    double rate_hz = 3.0;  // Twinkle rate of each pixel.
+    double density = 0.15; // Share of pixels that shimmer.
+    double fade_s = 0.03;  // Fade-in time constant after a note ends.
 };
 
 struct BuildParams {
