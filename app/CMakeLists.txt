@@ -94,6 +94,10 @@ target_link_libraries(psyight_eval PRIVATE psyight_options psyight_lib)
 add_executable(psyight_analyse src/analyse_main.cpp)
 target_link_libraries(psyight_analyse PRIVATE psyight_options psyight_lib)
 
+# Renders whole tracks as shows offline and reports flashes, current, contrast and render cost.
+add_executable(psyight_show_check src/show_check_main.cpp)
+target_link_libraries(psyight_show_check PRIVATE psyight_options psyight_lib)
+
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp tests/core_test.cpp
                              tests/audio_test.cpp tests/front_end_test.cpp
