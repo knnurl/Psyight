@@ -93,7 +93,17 @@ No hardware here: the exit (a show on real strips via the F767 node) stays with 
 7. Scenes, scene automation by section, modulation matrix basics; rig editor GUI; recorder and preflight later.
 Threads (SPEC 4.2): engine and output get their own threads once the pure render is in place.
 
+M3 progress (2026-10-16):
+- Steps 1 to 5 done: engine core (5a94340), limiters (c7bb455), preview (3f8b0b3).
+- Step 6 done: patch, sACN and Art-Net packets with sync (cf768f8); show thread, frame sender, virtual node, Winsock UDP socket (206ce07); preview drawn from the virtual node, Output settings (3bc2266).
+  - Measured: show thread 600 frames in 10 s, interval p5 15.6 / p50 16.7 / p95 17.8 ms, 0.15 ms a frame for 444 pixels (psyight_tests -tc="show thread: timing" --no-skip). In the app: 60.0 fps, 0.08 to 0.12 ms a frame.
+  - Checked over a real socket: unicast to 127.0.0.1, a local receiver got about 61 frames a second, each universes 1 and 2 (636 bytes), 3 (438 bytes) and sync (49 bytes).
+  - Not yet: ArtPoll discovery, network interface choice (sends leave on the routing table's default), fault injection (SPEC 11), RGBW.
+  - Sending to the network is off by default. Multicast was not sent from this machine (university network); the owner should try it on the home network with the node.
+- Next: step 7 (scenes and section automation, modulation basics, rig editor), then the recorder and preflight.
+
 ## Known issues
+- The show thread reads the transport position, which advances once per audio device period, so render time steps rather than glides between periods [measure the period and the visible effect; interpolate with the wall clock if needed].
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
 - Spectrogram display resolution at the low end is about half a bin (SPEC 6.1); CQT is an M2 option.
 - Bass tracker v0 limits: gaps shorter than the 25 ms envelope window run to the next onset (a dip-depth estimate was tried and reverted: decay looks like a gap); long notes decaying below k x peak end before their gate; long notes held under a kick are split; notes under about two periods get a wrong pitch with low confidence.
