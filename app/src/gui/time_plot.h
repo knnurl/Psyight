@@ -17,6 +17,9 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s);
 
 void draw_playhead(double playhead_s);
 
+// Detected sections (SPEC 6.6) as a labelled, colour-coded strip along the top of the plot.
+void draw_sections(const std::vector<DetectedSection> &sections, double from_s, double to_s);
+
 // Shades the loop region when it is enabled and draws its edges: draggable with editable (ImPlot
 // drag tool ids first_drag_id and first_drag_id + 1), plain lines otherwise. Returns the edge
 // times, for seek_on_click.

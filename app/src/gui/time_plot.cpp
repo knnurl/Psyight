@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 
 namespace psyight {
@@ -16,6 +17,24 @@ constexpr float kClickSlopPixels = 3.0f; // Mouse travel below this is a click, 
 constexpr float kHandleGrabPixels = 6.0f;
 const ImVec4 kLoopShade(0.95f, 0.75f, 0.2f, 0.05f); // Faint on purpose: the edges mark the loop.
 const ImVec4 kLoopEdge(0.95f, 0.75f, 0.2f, 1.0f);   // As in the transport overview.
+constexpr ImU32 kSectionBoundary = IM_COL32(0, 0, 0, 170);
+constexpr ImU32 kSectionText = IM_COL32(255, 255, 255, 235);
+
+ImU32 section_colour(const std::string &label) {
+    if (label == "groove") {
+        return IM_COL32(40, 150, 130, 190);
+    }
+    if (label == "breakdown") {
+        return IM_COL32(60, 90, 200, 190);
+    }
+    if (label == "build") {
+        return IM_COL32(230, 140, 40, 190);
+    }
+    if (label == "drop") {
+        return IM_COL32(220, 60, 60, 200);
+    }
+    return IM_COL32(120, 120, 120, 170); // Intro and outro.
+}
 
 } // namespace
 
@@ -45,6 +64,29 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s) {
     plot_lines("##slots", slots, 0.10f, 1.0f);
     plot_lines("##beats", beats, 0.30f, 1.0f);
     plot_lines("##bars", bars, 0.60f, 1.5f);
+}
+
+void draw_sections(const std::vector<DetectedSection> &sections, double from_s, double to_s) {
+    ImDrawList *draw = ImPlot::GetPlotDrawList();
+    const ImVec2 origin = ImPlot::GetPlotPos();
+    const float height = ImGui::GetTextLineHeight() + 2.0f;
+    ImPlot::PushPlotClipRect();
+    for (const DetectedSection &section : sections) {
+        if (section.end_s < from_s || section.start_s > to_s) {
+            continue;
+        }
+        const float left = ImPlot::PlotToPixels(section.start_s, 0.0).x;
+        const float right = ImPlot::PlotToPixels(section.end_s, 0.0).x;
+        draw->AddRectFilled(ImVec2(left, origin.y), ImVec2(right, origin.y + height),
+                            section_colour(section.label));
+        draw->AddLine(ImVec2(left, origin.y), ImVec2(left, origin.y + height), kSectionBoundary,
+                      2.0f);
+        const float text_left = std::max(left, origin.x) + 3.0f;
+        if (right - text_left > ImGui::CalcTextSize(section.label.c_str()).x + 3.0f) {
+            draw->AddText(ImVec2(text_left, origin.y + 1.0f), kSectionText, section.label.c_str());
+        }
+    }
+    ImPlot::PopPlotClipRect();
 }
 
 void draw_playhead(double playhead_s) {

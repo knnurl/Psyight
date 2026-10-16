@@ -219,6 +219,12 @@ void Session::update() {
     Labels fresh;
     fresh.audio = track_->name;
     fresh.sample_rate = track_->sample_rate_hz;
+    if (track_->track_analysis != nullptr && track_->track_analysis->beats.bpm > 0.0) {
+        // Start from the detected grid (not saved until something is edited).
+        const BeatTrackResult &beats = track_->track_analysis->beats;
+        fresh.grid = {beats.bpm,
+                      samples_to_seconds(beats.grid.first_downbeat, beats.grid.sample_rate_hz)};
+    }
     labels_ = LabelEditor(std::move(fresh));
 }
 

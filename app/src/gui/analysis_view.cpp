@@ -84,6 +84,9 @@ void AnalysisView::draw() {
         const ImPlotRect limits = ImPlot::GetPlotLimits();
         textures_.draw(limits.X.Min, limits.X.Max);
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
+        if (track.track_analysis != nullptr) {
+            draw_sections(track.track_analysis->sections, limits.X.Min, limits.X.Max);
+        }
         draw_playhead(playhead_s);
         // Dragging the downbeat is one undoable gesture from press to release.
         LabelEditor &labels = session_.labels();
