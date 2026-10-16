@@ -16,7 +16,13 @@ constexpr int kFeatureBands = 24; // Log-spectrogram rows grouped for the novelt
 constexpr int kNoveltyBars = 4;   // Bars compared on each side of a candidate phrase start.
 constexpr double kNoveltyClipQuantile = 0.95;
 constexpr double kOtherPeakFraction = 0.05; // Tempo peaks within 5% are the same peak.
-constexpr int kFitIterations = 3;
+// Grid search: period within +-1% of the autocorrelation peak in 0.02% steps, phase in half
+// frames; then 0.002% and 0.1 frame steps around the best.
+constexpr double kGridCoarseRange = 0.01;
+constexpr double kGridCoarseStep = 0.0002;
+constexpr double kGridFineStep = 0.00002;
+constexpr double kGridCoarsePhaseFrames = 0.5;
+constexpr double kGridFinePhaseFrames = 0.1;
 
 int band_index(const FrontEndResult &features, std::string_view name) {
     for (size_t b = 0; b < features.bands.size(); ++b) {
@@ -212,42 +218,70 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
         result.beat_times_s.push_back(position * frame_s - p.beat_bias_ms * 1e-3);
     }
 
-    // 4. Constant-tempo fit to the strong beats.
+    // 4. Constant-tempo grid. Template matching: the period and phase whose beat grid collects the
+    // most onset strength over the whole track, so every groove section's kicks line up and
+    // breakdowns only add noise. (Numbering dynamic-programming beats instead slips a beat
+    // wherever they wander in a breakdown, which skews the whole fit.) Then least squares on the
+    // strong beats near that grid refines it; with an accurate grid, rounding indices is safe.
+    const std::vector<float> spread = box_mean(odf, 1); // Tolerates a frame of jitter.
+    const auto grid_strength = [&](double period, double phase) {
+        double sum = 0.0;
+        int count = 0;
+        for (double x = phase; x < frames - 1; x += period) {
+            const auto i = static_cast<int>(x);
+            const double fraction = x - i;
+            sum += spread[i] * (1.0 - fraction) + spread[i + 1] * fraction;
+            ++count;
+        }
+        return count > 0 ? sum / count : 0.0;
+    };
+    double grid_period = period_frames;
+    double grid_phase = 0.0;
+    double best_strength = -1.0;
+    const auto search = [&](double centre, double half_range, double period_step, double phase_from,
+                            double phase_to, double phase_step) {
+        for (double period = centre - half_range; period <= centre + half_range;
+             period += period_step) {
+            for (double phase = phase_from; phase < phase_to; phase += phase_step) {
+                const double strength = grid_strength(period, phase);
+                if (strength > best_strength) {
+                    best_strength = strength;
+                    grid_period = period;
+                    grid_phase = phase;
+                }
+            }
+        }
+    };
+    search(period_frames, kGridCoarseRange * period_frames, kGridCoarseStep * period_frames, 0.0,
+           period_frames, kGridCoarsePhaseFrames);
+    const double coarse_period = grid_period;
+    const double coarse_phase = grid_phase;
+    search(coarse_period, kGridCoarseStep * period_frames, kGridFineStep * period_frames,
+           coarse_phase - kGridCoarsePhaseFrames, coarse_phase + kGridCoarsePhaseFrames,
+           kGridFinePhaseFrames);
+
     std::vector<float> strengths;
     for (const int i : beat_frames) {
         strengths.push_back(odf[i]);
     }
     const double strong = quantile(strengths, p.fit_strength_quantile);
-    std::vector<double> anchors;
+    double period_s = grid_period * frame_s;
+    double origin_s = grid_phase * frame_s - p.beat_bias_ms * 1e-3;
+    double n = 0.0, sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0;
     for (size_t k = 0; k < beat_frames.size(); ++k) {
-        if (odf[beat_frames[k]] >= strong) {
-            anchors.push_back(result.beat_times_s[k]);
+        const double t = result.beat_times_s[k];
+        const double index = std::round((t - origin_s) / period_s);
+        if (odf[beat_frames[k]] >= strong &&
+            std::abs(t - (origin_s + index * period_s)) <= p.fit_outlier_ms * 1e-3) {
+            n += 1.0;
+            sx += index;
+            sy += t;
+            sxx += index * index;
+            sxy += index * t;
         }
     }
-    if (anchors.size() < 4) {
-        return result;
-    }
-    double period_s = period_frames * frame_s;
-    double origin_s = anchors.front();
-    std::vector<bool> used(anchors.size(), true);
-    for (int iteration = 0; iteration < kFitIterations; ++iteration) {
-        double n = 0.0, sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0;
-        for (size_t k = 0; k < anchors.size(); ++k) {
-            const double index = std::round((anchors[k] - origin_s) / period_s);
-            const double residual = anchors[k] - (origin_s + index * period_s);
-            used[k] = iteration == 0 || std::abs(residual) <= p.fit_outlier_ms * 1e-3;
-            if (used[k]) {
-                n += 1.0;
-                sx += index;
-                sy += anchors[k];
-                sxx += index * index;
-                sxy += index * anchors[k];
-            }
-        }
-        const double denominator = n * sxx - sx * sx;
-        if (n < 4.0 || denominator <= 0.0) {
-            break;
-        }
+    const double denominator = n * sxx - sx * sx;
+    if (n >= 4.0 && denominator > 0.0) {
         period_s = (n * sxy - sx * sy) / denominator;
         origin_s = (sy - period_s * sx) / n;
     }

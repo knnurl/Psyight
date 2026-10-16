@@ -10,8 +10,9 @@
 //    double tempos of psytrance.
 // 3. Beats: dynamic programming (Ellis 2007): each beat maximises onset strength minus a cost on
 //    log-period deviation, so beats continue through breakdowns.
-// 4. Grid: a constant-tempo fit to the strong beats (robust least squares), precise to about
-//    0.01 BPM over a track. DJ mixes with tempo changes need the per-beat times instead (M5).
+// 4. Grid: the constant-tempo period and phase whose beats collect the most onset strength over
+//    the whole track (grid search), refined by least squares on the strong beats near it. DJ
+//    mixes with tempo changes need the per-beat times instead (M5).
 // 5. Downbeat and phrase: the beat (and bar) positions where the music changes most between the
 //    preceding and following bars (log-spectrogram band energies and bass pitch salience, each
 //    group scaled over the track), with a confidence margin. Phrases are counted in groups of
@@ -38,7 +39,7 @@ struct BeatTrackerParams {
     double tightness = 100.0;           // Cost weight on squared log-period deviation (Ellis 2007).
     double envelope_window_ms = 25.0;   // Low-band level averaged over about one bass period.
     double fit_strength_quantile = 0.5; // Beats stronger than this quantile anchor the grid fit.
-    double fit_outlier_ms = 30.0;       // Beats further than this from the fit are dropped.
+    double fit_outlier_ms = 30.0;       // Beats further than this from the grid are not fitted.
     double beat_bias_ms = 0.0;          // Subtracted from beat times.
     double bars_per_phrase = 8.0;
 };
