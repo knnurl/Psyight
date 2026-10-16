@@ -72,6 +72,10 @@ target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32)
 
+# Scores the bass tracker against a labels file (local reference tracks; never run in CI).
+add_executable(psyight_eval src/eval_main.cpp)
+target_link_libraries(psyight_eval PRIVATE psyight_options psyight_lib)
+
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp tests/core_test.cpp
                              tests/audio_test.cpp tests/front_end_test.cpp
