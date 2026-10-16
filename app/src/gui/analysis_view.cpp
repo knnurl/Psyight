@@ -24,10 +24,13 @@ constexpr double kFrequencyTicksHz[] = {50, 100, 200, 500, 1000, 2000, 5000, 100
 constexpr const char *kFrequencyTickLabels[] = {"50", "100", "200", "500", "1k", "2k", "5k", "10k"};
 // Shares of the height for the spectrogram, band energy and flux plots, and a plot's minimum
 // height in lines of text.
-constexpr std::array<float, 3> kPlotRatios{0.55f, 0.25f, 0.20f};
+constexpr std::array<float, 4> kPlotRatios{0.55f, 0.25f, 0.20f, 0.30f};
 constexpr float kMinPlotHeight = 4.0f;
 int kWholeNumbers = 0; // Decimals for format_fixed_width (ImPlot takes a non-const pointer).
 int kHundredths = 2;
+constexpr double kMaxRestSlots = 2000.0; // Rests are shaded only when this few slots are in view.
+constexpr ImU32 kRestShade = IM_COL32(170, 110, 255, 45);
+constexpr ImU32 kHatTick = IM_COL32(255, 255, 255, 200);
 
 // Plots the visible part of a per-frame series, decimated to at most kMaxPlotPoints.
 void plot_series(const char *label, const std::vector<float> &values, double frame_s, double from_s,
@@ -169,7 +172,87 @@ void AnalysisView::draw() {
         seek_on_click(session_, draw_loop(session_, false, 30));
         ImPlot::EndPlot();
     }
+    open_[3] = ImGui::CollapsingHeader("Residual (non-bass) and hats");
+    if (open_[3] && ImPlot::BeginPlot("##residual", ImVec2(-1, height(3)), ImPlotFlags_None)) {
+        setup_time_axis(session_.view);
+        ImPlot::SetupAxis(ImAxis_Y1, "0-1", ImPlotAxisFlags_Lock);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 1.0, ImPlotCond_Always);
+        ImPlot::SetupAxisFormat(ImAxis_Y1, format_fixed_width, &kHundredths);
+        ImPlot::SetupLegend(ImPlotLocation_NorthWest, ImPlotLegendFlags_Horizontal);
+        const ImPlotRect limits = ImPlot::GetPlotLimits();
+        if (track.track_analysis != nullptr) {
+            draw_residual(*track.track_analysis, grid, frame_s, limits.X.Min, limits.X.Max);
+        } else {
+            ImPlot::PlotText("No analysis (no tempo found)", 0.5 * (limits.X.Min + limits.X.Max),
+                             0.5);
+        }
+        draw_grid_lines(grid, limits.X.Min, limits.X.Max);
+        draw_playhead(playhead_s);
+        seek_on_click(session_, draw_loop(session_, false, 40));
+        ImPlot::EndPlot();
+    }
     ImGui::End();
+}
+
+void AnalysisView::draw_residual(const TrackAnalysis &analysis, const Grid &grid, double frame_s,
+                                 double from_s, double to_s) {
+    // Bass rests: 16th slots whose middle no detected note covers (SPEC 6.3), where the residual
+    // drives the light.
+    ImDrawList *draw = ImPlot::GetPlotDrawList();
+    const std::vector<BassNote> &notes = analysis.bass.notes;
+    const double slot_s = grid.slot_length_samples() / grid.sample_rate_hz;
+    const double first_s = samples_to_seconds(grid.first_downbeat, grid.sample_rate_hz);
+    ImPlot::PushPlotClipRect();
+    if (slot_s > 0.0 && (to_s - from_s) / slot_s < kMaxRestSlots) {
+        auto note = std::lower_bound(notes.begin(), notes.end(), from_s - 4.0,
+                                     [](const BassNote &n, double t) { return n.onset_s < t; });
+        for (double slot = std::floor((from_s - first_s) / slot_s); first_s + slot * slot_s < to_s;
+             slot += 1.0) {
+            const double start_s = first_s + slot * slot_s;
+            const double middle_s = start_s + 0.5 * slot_s;
+            while (note != notes.end() && note->offset_s <= middle_s && note->onset_s <= middle_s) {
+                ++note; // Notes ending before this slot's middle cannot cover it or later ones.
+            }
+            bool covered = false;
+            for (auto n = note; n != notes.end() && n->onset_s <= middle_s; ++n) {
+                covered = covered || n->offset_s > middle_s;
+            }
+            if (!covered && middle_s >= 0.0 && middle_s <= analysis.duration_s) {
+                draw->AddRectFilled(ImPlot::PlotToPixels(start_s, 1.0),
+                                    ImPlot::PlotToPixels(start_s + slot_s, 0.0), kRestShade);
+            }
+        }
+    }
+    ImPlot::PopPlotClipRect();
+
+    // Level, centroid and flatness on 0 to 1: level -90 to 0 dB, centroid 0 to 10 kHz.
+    const ResidualFeatures &r = analysis.residual;
+    const int frames = static_cast<int>(r.energy_db.size());
+    const int first = std::clamp(static_cast<int>(std::floor(from_s / frame_s)), 0, frames);
+    const int end = std::clamp(static_cast<int>(std::ceil(to_s / frame_s)) + 1, first, frames);
+    const int step = std::max(1, (end - first) / kMaxPlotPoints);
+    std::vector<float> level, centroid, flatness;
+    for (int i = first; i < end; i += step) {
+        level.push_back(std::clamp((r.energy_db[i] + 90.0f) / 90.0f, 0.0f, 1.0f));
+        centroid.push_back(std::clamp(r.centroid_hz[i] / 10000.0f, 0.0f, 1.0f));
+        flatness.push_back(std::clamp(r.flatness[i], 0.0f, 1.0f));
+    }
+    const auto count = static_cast<int>(level.size());
+    ImPlot::PlotLine("level", level.data(), count, frame_s * step, first * frame_s);
+    ImPlot::PlotLine("centroid (10 kHz = 1)", centroid.data(), count, frame_s * step,
+                     first * frame_s);
+    ImPlot::PlotLine("flatness", flatness.data(), count, frame_s * step, first * frame_s);
+
+    // Hats: ticks along the top, taller when stronger.
+    ImPlot::PushPlotClipRect();
+    for (const HatOnset &hat : r.hats) {
+        if (hat.t_s >= from_s && hat.t_s <= to_s) {
+            const double length = 0.05 + 0.1 * std::min(1.0, hat.strength);
+            draw->AddLine(ImPlot::PlotToPixels(hat.t_s, 1.0),
+                          ImPlot::PlotToPixels(hat.t_s, 1.0 - length), kHatTick, 2.0f);
+        }
+    }
+    ImPlot::PopPlotClipRect();
 }
 
 void AnalysisView::draw_toolbar(const LoadedTrack &track) {

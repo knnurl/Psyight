@@ -1,6 +1,8 @@
 // Analysis view (SPEC section 9.4, M1): scrolling log-frequency spectrogram, band energies and
 // spectral flux on one shared time axis that follows the playhead, with the manual grid (BPM and
-// a draggable first downbeat) drawn on every plot. Each plot folds under its own header.
+// a draggable first downbeat) drawn on every plot, and the residual view (SPEC 9.4, M2): non-bass
+// level, centroid and flatness with bass rests shaded and hats marked. Each plot folds under its
+// own header.
 #pragma once
 
 #include <array>
@@ -18,6 +20,9 @@ class AnalysisView {
 
   private:
     void draw_toolbar(const LoadedTrack &track);
+    // The residual's level, centroid and flatness, bass rests shaded, hats as ticks.
+    void draw_residual(const TrackAnalysis &analysis, const Grid &grid, double frame_s,
+                       double from_s, double to_s);
 
     Session &session_;
     SpectrogramTextures textures_;
@@ -25,8 +30,8 @@ class AnalysisView {
     float max_db_ = -10.0f;
     bool colours_changed_ = false;
     bool dragging_downbeat_ = false;
-    // Which of the spectrogram, band energy and flux plots are unfolded.
-    std::array<bool, 3> open_{true, true, true};
+    // Which of the spectrogram, band energy, flux and residual plots are unfolded.
+    std::array<bool, 4> open_{true, true, true, false}; // The residual starts folded.
 };
 
 } // namespace psyight
