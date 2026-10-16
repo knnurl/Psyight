@@ -66,6 +66,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/engine/colour.cpp src/engine/inputs.cpp
                                src/engine/scene.cpp src/engine/limiters.cpp
                                src/engine/automation.cpp src/engine/modulation.cpp
+                               src/engine/effect_spec.cpp
                                src/io/text_file.cpp
                                src/io/project.cpp
                                src/output/patch.cpp src/output/packets.cpp

@@ -183,4 +183,95 @@ const char *mod_target_name(ModTarget target) {
     return "?";
 }
 
+const char *mod_source_id(ModSource source) {
+    switch (source) {
+    case ModSource::constant:
+        return "constant";
+    case ModSource::beat_phase:
+        return "beat_phase";
+    case ModSource::bar_phase:
+        return "bar_phase";
+    case ModSource::phrase_phase:
+        return "phrase_phase";
+    case ModSource::section_progress:
+        return "section_progress";
+    case ModSource::kick:
+        return "kick";
+    case ModSource::bass_active:
+        return "bass_active";
+    case ModSource::bass_velocity:
+        return "bass_velocity";
+    case ModSource::bass_gate:
+        return "bass_gate";
+    case ModSource::bass_pitch:
+        return "bass_pitch";
+    case ModSource::residual_level:
+        return "residual_level";
+    case ModSource::residual_brightness:
+        return "residual_brightness";
+    case ModSource::lfo_beat:
+        return "lfo_beat";
+    case ModSource::lfo_bar:
+        return "lfo_bar";
+    case ModSource::lfo_phrase:
+        return "lfo_phrase";
+    case ModSource::random_bar:
+        return "random_bar";
+    }
+    return "constant";
+}
+
+const char *mod_curve_id(ModCurve curve) {
+    switch (curve) {
+    case ModCurve::linear:
+        return "linear";
+    case ModCurve::exponential:
+        return "exponential";
+    case ModCurve::logarithmic:
+        return "logarithmic";
+    case ModCurve::s_curve:
+        return "s_curve";
+    }
+    return "linear";
+}
+
+const char *mod_target_id(ModTarget target) {
+    switch (target) {
+    case ModTarget::opacity:
+        return "opacity";
+    case ModTarget::hue_shift:
+        return "hue_shift";
+    case ModTarget::brightness:
+        return "brightness";
+    }
+    return "opacity";
+}
+
+namespace {
+
+template <typename T, size_t N>
+std::optional<T> from_id(const std::string &id, const std::array<T, N> &all,
+                         const char *(*name)(T)) {
+    for (const T v : all) {
+        if (id == name(v)) {
+            return v;
+        }
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+std::optional<ModSource> mod_source_from_id(const std::string &id) {
+    return from_id(id, kModSources, mod_source_id);
+}
+
+std::optional<ModCurve> mod_curve_from_id(const std::string &id) {
+    return from_id(id, kModCurves, mod_curve_id);
+}
+
+std::optional<ModTarget> mod_target_from_id(const std::string &id) {
+    return from_id(id, kModTargets, mod_target_id);
+}
+
 } // namespace psyight

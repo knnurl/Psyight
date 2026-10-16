@@ -1,5 +1,7 @@
 #include "gui/preview_view.h"
 
+#include "engine/effect_spec.h"
+
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
@@ -51,6 +53,11 @@ void PreviewView::sync_config() {
     config_.limiter = p.limiter;
     config_.latency_offset_s = 1e-3 * p.latency_offset_ms;
     config_.automation = p.automation;
+    config_.scenes = p.scenes;
+    config_.palettes = p.palettes;
+    if (config_.manual_scene >= static_cast<int>(config_.scenes.size())) {
+        config_.manual_scene = -1;
+    }
     project_version_ = project_.version();
     config_.version = ++version_;
     show_.set_config(std::make_shared<const ShowConfig>(config_));
@@ -88,8 +95,6 @@ void PreviewView::draw() {
 void PreviewView::draw_controls(const ShowFrame &frame) {
     const float em = ImGui::GetFontSize();
     draw_scene_cards(frame);
-    edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(config_.scenes.size()) - 1);
-    Scene &scene = config_.scenes[static_cast<size_t>(edit_scene_)];
     ImGui::SetNextItemWidth(7.0f * em);
     float latency_ms = static_cast<float>(project_.project().latency_offset_ms);
     if (ImGui::DragFloat("Latency offset (ms)", &latency_ms, 1.0f, -200.0f, 200.0f, "%.0f")) {
@@ -98,33 +103,17 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     }
     ImGui::SetItemTooltip("Render time minus playhead. About 2.9 ms per metre from the speakers "
                           "(SPEC 4.3).");
-    const std::string layers_label = "Layers and palette of " + scene.name + "###layers";
-    if (ImGui::TreeNode(layers_label.c_str())) {
-        ImGui::SetNextItemWidth(9.0f * em);
-        if (ImGui::BeginCombo("Palette (base)",
-                              config_.palettes[static_cast<size_t>(scene.palette)].name.c_str())) {
-            for (int i = 0; i < static_cast<int>(config_.palettes.size()); ++i) {
-                if (ImGui::Selectable(config_.palettes[static_cast<size_t>(i)].name.c_str(),
-                                      i == scene.palette)) {
-                    scene.palette = i;
-                    dirty_ = true;
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::SetItemTooltip("Automation shifts it by one every %d phrases.",
-                              config_.automation.palette_every_phrases);
-        for (size_t i = 0; i < scene.layers.size(); ++i) {
-            Layer &layer = scene.layers[i];
-            ImGui::PushID(static_cast<int>(i));
-            dirty_ |= ImGui::Checkbox(layer.effect->name(), &layer.enabled);
-            ImGui::SameLine(14.0f * em);
-            ImGui::SetNextItemWidth(8.0f * em);
-            dirty_ |= ImGui::SliderFloat("opacity", &layer.opacity, 0.0f, 1.0f, "%.2f");
-            ImGui::PopID();
-        }
-        draw_routes(scene);
+    std::vector<Scene> &scenes = project_.edit().scenes;
+    edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(scenes.size()) - 1);
+    const std::string scene_label =
+        "Scene: " + scenes[static_cast<size_t>(edit_scene_)].name + "###scene";
+    if (ImGui::TreeNode(scene_label.c_str())) {
+        draw_scene_editor(scenes);
         ImGui::TreePop();
+    }
+    if (scene_edited_) {
+        project_.changed();
+        scene_edited_ = false;
     }
     if (ImGui::TreeNode("Limiters")) {
         LimiterParams p = project_.project().limiter;
@@ -160,6 +149,157 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     }
 }
 
+void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
+    const float em = ImGui::GetFontSize();
+    Scene &scene = scenes[static_cast<size_t>(edit_scene_)];
+    ImGui::SetNextItemWidth(10.0f * em);
+    scene_edited_ |= ImGui::InputText("Name", &scene.name);
+    const std::vector<Palette> &palettes = project_.project().palettes;
+    scene.palette = std::clamp(scene.palette, 0, static_cast<int>(palettes.size()) - 1);
+    ImGui::SetNextItemWidth(9.0f * em);
+    if (ImGui::BeginCombo("Palette (base)",
+                          palettes[static_cast<size_t>(scene.palette)].name.c_str())) {
+        for (int i = 0; i < static_cast<int>(palettes.size()); ++i) {
+            if (ImGui::Selectable(palettes[static_cast<size_t>(i)].name.c_str(),
+                                  i == scene.palette)) {
+                scene.palette = i;
+                scene_edited_ = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Automation shifts it by one every %d phrases.",
+                          project_.project().automation.palette_every_phrases);
+    // Section tags: which sections the automation may pick this scene for; wraps like the cards.
+    ImGui::TextUnformatted("For");
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    for (const char *label : {"intro", "groove", "breakdown", "build", "drop", "outro"}) {
+        const float width =
+            ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(label).x;
+        if (ImGui::GetItemRectMax().x + style.ItemSpacing.x + width < right) {
+            ImGui::SameLine();
+        }
+        auto it = std::find(scene.sections.begin(), scene.sections.end(), label);
+        bool tagged = it != scene.sections.end();
+        if (ImGui::Checkbox(label, &tagged)) {
+            if (tagged) {
+                scene.sections.emplace_back(label);
+            } else {
+                scene.sections.erase(it);
+            }
+            scene_edited_ = true;
+        }
+    }
+
+    // Layers, bottom first.
+    int remove = -1;
+    int swap_down = -1;
+    for (size_t i = 0; i < scene.layers.size(); ++i) {
+        Layer &layer = scene.layers[i];
+        ImGui::PushID(static_cast<int>(i));
+        scene_edited_ |= ImGui::Checkbox("##on", &layer.enabled);
+        ImGui::SameLine();
+        const bool open = ImGui::TreeNode(layer.effect->name());
+        ImGui::SameLine(15.5f * em);
+        ImGui::SetNextItemWidth(5.0f * em);
+        scene_edited_ |= ImGui::SliderFloat("##opacity", &layer.opacity, 0.0f, 1.0f, "%.2f");
+        ImGui::SetItemTooltip("Opacity");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(5.0f * em);
+        if (ImGui::BeginCombo("##blend", blend_mode_id(layer.blend))) {
+            for (const BlendMode m : kBlendModes) {
+                if (ImGui::Selectable(blend_mode_id(m), m == layer.blend)) {
+                    layer.blend = m;
+                    scene_edited_ = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("v") && i + 1 < scene.layers.size()) {
+            swap_down = static_cast<int>(i);
+        }
+        ImGui::SetItemTooltip("Move down (earlier, under the layers above).");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("x")) {
+            remove = static_cast<int>(i);
+        }
+        ImGui::SetItemTooltip("Remove this layer and its routes.");
+        if (open) {
+            const std::vector<EffectParamInfo> infos = effect_param_infos(layer.spec.type());
+            bool params_changed = false;
+            for (size_t k = 0; k < infos.size(); ++k) {
+                const EffectParamInfo &info = infos[k];
+                ImGui::SetNextItemWidth(8.0f * em);
+                const std::string label =
+                    std::string(info.label) +
+                    (info.unit[0] != 0 ? std::string(" (") + info.unit + ")" : std::string());
+                if (info.integer) {
+                    int v = static_cast<int>(std::lround(effect_param(layer.spec, k)));
+                    if (ImGui::SliderInt(label.c_str(), &v, static_cast<int>(info.min),
+                                         static_cast<int>(info.max))) {
+                        set_effect_param(layer.spec, k, v);
+                        params_changed = true;
+                    }
+                } else {
+                    float v = static_cast<float>(effect_param(layer.spec, k));
+                    if (ImGui::SliderFloat(label.c_str(), &v, static_cast<float>(info.min),
+                                           static_cast<float>(info.max), "%.3g")) {
+                        set_effect_param(layer.spec, k, v);
+                        params_changed = true;
+                    }
+                }
+            }
+            if (params_changed) {
+                layer.effect = make_effect(layer.spec);
+                scene_edited_ = true;
+            }
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+    if (swap_down >= 0) {
+        swap_layers(scene, static_cast<size_t>(swap_down), static_cast<size_t>(swap_down) + 1);
+        scene_edited_ = true;
+    }
+    if (remove >= 0) {
+        remove_layer(scene, static_cast<size_t>(remove));
+        scene_edited_ = true;
+    }
+    ImGui::SetNextItemWidth(9.0f * em);
+    if (ImGui::BeginCombo("##add layer", "Add layer")) {
+        for (const EffectType t : kEffectTypes) {
+            const Layer preview_layer = make_layer(default_spec(t), BlendMode::add);
+            if (ImGui::Selectable(preview_layer.effect->name())) {
+                scene.layers.push_back(preview_layer);
+                scene_edited_ = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    draw_routes(scene);
+
+    // The scene list.
+    if (ImGui::Button("Duplicate scene")) {
+        Scene copy = scene;
+        copy.name += " (copy)";
+        scenes.insert(scenes.begin() + edit_scene_ + 1, std::move(copy));
+        ++edit_scene_;
+        scene_edited_ = true;
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(scenes.size() < 2);
+    if (ImGui::Button("Delete scene")) {
+        scenes.erase(scenes.begin() + edit_scene_);
+        edit_scene_ = std::max(0, edit_scene_ - 1);
+        config_.manual_scene = -1;
+        dirty_ = true;
+        scene_edited_ = true;
+    }
+    ImGui::EndDisabled();
+}
+
 void PreviewView::draw_routes(Scene &scene) {
     if (!ImGui::TreeNode("Modulation")) {
         return;
@@ -174,7 +314,7 @@ void PreviewView::draw_routes(Scene &scene) {
             for (const ModSource s : kModSources) {
                 if (ImGui::Selectable(mod_source_name(s), s == r.source)) {
                     r.source = s;
-                    dirty_ = true;
+                    scene_edited_ = true;
                 }
             }
             ImGui::EndCombo();
@@ -185,13 +325,13 @@ void PreviewView::draw_routes(Scene &scene) {
             for (const ModCurve c : kModCurves) {
                 if (ImGui::Selectable(mod_curve_name(c), c == r.curve)) {
                     r.curve = c;
-                    dirty_ = true;
+                    scene_edited_ = true;
                 }
             }
             ImGui::EndCombo();
         }
         ImGui::SameLine();
-        dirty_ |= ImGui::Checkbox("invert", &r.invert);
+        scene_edited_ |= ImGui::Checkbox("invert", &r.invert);
         ImGui::SameLine();
         if (ImGui::SmallButton("x")) {
             remove = static_cast<int>(i);
@@ -204,7 +344,7 @@ void PreviewView::draw_routes(Scene &scene) {
                 if (ImGui::Selectable(mod_target_name(t), t == r.target)) {
                     r.target = t;
                     r.amount = t == ModTarget::hue_shift ? 60.0 : 0.5;
-                    dirty_ = true;
+                    scene_edited_ = true;
                 }
             }
             ImGui::EndCombo();
@@ -219,7 +359,7 @@ void PreviewView::draw_routes(Scene &scene) {
                     if (ImGui::Selectable(scene.layers[static_cast<size_t>(k)].effect->name(),
                                           k == r.layer)) {
                         r.layer = k;
-                        dirty_ = true;
+                        scene_edited_ = true;
                     }
                 }
                 ImGui::EndCombo();
@@ -232,18 +372,18 @@ void PreviewView::draw_routes(Scene &scene) {
         if (ImGui::SliderFloat("amount", &amount, hue ? -180.0f : -1.0f, hue ? 180.0f : 1.0f,
                                hue ? "%.0f deg" : "%.2f")) {
             r.amount = amount;
-            dirty_ = true;
+            scene_edited_ = true;
         }
         ImGui::Unindent();
         ImGui::PopID();
     }
     if (remove >= 0) {
         scene.routes.erase(scene.routes.begin() + remove);
-        dirty_ = true;
+        scene_edited_ = true;
     }
     if (ImGui::Button("Add route")) {
         scene.routes.push_back({});
-        dirty_ = true;
+        scene_edited_ = true;
     }
     ImGui::SetItemTooltip("Source, curve and amount onto a layer's opacity or hue, or the "
                           "scene's brightness (SPEC 7.4). Routes to one target add up.");

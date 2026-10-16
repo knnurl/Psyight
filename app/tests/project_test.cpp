@@ -1,5 +1,6 @@
 // Project file: round trips, defaults for missing fields, and rejected input.
 
+#include "engine/effect_spec.h"
 #include "io/project.h"
 
 #include <doctest/doctest.h>
@@ -71,6 +72,63 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.automation.palette_every_phrases == 4);
     // 444 + 45 pixels at 128 per universe: universes 10 to 13.
     CHECK(patch_of(q).universes == std::vector<int>{10, 11, 12, 13});
+}
+
+TEST_CASE("project: scenes and palettes round-trip and render as before") {
+    Project p = default_project();
+    // Edit an effect parameter, a layer and a route, and add a palette.
+    EffectSpec &conveyor = p.scenes[0].layers[1].spec;
+    set_effect_param(conveyor, 0, 8.0); // segment_pixels.
+    p.scenes[0].layers[1].effect = make_effect(conveyor);
+    p.scenes[0].layers[3].enabled = false;
+    p.scenes[0].routes.push_back(
+        {ModSource::kick, ModCurve::exponential, true, ModTarget::opacity, 0, -0.5});
+    p.palettes.push_back({"Mono", {{0.2f, 0.0f, 0.6f}}});
+    const Result<std::string> text = to_project_json(p);
+    REQUIRE(text.ok());
+    const Result<Project> back = parse_project_json(text.value());
+    REQUIRE(back.ok());
+    const Project &q = back.value();
+    REQUIRE(q.scenes.size() == p.scenes.size());
+    REQUIRE(q.palettes.size() == p.palettes.size());
+    CHECK(q.palettes.back().name == "Mono");
+    CHECK(std::get<ConveyorParams>(q.scenes[0].layers[1].spec.params).segment_pixels == 8);
+    CHECK_FALSE(q.scenes[0].layers[3].enabled);
+    REQUIRE(q.scenes[0].routes.size() == 1);
+    CHECK(q.scenes[0].routes[0].source == ModSource::kick);
+    CHECK(q.scenes[0].routes[0].invert);
+    CHECK(q.scenes[3].routes[0].target == ModTarget::hue_shift);
+    CHECK(q.scenes[3].sections == std::vector<std::string>{"intro", "breakdown", "outro"});
+    // Every scene renders exactly as the one saved.
+    const Rig rig = default_rig();
+    EngineInputs in;
+    in.t_s = 12.3;
+    in.since_kick_s = 0.05;
+    in.bass_active = true;
+    in.since_bass_onset_s = 0.02;
+    in.bass_velocity = 0.9;
+    in.bass_gate_ratio = 0.7;
+    in.bass_notes_so_far = 17;
+    in.section = "drop";
+    in.since_section_s = 0.1;
+    in.section_length_s = 20.0;
+    for (size_t s = 0; s < p.scenes.size(); ++s) {
+        CAPTURE(s);
+        CHECK(render_scene(q.scenes[s], rig, in, q.palettes, 1) ==
+              render_scene(p.scenes[s], rig, in, p.palettes, 1));
+    }
+    // Unknown parameters are ignored; unknown effects are not.
+    CHECK(parse_project_json(R"({"schema": 1, "scenes": [{"layers": [{"effect": "plasma",
+        "params": {"no_such": 3, "speed_hz": 0.5}}]}]})")
+              .ok());
+    CHECK_FALSE(
+        parse_project_json(R"({"schema": 1, "scenes": [{"layers": [{"effect": "laser"}]}]})").ok());
+    CHECK_FALSE(parse_project_json(R"({"schema": 1, "scenes": []})").ok());
+    CHECK_FALSE(
+        parse_project_json(R"({"schema": 1, "palettes": [{"colours": [[1, 2, 0]]}]})").ok());
+    CHECK_FALSE(parse_project_json(R"({"schema": 1, "scenes": [{"layers": [],
+        "routes": [{"source": "moon", "target": "opacity"}]}]})")
+                    .ok());
 }
 
 TEST_CASE("project: missing sections take defaults; bad input is rejected") {

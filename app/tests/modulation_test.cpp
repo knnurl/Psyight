@@ -88,6 +88,25 @@ TEST_CASE("modulation: hue rotation keeps grey, wraps at 360 and keeps luminance
     CHECK(luma(shifted) == doctest::Approx(luma(violet)).epsilon(0.15));
 }
 
+TEST_CASE("modulation: removing and swapping layers keeps routes on their layers") {
+    Scene scene = default_scene(); // Plasma, conveyor, shimmer, sparkle, shockwave.
+    scene.routes = {
+        {ModSource::kick, ModCurve::linear, false, ModTarget::opacity, 1, 0.5},
+        {ModSource::lfo_bar, ModCurve::linear, false, ModTarget::hue_shift, 3, 30.0},
+        {ModSource::constant, ModCurve::linear, false, ModTarget::brightness, 1, 0.2},
+    };
+    swap_layers(scene, 1, 3);
+    CHECK(scene.layers[1].spec.type() == EffectType::sparkle);
+    CHECK(scene.routes[0].layer == 3); // Still the conveyor.
+    CHECK(scene.routes[1].layer == 1); // Still the sparkle.
+    remove_layer(scene, 1);            // The sparkle and its hue route go.
+    REQUIRE(scene.layers.size() == 4);
+    REQUIRE(scene.routes.size() == 2);
+    CHECK(scene.routes[0].layer == 2); // The conveyor moved down one.
+    CHECK(scene.layers[2].spec.type() == EffectType::conveyor);
+    CHECK(scene.routes[1].target == ModTarget::brightness); // Not tied to a layer.
+}
+
 TEST_CASE("modulation: routes change opacity, hue and brightness, and rendering stays pure") {
     const Rig rig = default_rig();
     const std::vector<Palette> palettes = default_palettes();

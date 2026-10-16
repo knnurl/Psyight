@@ -13,6 +13,8 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
+#include <string>
 
 namespace psyight {
 
@@ -69,5 +71,13 @@ Rgb rotate_hue(const Rgb &c, double degrees);
 const char *mod_source_name(ModSource source);
 const char *mod_curve_name(ModCurve curve);
 const char *mod_target_name(ModTarget target);
+
+// Stable ids for files ("lfo_phrase", "s_curve", "hue_shift" and so on).
+const char *mod_source_id(ModSource source);
+const char *mod_curve_id(ModCurve curve);
+const char *mod_target_id(ModTarget target);
+std::optional<ModSource> mod_source_from_id(const std::string &id);
+std::optional<ModCurve> mod_curve_from_id(const std::string &id);
+std::optional<ModTarget> mod_target_from_id(const std::string &id);
 
 } // namespace psyight

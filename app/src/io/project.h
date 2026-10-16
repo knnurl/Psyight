@@ -1,13 +1,15 @@
 // Project file, schema 1 (SPEC section 10): `.psyproj` JSON holding the rig (strips with colour
-// orders), the patch, the output settings, the limiters, the latency offset and the scene
-// automation settings. Scenes, palettes, modulation and the MIDI map come later.
+// orders), the patch, the output settings, the limiters, the latency offset, the scene
+// automation settings, the scenes (layers with their effect parameters, section tags, modulation
+// routes) and the palettes. The MIDI map comes later.
 // Every section and field is optional when parsing and takes its default when missing, so files
-// survive version changes; unknown fields are ignored. Whether to send to the network is not
-// stored: the app always starts with sending off.
+// survive version changes; unknown fields (and unknown effect parameters) are ignored. Whether to
+// send to the network is not stored: the app always starts with sending off.
 #pragma once
 
 #include "core/result.h"
 #include "engine/automation.h"
+#include "engine/colour.h"
 #include "engine/limiters.h"
 #include "engine/rig.h"
 #include "output/patch.h"
@@ -37,6 +39,8 @@ struct Project {
     LimiterParams limiter;
     double latency_offset_ms = 0.0;
     AutomationParams automation;
+    std::vector<Scene> scenes = default_scenes();
+    std::vector<Palette> palettes = default_palettes();
 };
 
 // The default frame rig (engine/rig.h default_rig) with default settings.
@@ -57,7 +61,8 @@ std::string polyline_text(const std::vector<Vec3> &polyline);
 int pixels_to_fill(const StripSpec &spec);
 
 // Fails on malformed JSON, another schema, a wrongly typed or out-of-range field, a strip with
-// fewer than two polyline points, or an unknown colour order or protocol.
+// fewer than two polyline points, an unknown colour order, protocol, effect, blend mode or
+// modulation id, an empty scene or palette list, or a palette without colours.
 Result<Project> parse_project_json(std::string_view json);
 Result<std::string> to_project_json(const Project &project);
 

@@ -1,6 +1,7 @@
 #include "io/project.h"
 
 #include "core/paths.h"
+#include "engine/effect_spec.h"
 #include "io/text_file.h"
 #include "output/udp_socket.h"
 
@@ -78,6 +79,93 @@ ColourOrder parse_order(const std::string &name) {
         }
     }
     throw FieldError{"unknown colour order " + name};
+}
+
+float unit_value(const json &value, const char *field) {
+    const double v = value.get<double>();
+    if (!std::isfinite(v) || v < 0.0 || v > 1.0) {
+        throw FieldError{std::string(field) + " must be between 0 and 1"};
+    }
+    return static_cast<float>(v);
+}
+
+template <typename T>
+T from_id_or_throw(const std::optional<T> &value, const char *what, const std::string &id) {
+    if (!value) {
+        throw FieldError{std::string("unknown ") + what + " " + id};
+    }
+    return *value;
+}
+
+Scene parse_scene(const json &item) {
+    Scene s;
+    s.name = optional<std::string>(item, "name", "");
+    s.palette = integer(item, "palette", 0, 0, 1000);
+    s.sections = optional<std::vector<std::string>>(item, "sections", {});
+    for (const json &l : item.at("layers").get_ref<const json::array_t &>()) {
+        const std::string effect = l.at("effect").get<std::string>();
+        const EffectType type = from_id_or_throw(effect_type_from_id(effect), "effect", effect);
+        EffectSpec spec = default_spec(type);
+        if (const auto params = l.find("params"); params != l.end()) {
+            const std::vector<EffectParamInfo> infos = effect_param_infos(type);
+            for (size_t i = 0; i < infos.size(); ++i) {
+                if (const auto v = params->find(infos[i].id); v != params->end()) {
+                    set_effect_param(spec, i, finite(v->get<double>(), infos[i].id));
+                }
+            }
+        }
+        const std::string blend = optional<std::string>(l, "blend", "add");
+        Layer layer = make_layer(spec, from_id_or_throw(blend_mode_from_id(blend), "blend", blend),
+                                 static_cast<float>(number(l, "opacity", 1.0, 0.0, 1.0)));
+        layer.enabled = optional(l, "enabled", true);
+        s.layers.push_back(std::move(layer));
+    }
+    if (const auto routes = item.find("routes"); routes != item.end()) {
+        for (const json &r : routes->get_ref<const json::array_t &>()) {
+            ModRoute route;
+            const std::string source = r.at("source").get<std::string>();
+            const std::string curve = optional<std::string>(r, "curve", "linear");
+            const std::string target = r.at("target").get<std::string>();
+            route.source = from_id_or_throw(mod_source_from_id(source), "source", source);
+            route.curve = from_id_or_throw(mod_curve_from_id(curve), "curve", curve);
+            route.target = from_id_or_throw(mod_target_from_id(target), "target", target);
+            route.invert = optional(r, "invert", false);
+            route.layer = integer(r, "layer", 0, 0, 1000);
+            route.amount = number(r, "amount", 0.0, -360.0, 360.0);
+            s.routes.push_back(route);
+        }
+    }
+    return s;
+}
+
+json scene_json(const Scene &s) {
+    json layers = json::array();
+    for (const Layer &l : s.layers) {
+        json params = json::object();
+        const std::vector<EffectParamInfo> infos = effect_param_infos(l.spec.type());
+        for (size_t i = 0; i < infos.size(); ++i) {
+            params[infos[i].id] = finite(effect_param(l.spec, i), infos[i].id);
+        }
+        layers.push_back({{"effect", effect_type_id(l.spec.type())},
+                          {"blend", blend_mode_id(l.blend)},
+                          {"opacity", finite(l.opacity, "opacity")},
+                          {"enabled", l.enabled},
+                          {"params", params}});
+    }
+    json routes = json::array();
+    for (const ModRoute &r : s.routes) {
+        routes.push_back({{"source", mod_source_id(r.source)},
+                          {"curve", mod_curve_id(r.curve)},
+                          {"invert", r.invert},
+                          {"target", mod_target_id(r.target)},
+                          {"layer", r.layer},
+                          {"amount", finite(r.amount, "amount")}});
+    }
+    return {{"name", s.name},
+            {"palette", s.palette},
+            {"sections", s.sections},
+            {"layers", layers},
+            {"routes", routes}};
 }
 
 } // namespace
@@ -267,6 +355,38 @@ Result<Project> parse_project_json(std::string_view json_text) {
         a.palette_every_phrases =
             integer(aut, "palette_every_phrases", a.palette_every_phrases, 0, 64);
         a.palette_slew_beats = number(aut, "palette_slew_beats", a.palette_slew_beats, 0.0, 64.0);
+
+        if (const auto it = root.find("palettes"); it != root.end()) {
+            p.palettes.clear();
+            for (const json &item : it->get_ref<const json::array_t &>()) {
+                Palette palette;
+                palette.name = optional<std::string>(item, "name", "");
+                for (const json &c : item.at("colours").get_ref<const json::array_t &>()) {
+                    const auto &rgb = c.get_ref<const json::array_t &>();
+                    if (rgb.size() != 3) {
+                        throw FieldError{"palette colours need r, g and b"};
+                    }
+                    palette.colours.push_back({unit_value(rgb[0], "r"), unit_value(rgb[1], "g"),
+                                               unit_value(rgb[2], "b")});
+                }
+                if (palette.colours.empty()) {
+                    throw FieldError{"palette " + palette.name + " has no colours"};
+                }
+                p.palettes.push_back(std::move(palette));
+            }
+            if (p.palettes.empty()) {
+                throw FieldError{"no palettes"};
+            }
+        }
+        if (const auto it = root.find("scenes"); it != root.end()) {
+            p.scenes.clear();
+            for (const json &item : it->get_ref<const json::array_t &>()) {
+                p.scenes.push_back(parse_scene(item));
+            }
+            if (p.scenes.empty()) {
+                throw FieldError{"no scenes"};
+            }
+        }
         return p;
     } catch (const json::exception &e) {
         return Error{std::string("invalid project JSON: ") + e.what()};
@@ -292,6 +412,18 @@ Result<std::string> to_project_json(const Project &p) {
         }
         const LimiterParams &l = p.limiter;
         const AutomationParams &a = p.automation;
+        json scenes = json::array();
+        for (const Scene &s : p.scenes) {
+            scenes.push_back(scene_json(s));
+        }
+        json palettes = json::array();
+        for (const Palette &palette : p.palettes) {
+            json colours = json::array();
+            for (const Rgb &c : palette.colours) {
+                colours.push_back({finite(c.r, "r"), finite(c.g, "g"), finite(c.b, "b")});
+            }
+            palettes.push_back({{"name", palette.name}, {"colours", colours}});
+        }
         const json root = {
             {"schema", kProjectSchemaVersion},
             {"rig", {{"strips", strips}}},
@@ -320,6 +452,8 @@ Result<std::string> to_project_json(const Project &p) {
              {{"crossfade_beats", finite(a.crossfade_beats, "crossfade_beats")},
               {"palette_every_phrases", a.palette_every_phrases},
               {"palette_slew_beats", finite(a.palette_slew_beats, "palette_slew_beats")}}},
+            {"scenes", scenes},
+            {"palettes", palettes},
         };
         return root.dump(2) + "\n";
     } catch (const json::exception &e) {

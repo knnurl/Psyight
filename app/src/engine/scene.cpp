@@ -1,5 +1,7 @@
 #include "engine/scene.h"
 
+#include "engine/effect_spec.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -298,14 +300,47 @@ Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &input
     return frame;
 }
 
+void remove_layer(Scene &scene, size_t index) {
+    if (index >= scene.layers.size()) {
+        return;
+    }
+    scene.layers.erase(scene.layers.begin() + static_cast<std::ptrdiff_t>(index));
+    const int removed = static_cast<int>(index);
+    std::erase_if(scene.routes, [removed](const ModRoute &r) {
+        return r.target != ModTarget::brightness && r.layer == removed;
+    });
+    for (ModRoute &r : scene.routes) {
+        if (r.target != ModTarget::brightness && r.layer > removed) {
+            --r.layer;
+        }
+    }
+}
+
+void swap_layers(Scene &scene, size_t a, size_t b) {
+    if (a >= scene.layers.size() || b >= scene.layers.size() || a == b) {
+        return;
+    }
+    std::swap(scene.layers[a], scene.layers[b]);
+    for (ModRoute &r : scene.routes) {
+        if (r.target == ModTarget::brightness) {
+            continue;
+        }
+        if (r.layer == static_cast<int>(a)) {
+            r.layer = static_cast<int>(b);
+        } else if (r.layer == static_cast<int>(b)) {
+            r.layer = static_cast<int>(a);
+        }
+    }
+}
+
 Scene default_scene() {
     Scene scene;
     scene.name = "Default";
-    scene.layers.push_back({make_plasma(), BlendMode::alpha, 1.0f, true});
-    scene.layers.push_back({make_conveyor(), BlendMode::add, 1.0f, true});
-    scene.layers.push_back({make_shimmer(), BlendMode::add, 1.0f, true});
-    scene.layers.push_back({make_sparkle(), BlendMode::add, 0.8f, true});
-    scene.layers.push_back({make_shockwave(), BlendMode::screen, 1.0f, true});
+    scene.layers.push_back(make_layer({PlasmaParams{}}, BlendMode::alpha));
+    scene.layers.push_back(make_layer({ConveyorParams{}}, BlendMode::add));
+    scene.layers.push_back(make_layer({ShimmerParams{}}, BlendMode::add));
+    scene.layers.push_back(make_layer({SparkleParams{}}, BlendMode::add, 0.8f));
+    scene.layers.push_back(make_layer({ShockwaveParams{}}, BlendMode::screen));
     return scene;
 }
 
@@ -320,22 +355,22 @@ std::vector<Scene> default_scenes() {
     staccato.name = "Groove, staccato";
     staccato.sections = {"groove"};
     staccato.palette = 1;
-    staccato.layers[1].effect = make_conveyor({6, 5, 28.0, 270.0, 0.02});
+    staccato.layers[1] = make_layer({ConveyorParams{6, 5, 28.0, 270.0, 0.02}}, BlendMode::add);
     scenes.push_back(staccato);
 
     Scene drop = default_scene();
     drop.name = "Drop";
     drop.sections = {"drop"};
-    drop.layers.push_back({make_drop_burst(), BlendMode::screen, 1.0f, true});
+    drop.layers.push_back(make_layer({DropBurstParams{}}, BlendMode::screen));
     scenes.push_back(drop);
 
     Scene ambient;
     ambient.name = "Ambient";
     ambient.sections = {"intro", "breakdown", "outro"};
-    ambient.layers.push_back({make_plasma(), BlendMode::alpha, 1.0f, true});
-    ambient.layers.push_back({make_shimmer(), BlendMode::add, 1.0f, true});
-    ambient.layers.push_back({make_sparkle(), BlendMode::add, 0.5f, true});
-    ambient.layers.push_back({make_conveyor(), BlendMode::add, 0.4f, true});
+    ambient.layers.push_back(make_layer({PlasmaParams{}}, BlendMode::alpha));
+    ambient.layers.push_back(make_layer({ShimmerParams{}}, BlendMode::add));
+    ambient.layers.push_back(make_layer({SparkleParams{}}, BlendMode::add, 0.5f));
+    ambient.layers.push_back(make_layer({ConveyorParams{}}, BlendMode::add, 0.4f));
     // The plasma's hue drifts 60 degrees and back over each phrase (SPEC 7.5).
     ambient.routes.push_back(
         {ModSource::lfo_phrase, ModCurve::s_curve, false, ModTarget::hue_shift, 0, 60.0});
@@ -344,10 +379,10 @@ std::vector<Scene> default_scenes() {
     Scene build;
     build.name = "Build";
     build.sections = {"build"};
-    build.layers.push_back({make_plasma(), BlendMode::alpha, 0.5f, true});
-    build.layers.push_back({make_build(), BlendMode::add, 1.0f, true});
-    build.layers.push_back({make_sparkle(), BlendMode::add, 0.8f, true});
-    build.layers.push_back({make_shockwave(), BlendMode::screen, 1.0f, true});
+    build.layers.push_back(make_layer({PlasmaParams{}}, BlendMode::alpha, 0.5f));
+    build.layers.push_back(make_layer({BuildParams{}}, BlendMode::add));
+    build.layers.push_back(make_layer({SparkleParams{}}, BlendMode::add, 0.8f));
+    build.layers.push_back(make_layer({ShockwaveParams{}}, BlendMode::screen));
     scenes.push_back(build);
     return scenes;
 }

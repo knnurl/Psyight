@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace psyight {
 
@@ -29,6 +30,7 @@ class PreviewView {
     void sync_config(); // Publishes config_ when it or the track changed.
     void draw_controls(const ShowFrame &frame);
     void draw_scene_cards(const ShowFrame &frame);
+    void draw_scene_editor(std::vector<Scene> &scenes);
     void draw_routes(Scene &scene);
     void draw_output(const ShowFrame &frame);
     void draw_rig(const ShowFrame &frame);
@@ -39,7 +41,8 @@ class PreviewView {
     ShowConfig config_;
     bool dirty_ = true;
     std::uint64_t version_ = 0;
-    int edit_scene_ = 0; // Whose layers and palette the controls show.
+    int edit_scene_ = 0;        // Whose layers and palette the controls show.
+    bool scene_edited_ = false; // A scene changed this frame: the project is told once.
     std::string address_text_ = "127.0.0.1";
     bool address_active_ = false;
     // Measured frame rate, from the frame index over about a second.

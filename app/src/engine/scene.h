@@ -29,6 +29,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace psyight {
@@ -95,6 +96,16 @@ struct DropBurstParams {
     double duration_s = 1.5; // After the drop starts.
 };
 
+// An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
+// makes the effect and describes the parameters).
+enum class EffectType { plasma, shockwave, conveyor, sparkle, shimmer, build, drop_burst };
+using EffectParams = std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams,
+                                  ShimmerParams, BuildParams, DropBurstParams>;
+struct EffectSpec {
+    EffectParams params;
+    EffectType type() const { return static_cast<EffectType>(params.index()); }
+};
+
 std::unique_ptr<Effect> make_plasma(const PlasmaParams &params = {});
 std::unique_ptr<Effect> make_shockwave(const ShockwaveParams &params = {});
 std::unique_ptr<Effect> make_conveyor(const ConveyorParams &params = {});
@@ -103,12 +114,15 @@ std::unique_ptr<Effect> make_shimmer(const ShimmerParams &params = {});
 std::unique_ptr<Effect> make_build(const BuildParams &params = {});
 std::unique_ptr<Effect> make_drop_burst(const DropBurstParams &params = {});
 
-// Effects are immutable once made, so copies of a scene (for the show thread) share them.
+// Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
+// describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,
+// and an edit of the spec remakes the effect.
 struct Layer {
     std::shared_ptr<const Effect> effect;
     BlendMode blend = BlendMode::add;
     float opacity = 1.0f;
     bool enabled = true;
+    EffectSpec spec;
 };
 
 struct Scene {
@@ -125,6 +139,11 @@ Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &input
 // The same with an explicit palette instead of the scene's.
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
                    const Palette &palette, std::uint64_t seed);
+
+// Layer edits that keep each route on the same layer: removing a layer removes its routes and
+// renumbers the rest; swapping two layers swaps their routes' indices.
+void remove_layer(Scene &scene, size_t index);
+void swap_layers(Scene &scene, size_t a, size_t b);
 
 // Plasma (alpha), conveyor (add), shimmer (add), sparkle (add), shockwave (screen).
 Scene default_scene();
