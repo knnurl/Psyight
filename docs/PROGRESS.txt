@@ -51,12 +51,22 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - `psyight_eval` CLI and the **M1 baseline** (`docs/results/M1.md`): OculusDrift region F 0.994 (452/452 matched, 5 false positives), pitch 0.989, gate MAE 0.037, offsets -6.8 ms median. Before the grid fix it scored F 0.858: the gap was the grid offset, not tracker scatter.
 - Tests: 110 doctest cases, 4183 assertions, Release.
 
-## Next steps, in order
-1. **Detected notes in the bass roll** (second colour, opacity is confidence; kicks as markers) and a "pre-fill labels from detections" button. Run the tracker in `Session::load` after the front end.
-2. **Scoring panel**: per complete region and total, the psyight_eval metrics, plus jump to the worst errors.
-3. **Golden-metric regression test** on the synthetic set (a metric that worsens fails), and a Python cross-check `tools/python/eval_mir.py` using the same closest-pairing rule.
-4. A "shift all labels by N ms" action in the inspector (a grid fix was a script this time).
-5. Open questions in SPEC 18: A13 (kick click ratio on real kicks), A14 (slide bias), A15 (are detected onsets 7 ms early on real attacks, or is the bass ahead of the 16ths?). Label a second track before tuning on real audio; the OculusDrift minute is the evaluation set, so don't tune on it.
+## Parked M1 to-dos (owner, 2026-10-16: "keep as a note for later")
+- Detected notes in the bass roll (second colour, opacity is confidence; kicks as markers), the inspector showing every tracker field, and a "pre-fill labels from detections" button. Run the tracker in `Session::load` after the front end.
+- Scoring panel: per complete region and total, the psyight_eval metrics, plus jump to the worst errors.
+- Golden-metric regression test on the synthetic set (a metric that worsens fails), and a Python cross-check `tools/python/eval_mir.py` using the same closest-pairing rule.
+- Log panel (SPEC 9.4 lists it for M1).
+- A "shift all labels by N ms" action in the inspector (the OculusDrift grid fix was a script).
+
+## Next steps: M2, owner-approved 2026-10-16 (unlabelled tracks first; labels later)
+1. **Beat, downbeat and phrase tracking** (file mode, SPEC 6.5): tempo with a prior, dynamic-programming beats, downbeat and phrase phase from bar-level novelty, and a constant-tempo Grid fit. Ground truth: the synthetic set and the OculusDrift grid (150 BPM, downbeat 16.042 s).
+2. **`psyight_analyse`**: unlabelled report for any track (tempo, grid, kick coverage, bass note statistics, pitch histogram), run on Hagios, Hall of Purity and Phase Change.
+3. Kick (standalone, with confidence), hats and residual detectors (SPEC 6.4); bass aggregates per bar and phrase (SPEC 6.2).
+4. Section detection (SPEC 6.6): breakdown, build, drop, groove (A9).
+5. GUI: automatic grid option, beats, downbeats, phrases and sections on the time plots.
+6. Offline Demucs stems (`tools/python/`, ask before installing; A6), loaded as an optional analysis source.
+7. With owner labels later: the M2 exit table for all four tracks, DSP against Demucs-assisted.
+- Open questions in SPEC 18: A13 (kick click ratio on real kicks), A14 (slide bias), A15 (detected onsets 7 ms early on real attacks?). The OculusDrift minute is the evaluation set: don't tune on it.
 
 ## Known issues
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
