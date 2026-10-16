@@ -188,17 +188,19 @@ The owner wants an audio-reactive LED system for psytrance. It starts as a home-
 
 #### DSP v0 algorithm
 
-This is the M1 baseline. Every threshold is a registry parameter, and ML is expected to beat it.
+This is the M1 baseline. Every threshold is a registry parameter (`bass.*`), and ML is expected to beat it. Implemented in `app/src/analysis/bass_tracker.*` (file mode).
 
-1. **Kick handling.** Detect kicks from a click-band onset (2.5 to 6 kHz) combined with a low-band rise. Build a kick mask window (default 0 to 60 ms after each kick) where bass offsets aren't declared and bass onsets are down-weighted.
-2. **Bass envelope.** Combine the filterbank energy over the harmonic region (default 80 to 400 Hz) with sub energy (30 to 80 Hz). Use fast attack and short release followers.
-3. **Onsets.** Use spectral flux in the bass region with adaptive-threshold peak picking. Optionally attract onsets to the grid within ±15 ms, but record the raw time too.
-4. **Offsets.** A note ends at the first of: the envelope dropping below k × note peak (default k = 0.25, configurable); the noise floor; or the next onset. Drops inside the kick mask are ignored.
-5. **Pitch.** File mode uses harmonic-sum spectrum or YIN on a low-passed signal with a 4096-sample centred window. Live mode uses a 2048-sample causal window weighted towards harmonics. Output MIDI, cents and confidence.
+**[Certain]** A low bass note's period (24 ms at E1) is longer than a 1024-sample window and five 5.33 ms hops: shorter analysis sees the waveform, not the envelope, and its energy and flux swing by 30 dB within a period. Every bass feature below is therefore at least one period long.
+
+1. **Kick handling.** Detect kicks from click-band (2.5 to 6 kHz) flux peaks that are broadband (click flux at least 0.2 × low-mid flux), come with a low-band rise of at least 6 dB, and lie within ±35 ms of a beat of the grid (the manual grid in M1, beat tracking in M2). Build a kick mask (default 60 ms after each kick) where bass offsets aren't declared and bass onsets are suppressed; for onsets it starts as early as the onset function can see the kick (half its window plus its smoothing, plus 15 ms).
+2. **Bass envelope.** The bass band's power (80 to 400 Hz) averaged over a centred 25 ms window (about one period).
+3. **Onsets.** A 2048-sample STFT over 40 Hz to 2 kHz; each bin's compressed magnitude is averaged over the envelope window, then differenced across that span (centred) and rectified, so period ripple cancels before rectification. Adaptive-threshold peak picking on the track-normalised result; a peak needs bass activity and must not drop the bass level by more than 12 dB (the click of an abrupt offset). Optional grid attraction is not built.
+4. **Offsets.** A note ends at the first of: the envelope dropping below k × note peak (default k = 0.25, the window's lag removed); the noise floor; the next onset; or the next kick (v0: a long note held under a kick is split there). Drops inside the kick mask are ignored. Gaps shorter than the envelope window are not resolved: the note runs to the next onset.
+5. **Pitch.** File mode averages the front end's harmonic-sum salience (8 harmonics, 8192-sample centred window: the bass roll's pitch background) over the central half of the note; cents by parabolic interpolation across semitone rows. **[Certain]** Notes shorter than about two periods have no reliable pitch, and get low confidence. Live mode (M5) uses a 2048-sample causal window weighted towards harmonics. Output MIDI, cents and confidence.
 6. **Derived values.**
    - Gate ratio.
    - Decay time constant, from an exponential fit between the peak and the offset.
-   - Slide: continuous pitch across a boundary with no envelope dip deeper than X dB.
+   - Slide: a note (no re-attack) whose halves differ in salience pitch is split where the second pitch's salience overtakes the first's, minus a 20 ms bias (about half a glide) [Verify] on real slides.
    - Long note: no re-attack at the next slot.
    - Rests: a slot with no onset and activity below a threshold.
 7. **Aggregates.** Per bar and per phrase statistics (section 6.2).
@@ -662,6 +664,10 @@ Initial metric targets are placeholders, marked **[Guessing]**. Replace them wit
 | 2026-10-15 | Flash limiter on by default at 3 per second | Photosensitivity: rolling 16ths at 160 BPM are a 10.7 Hz strobe if mapped to brightness |
 | 2026-10-15 | Build with CMake presets (Ninja Multi-Config) and vcpkg manifest mode, triplet `x64-windows-static-md`. The registry baseline is pinned in `app/vcpkg-configuration.json` to the snapshot bundled with Visual Studio (`b1b19307`, 2025-08-30). vcpkg compiles the dependencies with the developer shell's Visual Studio instance | Ninja uses whichever MSVC the shell provides and exports `compile_commands.json`. The pinned baseline makes clean checkouts reproducible and matches the bundled vcpkg's scripts. Static third-party libraries with the shared CRT leave no third-party DLLs to ship; the target machine needs the VC++ 2015-2022 x64 redistributable. One toolset for app and dependencies avoids static-library link mismatches |
 | 2026-10-15 | Project name is Psyight (replaces the working name PsyLight) | Owner decision |
+| 2026-10-16 | Bass tracker analysis windows are at least one bass period long: the envelope averages 25 ms, the onset function smooths each bin over that span before a centred difference | Shorter windows see the 24 ms waveform period of E1 and fire false onsets inside held notes; measured on the synthetic set (onset F from 0.40 to 1.00) |
+| 2026-10-16 | In M1, kicks must lie within 35 ms of a beat of the manual grid | A synth bass attack's click passed the click-flux and low-rise tests; the grid is the M1 beat prior until M2's beat tracking |
+| 2026-10-16 | Bass tracker v0 ends a note at the next kick | The slot-3 note of K-B-B-B closes at the kick, whose own energy hides the drop; cost: long notes held under a kick are split |
+| 2026-10-16 | psyight_eval scores the tracker from the command line; the scoring panel remains M1 work | First real numbers before the panel; reproducible command for docs/results |
 | 2026-10-15 | Labelling audition at 0.5x with pitch kept, using Signalsmith Stretch 1.4.0 and Signalsmith Linear 0.6.4 (MIT, header-only, vendored in `app/third_party`) | Owner chose it over writing WSOLA: much cleaner transients and sustained bass. Rubber Band (GPL) and SoundTouch (LGPL) are excluded by the licensing rule. Measured latency at 0.5x: 90 ms of input, compensated in the displayed playhead |
 
 Superseded during the conversation: an early suggestion to use JUCE for the C++ engine (replaced by the permissive stack) and an early "prototype in Python first" plan (replaced by the owner's choice of C++ from the start).
@@ -697,6 +703,9 @@ Superseded during the conversation: an early suggestion to use JUCE for the C++ 
 | A10 | vcpkg ports exist for imgui (docking), implot, miniaudio, pffft, nlohmann-json, spdlog, doctest, rtmidi; ONNX Runtime DirectML may need NuGet or a manual package. The M1 set was verified on 2026-10-15 at baseline `b1b19307`: it builds and links with MSVC 19.44, and `ctest --preset windows-msvc-release` passes smoke tests for pffft, miniaudio and nlohmann-json. rtmidi and ONNX Runtime are not yet checked | [Certain] for the M1 set; [Verify] for rtmidi and ONNX Runtime | Build setup |
 | A11 | WASAPI loopback via miniaudio captures the laptop output reliably at 48 kHz | [Likely] | M5 |
 | A12 | Single-ended 5 V pixel data is reliable over only a few metres | [Likely] | Rig and node placement |
+| A13 | Kick click flux at least 0.2 × low-mid flux separates real kicks from bass attacks (synthetic: kicks 0.29 and up, bass attacks median 0.07). On OculusDrift 151 of 153 beats in the labelled region had a kick | [Likely] | Bass tracker kick mask |
+| A14 | The slide split bias of 20 ms (half the generator's 40 ms glide) suits real slides | [Guessing] | Slide onset timing |
+| A15 | On OculusDrift the tracker's bass onsets sit 7 ms (p5 to p95: 3 to 10 ms) before the 16ths of a grid aligned to the detected kicks: production timing or tracker bias on real attacks, undecided | [Verify] | Onset bias parameter |
 
 ---
 
