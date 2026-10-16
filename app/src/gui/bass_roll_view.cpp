@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <tuple>
 #include <vector>
 
@@ -28,12 +29,41 @@ constexpr ImU32 kNoteBorder = IM_COL32(150, 240, 225, 255);
 constexpr ImU32 kSelectedBorder = IM_COL32(255, 230, 120, 255);
 constexpr ImU32 kSlideLine = IM_COL32(150, 240, 225, 200);
 constexpr ImU32 kBlackKeyRow = IM_COL32(255, 255, 255, 10);
+constexpr ImU32 kBoxFill = IM_COL32(255, 230, 120, 30);
+constexpr ImU32 kBoxBorder = IM_COL32(255, 230, 120, 180);
 constexpr ImU32 kCompleteRegion = IM_COL32(80, 200, 120, 28);
 constexpr ImU32 kIncompleteRegion = IM_COL32(200, 200, 200, 18);
 constexpr double kPitchRangeLowQuantile = 0.6; // Most frames are quiet: keep them dark.
 constexpr double kPitchRangeHighQuantile = 0.997;
 static_assert(kLowestMidi == kSalienceFirstMidi && kHighestMidi == kSalienceLastMidi,
               "the bass roll rows and the salience rows must match");
+constexpr int kMaxRepeatCount = 256;
+
+struct RepeatPeriod {
+    const char *label;
+    int slots; // 0: the pattern's default period.
+};
+constexpr std::array<RepeatPeriod, 7> kRepeatPeriods{{{"Auto", 0},
+                                                      {"1/16", 1},
+                                                      {"1 beat", 4},
+                                                      {"2 beats", 8},
+                                                      {"1 bar", 16},
+                                                      {"2 bars", 32},
+                                                      {"4 bars", 64}}};
+
+std::string describe_slots(int slots) {
+    char text[32];
+    if (slots % kSlotsPerBar == 0) {
+        std::snprintf(text, sizeof(text), "%d bar%s", slots / kSlotsPerBar,
+                      slots == kSlotsPerBar ? "" : "s");
+    } else if (slots % kSlotsPerBeat == 0) {
+        std::snprintf(text, sizeof(text), "%d beat%s", slots / kSlotsPerBeat,
+                      slots == kSlotsPerBeat ? "" : "s");
+    } else {
+        std::snprintf(text, sizeof(text), "%d/16", slots);
+    }
+    return text;
+}
 
 bool is_black_key(int midi) {
     const int pitch_class = midi % 12;
@@ -87,11 +117,13 @@ void BassRollView::draw_roll() {
     }
     const LoadedTrack &track = session_.track();
     LabelEditor &labels = session_.labels();
+    sync_selection();
+    mouse_time_s_.reset();
     ImGui::Checkbox("Snap to 1/16 (hold Alt for free)", &snap_);
     ImGui::SameLine();
-    ImGui::TextDisabled("Double-click: new note. Drag: move or resize. Right-click: delete. "
-                        "Middle-drag: pan. Middle double-click: fit. "
-                        "Ctrl+click: seek.");
+    ImGui::TextDisabled("Double-click: new note. Drag: move, resize or box select (Shift adds). "
+                        "Right-click: delete. Ctrl+C, V, D: copy, paste, duplicate. "
+                        "Middle-drag: pan. Middle double-click: fit. Ctrl+click: seek.");
     ImGui::Checkbox("Pitch background", &show_pitch_);
     if (show_pitch_) {
         ImGui::SameLine();
@@ -116,7 +148,7 @@ void BassRollView::draw_roll() {
         pitch_range_changed_ = false;
     }
     ImGui::SameLine();
-    ImGui::Text("| %zu notes%s", labels.labels().bass_notes.size(),
+    ImGui::Text("| %zu notes, %zu selected%s", labels.labels().bass_notes.size(), selection_.size(),
                 labels.dirty() ? ", unsaved" : "");
 
     // In the bass roll the left button edits, so panning and fit-to-data (ImPlot's double-click,
@@ -194,7 +226,7 @@ void BassRollView::draw_notes() const {
         const ImVec2 top_left = ImPlot::PlotToPixels(note.onset_s, note.midi + 1);
         const ImVec2 bottom_right = ImPlot::PlotToPixels(note.offset_s, note.midi);
         draw->AddRectFilled(top_left, bottom_right, kNoteFill, 2.0f);
-        const bool selected = static_cast<int>(i) == selected_;
+        const bool selected = is_selected(static_cast<int>(i));
         draw->AddRect(top_left, bottom_right, selected ? kSelectedBorder : kNoteBorder, 2.0f, 0,
                       selected ? 2.0f : 1.0f);
         if (note.slide_in && i > 0) {
@@ -205,15 +237,95 @@ void BassRollView::draw_notes() const {
     }
 }
 
+void BassRollView::sync_selection() {
+    const LoadedTrack *track = session_.has_track() ? &session_.track() : nullptr;
+    LabelEditor &labels = session_.labels();
+    if (track != selection_track_ || labels.undo_redo_count() != selection_undo_redo_count_) {
+        selection_track_ = track;
+        selection_undo_redo_count_ = labels.undo_redo_count();
+        selection_.clear();
+        if (drag_ != Drag::none) {
+            labels.end_gesture();
+            drag_ = Drag::none;
+        }
+        boxing_ = false;
+    }
+    const auto count = static_cast<int>(labels.labels().bass_notes.size());
+    std::erase_if(selection_, [count](int i) { return i >= count; });
+}
+
+bool BassRollView::is_selected(int index) const {
+    return std::binary_search(selection_.begin(), selection_.end(), index);
+}
+
+void BassRollView::set_selection(std::vector<int> indices) {
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    selection_ = std::move(indices);
+}
+
+void BassRollView::select_in_view() {
+    std::vector<int> visible;
+    const std::vector<BassNoteLabel> &notes = session_.labels().labels().bass_notes;
+    for (int i = 0; i < static_cast<int>(notes.size()); ++i) {
+        if (notes[i].offset_s > session_.view.min_s && notes[i].onset_s < session_.view.max_s) {
+            visible.push_back(i);
+        }
+    }
+    set_selection(std::move(visible));
+}
+
+void BassRollView::move_selection(double delta_s, int delta_midi) {
+    const auto grabbed_at = std::find(selection_.begin(), selection_.end(), grabbed_);
+    const std::vector<int> moved = session_.labels().move_notes(selection_, delta_s, delta_midi);
+    if (grabbed_at != selection_.end()) {
+        grabbed_ = moved[grabbed_at - selection_.begin()];
+    }
+    set_selection(moved);
+}
+
+NotePattern BassRollView::selection_pattern() const {
+    return copy_pattern(session_.labels().labels().bass_notes, selection_, session_.grid(),
+                        kRepeatPeriods[repeat_period_choice_].slots);
+}
+
+void BassRollView::paste(double anchor_s) {
+    if (clipboard_.empty()) {
+        return;
+    }
+    const PatternPlacement placed = place_pattern(clipboard_, session_.grid(), anchor_s, 1);
+    set_selection(
+        session_.labels().insert_notes(placed.notes, placed.clear_from_s, placed.clear_to_s));
+}
+
+void BassRollView::duplicate(int count, double limit_s) {
+    const NotePattern pattern = selection_pattern();
+    const Grid grid = session_.grid();
+    const PatternPlacement placed = place_pattern(
+        pattern, grid, pattern.anchor_s + pattern_period_s(pattern, grid), count, limit_s);
+    if (placed.notes.empty()) {
+        return; // Never clear notes without placing any.
+    }
+    const std::vector<int> added =
+        session_.labels().insert_notes(placed.notes, placed.clear_from_s, placed.clear_to_s);
+    // Select the last copy, so the next duplicate continues the line.
+    set_selection(std::vector<int>(
+        added.begin() + static_cast<std::ptrdiff_t>(placed.last_copy_first), added.end()));
+}
+
 void BassRollView::handle_mouse(const LoadedTrack &track) {
     LabelEditor &labels = session_.labels();
     const ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+    const ImGuiIO &io = ImGui::GetIO();
     bool near_start = false;
     bool near_end = false;
     const bool hovered = ImPlot::IsPlotHovered();
     const int under_mouse = hovered ? hovered_note(near_start, near_end) : -1;
+    if (hovered) {
+        mouse_time_s_ = mouse.x;
+    }
 
-    if (hovered && drag_ == Drag::none) {
+    if (hovered && drag_ == Drag::none && !boxing_) {
         if (near_start || near_end) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
         }
@@ -228,84 +340,158 @@ void BassRollView::handle_mouse(const LoadedTrack &track) {
     }
 
     if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && under_mouse < 0) {
+        boxing_ = false; // The first click of the double-click started a box.
         const double onset_s = snapped(mouse.x);
         const int midi = std::clamp(static_cast<int>(std::floor(mouse.y)), 0, 127);
-        selected_ =
-            labels.add_note({onset_s, onset_s + default_length_s_, midi, 0.0, false, false, 1.0});
-        drag_ = Drag::none;
+        set_selection({labels.add_note(
+            {onset_s, onset_s + default_length_s_, midi, 0.0, false, false, 1.0})});
         return;
     }
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        if (under_mouse >= 0) {
-            selected_ = under_mouse;
+        if (under_mouse >= 0 && io.KeyShift) {
+            std::vector<int> toggled = selection_;
+            if (is_selected(under_mouse)) {
+                std::erase(toggled, under_mouse);
+            } else {
+                toggled.push_back(under_mouse);
+            }
+            set_selection(std::move(toggled));
+        } else if (under_mouse >= 0) {
+            // Dragging a selected note moves the whole selection; an edge resizes one note.
+            if (!is_selected(under_mouse) || near_start || near_end) {
+                set_selection({under_mouse});
+            }
+            grabbed_ = under_mouse;
             drag_ = near_start ? Drag::resize_start : near_end ? Drag::resize_end : Drag::move;
+            drag_moved_ = false;
             grab_offset_s_ = mouse.x - labels.labels().bass_notes[under_mouse].onset_s;
             labels.begin_gesture();
-        } else {
-            // A plain click only deselects: seeking would scroll a following view between the
-            // two clicks of a double-click and put the new note somewhere else.
-            selected_ = -1;
-        }
-        if (under_mouse < 0 && ImGui::GetIO().KeyCtrl) {
+        } else if (io.KeyCtrl) {
             session_.transport().seek(seconds_to_samples(std::clamp(mouse.x, 0.0, track.duration_s),
                                                          track.sample_rate_hz));
+        } else {
+            // A plain click deselects and a drag selects a box. Seeking here would scroll a
+            // following view between the two clicks of a double-click and put the new note
+            // somewhere else.
+            boxing_ = true;
+            box_start_s_ = mouse.x;
+            box_start_row_ = mouse.y;
+            box_base_ = io.KeyShift ? selection_ : std::vector<int>{};
+            set_selection(box_base_);
         }
     }
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && under_mouse >= 0) {
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && under_mouse >= 0 &&
+        drag_ == Drag::none && !boxing_) {
         labels.delete_note(under_mouse);
-        selected_ = -1;
+        selection_.clear();
     }
 
-    if (drag_ != Drag::none && selected_ >= 0) {
+    if (boxing_) {
+        handle_box_select(mouse.x, mouse.y);
+    }
+    if (drag_ != Drag::none) {
+        const BassNoteLabel note = labels.labels().bass_notes[grabbed_];
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
-            const BassNoteLabel note = labels.labels().bass_notes[selected_];
+            drag_moved_ = true;
             switch (drag_) {
             case Drag::move:
-                selected_ =
-                    labels.move_note(selected_, snapped(mouse.x - grab_offset_s_),
-                                     std::clamp(static_cast<int>(std::floor(mouse.y)), 0, 127));
+                move_selection(snapped(mouse.x - grab_offset_s_) - note.onset_s,
+                               std::clamp(static_cast<int>(std::floor(mouse.y)), 0, 127) -
+                                   note.midi);
                 break;
             case Drag::resize_start:
-                selected_ = labels.resize_note(
-                    selected_,
+                grabbed_ = labels.resize_note(
+                    grabbed_,
                     std::min(snapped(mouse.x), note.offset_s - LabelEditor::kMinNoteLengthS),
                     note.offset_s);
+                set_selection({grabbed_});
                 break;
             case Drag::resize_end:
-                selected_ = labels.resize_note(
-                    selected_, note.onset_s,
+                grabbed_ = labels.resize_note(
+                    grabbed_, note.onset_s,
                     std::max(snapped(mouse.x), note.onset_s + LabelEditor::kMinNoteLengthS));
+                set_selection({grabbed_});
                 break;
             case Drag::none:
                 break;
             }
         }
         if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            const BassNoteLabel &note = labels.labels().bass_notes[selected_];
-            default_length_s_ = note.offset_s - note.onset_s;
+            if (!drag_moved_) {
+                set_selection({grabbed_}); // A click on a selected note selects only it.
+            }
+            const BassNoteLabel &dropped = labels.labels().bass_notes[grabbed_];
+            default_length_s_ = dropped.offset_s - dropped.onset_s;
             labels.end_gesture();
             drag_ = Drag::none;
         }
     }
 }
 
+void BassRollView::handle_box_select(double mouse_s, double mouse_row) {
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        boxing_ = false;
+        return;
+    }
+    if (!ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
+        return;
+    }
+    const double from_s = std::min(box_start_s_, mouse_s);
+    const double to_s = std::max(box_start_s_, mouse_s);
+    const double low_row = std::min(box_start_row_, mouse_row);
+    const double high_row = std::max(box_start_row_, mouse_row);
+    std::vector<int> selected = box_base_;
+    const std::vector<BassNoteLabel> &notes = session_.labels().labels().bass_notes;
+    for (int i = 0; i < static_cast<int>(notes.size()); ++i) {
+        const BassNoteLabel &note = notes[i];
+        if (note.offset_s > from_s && note.onset_s < to_s && note.midi + 1 > low_row &&
+            note.midi < high_row) {
+            selected.push_back(i);
+        }
+    }
+    set_selection(std::move(selected));
+    ImPlot::PushPlotClipRect();
+    ImDrawList *draw = ImPlot::GetPlotDrawList();
+    const ImVec2 top_left = ImPlot::PlotToPixels(from_s, high_row);
+    const ImVec2 bottom_right = ImPlot::PlotToPixels(to_s, low_row);
+    draw->AddRectFilled(top_left, bottom_right, kBoxFill);
+    draw->AddRect(top_left, bottom_right, kBoxBorder);
+    ImPlot::PopPlotClipRect();
+}
+
 void BassRollView::handle_keys() {
     LabelEditor &labels = session_.labels();
-    if (selected_ < 0 || selected_ >= static_cast<int>(labels.labels().bass_notes.size()) ||
-        ImGui::GetIO().WantTextInput) {
+    if (ImGui::GetIO().WantTextInput || drag_ != Drag::none || boxing_) {
+        return;
+    }
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A)) {
+        select_in_view();
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        selection_.clear();
+    }
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C) && !selection_.empty()) {
+        clipboard_ = selection_pattern();
+    }
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
+        paste(snapped(mouse_time_s_.value_or(session_.playhead_s())));
+    }
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_D)) {
+        duplicate(repeat_count_, std::numeric_limits<double>::infinity());
+    }
+    if (selection_.empty()) {
         return;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
-        labels.delete_note(selected_);
-        selected_ = -1;
+        labels.delete_notes(selection_);
+        selection_.clear();
         return;
     }
     const int step = ImGui::GetIO().KeyShift ? 12 : 1;
-    const BassNoteLabel &note = labels.labels().bass_notes[selected_];
     if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
-        selected_ = labels.move_note(selected_, note.onset_s, std::min(127, note.midi + step));
+        move_selection(0.0, step);
     } else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
-        selected_ = labels.move_note(selected_, note.onset_s, std::max(0, note.midi - step));
+        move_selection(0.0, -step);
     }
 }
 
@@ -337,12 +523,17 @@ void BassRollView::draw_inspector() {
         labels.redo();
     }
     ImGui::EndDisabled();
+    sync_selection();
     if (!session_.status().empty()) {
         ImGui::TextWrapped("%s", session_.status().c_str());
     }
 
-    ImGui::SeparatorText("Selected note");
-    draw_inspector_note();
+    ImGui::SeparatorText("Selection");
+    draw_inspector_selection();
+    if (selection_.size() == 1) {
+        ImGui::SeparatorText("Selected note");
+        draw_inspector_note();
+    }
     ImGui::SeparatorText("Labelled regions");
     draw_inspector_regions(track);
     ImGui::End();
@@ -350,13 +541,8 @@ void BassRollView::draw_inspector() {
 
 void BassRollView::draw_inspector_note() {
     LabelEditor &labels = session_.labels();
-    const std::vector<BassNoteLabel> &notes = labels.labels().bass_notes;
-    if (selected_ < 0 || selected_ >= static_cast<int>(notes.size())) {
-        selected_ = -1;
-        ImGui::TextDisabled("Click a note in the bass roll.");
-        return;
-    }
-    BassNoteLabel note = notes[selected_];
+    const int selected = selection_.front();
+    BassNoteLabel note = labels.labels().bass_notes[selected];
     bool changed = false;
     const float em = ImGui::GetFontSize();
     ImGui::SetNextItemWidth(9.0f * em);
@@ -401,11 +587,86 @@ void BassRollView::draw_inspector_note() {
         changed = true;
     }
     if (changed) {
-        selected_ = labels.set_note(selected_, note);
+        set_selection({labels.set_note(selected, note)});
     }
-    if (ImGui::Button("Delete note")) {
-        labels.delete_note(selected_);
-        selected_ = -1;
+}
+
+void BassRollView::draw_inspector_selection() {
+    LabelEditor &labels = session_.labels();
+    if (selection_.empty()) {
+        ImGui::TextDisabled("Click a note, or drag a box around notes. Ctrl+A selects the notes "
+                            "in view.");
+    } else {
+        ImGui::Text("%zu note%s selected", selection_.size(), selection_.size() == 1 ? "" : "s");
+    }
+    ImGui::BeginDisabled(selection_.empty());
+    if (ImGui::Button("Copy (Ctrl+C)")) {
+        clipboard_ = selection_pattern();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Delete (Del)")) {
+        labels.delete_notes(selection_);
+        selection_.clear();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(clipboard_.empty());
+    if (ImGui::Button("Paste at playhead")) {
+        paste(snapped(session_.playhead_s()));
+    }
+    ImGui::EndDisabled();
+
+    // Duplicate: the selection repeated right after itself, replacing the notes there.
+    const NotePattern pattern = selection_pattern();
+    const float em = ImGui::GetFontSize();
+    const std::string auto_label = repeat_period_choice_ == 0 && !pattern.empty()
+                                       ? "Auto (" + describe_slots(pattern.period_slots) + ")"
+                                       : std::string(kRepeatPeriods[0].label);
+    ImGui::SetNextItemWidth(9.0f * em);
+    if (ImGui::BeginCombo("Repeat every", repeat_period_choice_ == 0
+                                              ? auto_label.c_str()
+                                              : kRepeatPeriods[repeat_period_choice_].label)) {
+        for (int i = 0; i < static_cast<int>(kRepeatPeriods.size()); ++i) {
+            if (ImGui::Selectable(i == 0 ? auto_label.c_str() : kRepeatPeriods[i].label,
+                                  i == repeat_period_choice_)) {
+                repeat_period_choice_ = i;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Auto: the slots the selection's onsets cover, rounded up to whole "
+                          "beats.");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(6.0f * em);
+    if (ImGui::InputInt("times", &repeat_count_)) {
+        repeat_count_ = std::clamp(repeat_count_, 1, kMaxRepeatCount);
+    }
+    ImGui::BeginDisabled(pattern.empty());
+    if (ImGui::Button("Duplicate (Ctrl+D)")) {
+        duplicate(repeat_count_, std::numeric_limits<double>::infinity());
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    const LabelRegion *region = nullptr;
+    for (const LabelRegion &candidate : labels.labels().regions) {
+        if (!pattern.empty() && candidate.start_s <= pattern.anchor_s &&
+            pattern.anchor_s < candidate.end_s) {
+            region = &candidate;
+        }
+    }
+    const int fill_copies =
+        region != nullptr ? copies_until(pattern, session_.grid(), region->end_s) : 0;
+    ImGui::BeginDisabled(fill_copies == 0);
+    if (ImGui::Button("Fill to region end")) {
+        duplicate(fill_copies, region->end_s);
+    }
+    ImGui::EndDisabled();
+    if (region == nullptr) {
+        ImGui::SetItemTooltip("Repeats a selection inside a labelled region up to the region's "
+                              "end.");
+    } else {
+        ImGui::SetItemTooltip("Repeats the selection %d times, up to the region's end.",
+                              fill_copies);
     }
 }
 

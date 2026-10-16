@@ -2,19 +2,27 @@
 // time on the shared view axis and one row per semitone, plus a note inspector with every field,
 // labelled regions and the labels file controls.
 //
-// Mouse: double-click empty space to create a note; Ctrl+click to seek; drag a note to
-// move it, or its edges to resize it; right-click a note to delete it. Times snap to 16ths unless
-// snapping is off or Alt is held. Keys: Delete removes the selection, Up and Down move it a
-// semitone (Shift: an octave). Undo, redo and save shortcuts are global (see main.cpp).
+// Mouse: double-click empty space to create a note; Ctrl+click to seek; drag on empty space to
+// select the notes in a box (Shift adds to the selection); click a note to select it, Shift+click
+// to add or remove it; drag a selected note to move the whole selection, or a note's edges to
+// resize it; right-click a note to delete it. Times snap to 16ths unless snapping is off or Alt is
+// held. Keys: Delete removes the selection, Up and Down move it a semitone (Shift: an octave),
+// Ctrl+A selects the notes in view, Escape clears the selection, Ctrl+C copies, Ctrl+V pastes at
+// the mouse (or the playhead when the mouse is elsewhere) and Ctrl+D repeats the selection right
+// after itself (see io/note_pattern.h for the rules). Undo, redo and save shortcuts are global
+// (see main.cpp).
 // Behind the notes, the pitch background shows how strongly each semitone sounds over time, so the
 // bassline appears as bright segments on its rows.
 #pragma once
 
 #include "gui/session.h"
 #include "gui/spectrogram_textures.h"
+#include "io/note_pattern.h"
 
 #include <array>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace psyight {
 
@@ -29,17 +37,43 @@ class BassRollView {
     enum class Drag { none, move, resize_start, resize_end };
 
     void handle_mouse(const LoadedTrack &track);
+    void handle_box_select(double mouse_s, double mouse_row);
     void handle_keys();
     double snapped(double t_s) const;
     int hovered_note(bool &near_start, bool &near_end) const;
     void draw_notes() const;
     void draw_regions() const;
     void draw_inspector_note();
+    void draw_inspector_selection();
     void draw_inspector_regions(const LoadedTrack &track);
 
+    // Selection: indices into the labels' notes, ascending. Undo, redo and loading a track
+    // invalidate indices, so they clear it.
+    void sync_selection();
+    bool is_selected(int index) const;
+    void set_selection(std::vector<int> indices);
+    void select_in_view();
+    void move_selection(double delta_s, int delta_midi);
+    // Copy, paste and duplicate: see io/note_pattern.h.
+    NotePattern selection_pattern() const;
+    void paste(double anchor_s);
+    void duplicate(int count, double limit_s);
+
     Session &session_;
-    int selected_ = -1;
+    std::vector<int> selection_;
+    const LoadedTrack *selection_track_ = nullptr;
+    size_t selection_undo_redo_count_ = 0;
     Drag drag_ = Drag::none;
+    int grabbed_ = -1;        // The note a drag started on.
+    bool drag_moved_ = false; // A click on a selected note that never moved selects only it.
+    bool boxing_ = false;
+    double box_start_s_ = 0.0;
+    double box_start_row_ = 0.0;         // Plot y: MIDI row, fractional.
+    std::vector<int> box_base_;          // The selection a Shift box adds to.
+    std::optional<double> mouse_time_s_; // Over the roll this frame: where Ctrl+V pastes.
+    NotePattern clipboard_;
+    int repeat_period_choice_ = 0; // Index into kRepeatPeriods (bass_roll_view.cpp).
+    int repeat_count_ = 1;
     double grab_offset_s_ = 0.0;              // Mouse time minus onset when a move started.
     double default_length_s_ = 0.5 * 0.09375; // The last edited length; half a slot at first.
     bool snap_ = true;
