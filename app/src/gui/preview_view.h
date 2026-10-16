@@ -1,44 +1,46 @@
-// Preview (SPEC section 9.4, M3): the rig's pixels drawn at their positions, rendered by the
-// engine at the playhead (plus the latency offset) through the limiters, with the scene's layers,
-// palette, limiter settings and the estimated supply current. File mode: the analysis is known
-// ahead, so the render time may lead the playhead (SPEC 4.3).
-// v0 renders on the GUI thread (444 pixels, cheap); the fixed-rate engine thread comes with the
-// network output.
+// Preview (SPEC section 9.4, M3): the rig's pixels drawn at their positions, as the virtual node
+// received them from the show thread (render at the playhead plus the latency offset, limiters,
+// patch, packets), with the scene's layers, palette, limiter settings, output settings and the
+// estimated supply current. File mode: the analysis is known ahead, so the render time may lead
+// the playhead (SPEC 4.3).
+// The panel owns the show thread: it publishes a new config when a setting, the track or the grid
+// changes, and draws the latest frame; neither side waits for the other.
 #pragma once
 
-#include "engine/limiters.h"
-#include "engine/rig.h"
-#include "engine/scene.h"
 #include "gui/session.h"
+#include "output/show.h"
 
-#include <vector>
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <string>
 
 namespace psyight {
 
 class PreviewView {
   public:
-    explicit PreviewView(Session &session) : session_(session) {}
+    explicit PreviewView(Session &session);
 
     void draw();
 
-    // The last rendered frame, after the limiters (for the output).
-    const Frame &frame() const { return frame_; }
-    const Rig &rig() const { return rig_; }
-
   private:
-    void draw_controls();
-    void draw_rig();
+    void sync_config(); // Publishes config_ when it or the track changed.
+    void draw_controls(const ShowFrame &frame);
+    void draw_output(const ShowFrame &frame);
+    void draw_rig(const ShowFrame &frame);
 
     Session &session_;
-    Rig rig_ = default_rig();
-    Scene scene_ = default_scene();
-    std::vector<Palette> palettes_ = default_palettes();
-    Limiters limiters_;
-    Frame frame_;
-    LimiterReport report_;
-    double last_render_s_ = 0.0;
+    ShowConfig config_;
+    bool dirty_ = true;
+    std::uint64_t version_ = 0;
     float latency_offset_ms_ = 0.0f;
-    int flashes_limited_ = 0;
+    int first_universe_ = 1;
+    std::string address_text_ = "127.0.0.1";
+    // Measured frame rate, from the frame index over about a second.
+    std::chrono::steady_clock::time_point rate_since_ = std::chrono::steady_clock::now();
+    std::int64_t rate_index_ = -1;
+    double measured_fps_ = 0.0;
+    ShowThread show_; // Last, so it is joined first on destruction.
 };
 
 } // namespace psyight

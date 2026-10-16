@@ -50,6 +50,7 @@ struct ShowFrame {
     double t_s = 0.0;
     Frame frame; // Linear, after the limiters.
     LimiterReport report;
+    std::int64_t flashes_limited = 0; // Frames the flash limiter clipped so far.
     std::string section;
     int beat_in_bar = 0;
     std::vector<std::uint8_t> node_rgb; // What the virtual node latched (gamma-encoded bytes).
@@ -76,6 +77,7 @@ class ShowRenderer {
     double last_t_s_ = 0.0;
     std::int64_t index_ = 0;
     std::int64_t send_errors_ = 0;
+    std::int64_t flashes_limited_ = 0;
     std::string network_error_;
 };
 

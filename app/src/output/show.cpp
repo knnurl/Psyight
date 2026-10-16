@@ -71,6 +71,8 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         out.frame.assign(config.rig.pixels.size(), Rgb{});
     }
     out.report = limiters_.process(out.frame, t_s);
+    flashes_limited_ += out.report.flash_limited;
+    out.flashes_limited = flashes_limited_;
     const std::vector<std::uint8_t> bytes = to_bytes(out.frame, config.limiter.gamma);
     Tee tee(node_, socket_.get());
     out.packets_sent = sender_.send_frame(config.output, patch_frame(config.patch, bytes), tee);
