@@ -114,6 +114,16 @@ M3 progress (2026-10-16):
   - Recorder and replay (26ee901): Record in the top bar writes recordings/<date_time>/ (meta, frames, params, events; gitignored); psyight_replay re-renders a session and diffs it: 767 of 767 frames byte-identical on a session with seeks, blackout, hold and a held scene. Not yet: audio.wav, features.bin, live-mode recording.
   - Not yet: per-group brightness caps.
 
+## M4 plan (owner, 2026-10-17: training data in Desktop\launch and Music\Musify\Download\Hall*Purity*; stream the stems; exclude all four reference tracks; Python first, then the app)
+Exit (SPEC 15): the student matches or beats DSP on the labelled regions, with measured inference latency. Today only OculusDrift's minute is labelled (DSP: onset F 0.994 on the mix, file mode, non-causal); the student is causal, so matching it is a high bar.
+Data: about 254 files (105 in Desktop\launch, 149 in the Hall of Purity folders), with duplicates and with copies of all four reference tracks under other names. None of it, nor anything derived from it, enters the repo (data/ is gitignored).
+Steps:
+1. C++ student features and teacher export (psyight_teacher): causal multi-resolution log spectrogram at the 5.33 ms hop (windows end at the frame, so the same code serves live inference), the teacher targets per frame from the stems analysis (kick onset, hat onset, bass gate, bass onset, bass pitch, residual activity), and a coarse fingerprint for duplicate and reference detection. Tests on the synthetic set.
+2. Python dataset builder (tools/python): fingerprint every file, drop duplicates and every copy of the four reference tracks, then per track: Demucs into a temporary folder, psyight_teacher, delete the stems. Output: data/m4/<id>.bin (a few MB each). Estimated 2 to 3 hours on the laptop GPU for ~200 tracks.
+3. Python training: small causal TCN (receptive field about 0.7 s, 0 to 2 frames lookahead), per-track train and validation split, ONNX export, inference latency measured with onnxruntime (CPU and DirectML).
+4. Scoring: the student's notes decoded and scored by the same code as DSP (psyight_eval reads external detections), on the labelled minute.
+5. Only if it holds up: ONNX Runtime in the app (vcpkg has onnxruntime-gpu 1.19.2, CUDA only, no DirectML: a decision for the owner then), the GUI A/B and live mode.
+
 ## Known issues
 - The show thread reads the transport position, which advances once per audio device period: 480 frames (10 ms) on this laptop's WASAPI device (app log on load). At 60 fps render time then moves 10 or 20 ms a frame instead of 16.7, a jitter of up to 5 ms; about 3 cm on the 6 m/s shockwave, invisible on the slower effects. Fix if it shows on real strips: publish a timestamp with the position (seqlock) and extrapolate while playing.
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
