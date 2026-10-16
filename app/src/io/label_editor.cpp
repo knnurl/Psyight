@@ -80,6 +80,92 @@ void LabelEditor::delete_note(int index) {
     labels_.bass_notes.erase(labels_.bass_notes.begin() + index);
 }
 
+std::vector<int> LabelEditor::replace(const std::vector<int> &indices,
+                                      const std::vector<BassNoteLabel> &notes) {
+    // Tag each note with its position in notes (-1 for kept notes), sort, then read the tags back.
+    // Kept notes come first, so like place(), an added note goes after equal onsets.
+    std::vector<bool> removed(labels_.bass_notes.size(), false);
+    for (const int i : indices) {
+        removed[i] = true;
+    }
+    std::vector<std::pair<BassNoteLabel, int>> tagged;
+    for (size_t i = 0; i < labels_.bass_notes.size(); ++i) {
+        if (!removed[i]) {
+            tagged.emplace_back(labels_.bass_notes[i], -1);
+        }
+    }
+    for (size_t i = 0; i < notes.size(); ++i) {
+        tagged.emplace_back(valid(notes[i]), static_cast<int>(i));
+    }
+    std::stable_sort(tagged.begin(), tagged.end(), [](const auto &a, const auto &b) {
+        return a.first.onset_s < b.first.onset_s;
+    });
+    std::vector<int> new_indices(notes.size());
+    labels_.bass_notes.clear();
+    for (const auto &[note, tag] : tagged) {
+        if (tag >= 0) {
+            new_indices[tag] = static_cast<int>(labels_.bass_notes.size());
+        }
+        labels_.bass_notes.push_back(note);
+    }
+    return new_indices;
+}
+
+std::vector<int> LabelEditor::insert_notes(const std::vector<BassNoteLabel> &notes,
+                                           double clear_from_s, double clear_to_s) {
+    std::vector<int> cleared;
+    for (int i = 0; i < static_cast<int>(labels_.bass_notes.size()); ++i) {
+        const double onset_s = labels_.bass_notes[i].onset_s;
+        if (onset_s >= clear_from_s && onset_s < clear_to_s) {
+            cleared.push_back(i);
+        }
+    }
+    if (notes.empty() && cleared.empty()) {
+        return {};
+    }
+    before_edit();
+    return replace(cleared, notes);
+}
+
+std::vector<int> LabelEditor::move_notes(const std::vector<int> &indices, double delta_s,
+                                         int delta_midi) {
+    if (indices.empty()) {
+        return {};
+    }
+    double min_onset_s = labels_.bass_notes[indices.front()].onset_s;
+    int min_midi = 127;
+    int max_midi = 0;
+    for (const int i : indices) {
+        const BassNoteLabel &note = labels_.bass_notes[i];
+        min_onset_s = std::min(min_onset_s, note.onset_s);
+        min_midi = std::min(min_midi, note.midi);
+        max_midi = std::max(max_midi, note.midi);
+    }
+    delta_s = std::max(delta_s, -min_onset_s);
+    delta_midi = std::clamp(delta_midi, -min_midi, 127 - max_midi);
+    if (delta_s == 0.0 && delta_midi == 0) {
+        return indices;
+    }
+    std::vector<BassNoteLabel> moved;
+    for (const int i : indices) {
+        BassNoteLabel note = labels_.bass_notes[i];
+        note.onset_s += delta_s;
+        note.offset_s += delta_s;
+        note.midi += delta_midi;
+        moved.push_back(note);
+    }
+    before_edit();
+    return replace(indices, moved);
+}
+
+void LabelEditor::delete_notes(const std::vector<int> &indices) {
+    if (indices.empty()) {
+        return;
+    }
+    before_edit();
+    replace(indices, {});
+}
+
 void LabelEditor::set_grid(const LabelGrid &grid) {
     if (grid == labels_.grid) {
         return;
@@ -111,6 +197,7 @@ bool LabelEditor::undo() {
     labels_ = std::move(undo_.back());
     undo_.pop_back();
     dirty_ = true;
+    ++undo_redo_count_;
     return true;
 }
 
@@ -122,6 +209,7 @@ bool LabelEditor::redo() {
     labels_ = std::move(redo_.back());
     redo_.pop_back();
     dirty_ = true;
+    ++undo_redo_count_;
     return true;
 }
 

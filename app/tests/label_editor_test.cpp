@@ -134,3 +134,85 @@ TEST_CASE("label editor: a loaded file with unsorted notes is sorted on load") {
     CHECK(onsets(editor) == std::vector<double>{1.0, 2.0, 3.0});
     CHECK_FALSE(editor.dirty());
 }
+
+TEST_CASE("label editor: insert_notes returns indices in input order and is one undo step") {
+    LabelEditor editor;
+    editor.add_note(note(2.0, 2.05));
+    const std::vector<int> added =
+        editor.insert_notes({note(3.0, 3.05, 31), note(1.0, 1.05, 30), note(2.0, 2.05, 32)});
+    CHECK(onsets(editor) == std::vector<double>{1.0, 2.0, 2.0, 3.0});
+    REQUIRE(added.size() == 3);
+    CHECK(editor.labels().bass_notes[added[0]].midi == 31);
+    CHECK(editor.labels().bass_notes[added[1]].midi == 30);
+    CHECK(added[2] == 2); // After the existing note with the same onset, like add_note.
+    CHECK(editor.labels().bass_notes[added[2]].midi == 32);
+    CHECK(editor.undo());
+    CHECK(onsets(editor) == std::vector<double>{2.0});
+}
+
+TEST_CASE("label editor: insert_notes replaces the notes with onsets in the cleared range") {
+    LabelEditor editor;
+    editor.insert_notes({note(1.0, 1.05), note(1.5, 1.55), note(2.0, 2.05), note(2.5, 2.55)});
+    const std::vector<int> added = editor.insert_notes({note(1.6, 1.65, 40)}, 1.5, 2.5);
+    CHECK(onsets(editor) == std::vector<double>{1.0, 1.6, 2.5}); // 1.5 and 2.0 gone; 2.5 kept.
+    CHECK(added == std::vector<int>{1});
+    CHECK(editor.undo());
+    CHECK(onsets(editor).size() == 4);
+    // Clearing alone is an edit; nothing to clear and nothing to add is not.
+    editor.mark_saved();
+    editor.insert_notes({}, 10.0, 11.0);
+    CHECK_FALSE(editor.dirty());
+    editor.insert_notes({}, 0.0, 1.2);
+    CHECK(onsets(editor) == std::vector<double>{1.5, 2.0, 2.5});
+    CHECK(editor.dirty());
+}
+
+TEST_CASE("label editor: move_notes keeps relative timing and follows notes past others") {
+    LabelEditor editor;
+    editor.insert_notes({note(1.0, 1.05, 28), note(1.1, 1.15, 28), note(1.3, 1.35, 30)});
+    // Move the first two after the third: their indices change.
+    const std::vector<int> moved = editor.move_notes({1, 0}, 0.5, 2);
+    REQUIRE(onsets(editor).size() == 3);
+    CHECK(onsets(editor)[0] == 1.3);
+    REQUIRE(moved.size() == 2);
+    CHECK(editor.labels().bass_notes[moved[0]].onset_s == doctest::Approx(1.6)); // Was index 1.
+    CHECK(editor.labels().bass_notes[moved[1]].onset_s == doctest::Approx(1.5)); // Was index 0.
+    CHECK(editor.labels().bass_notes[moved[0]].midi == 30);
+    CHECK(editor.labels().bass_notes[moved[0]].offset_s == doctest::Approx(1.65));
+    CHECK(editor.undo());
+    CHECK(onsets(editor) == std::vector<double>{1.0, 1.1, 1.3});
+}
+
+TEST_CASE("label editor: move_notes limits the shift so the group stays valid together") {
+    LabelEditor editor;
+    editor.insert_notes({note(0.2, 0.25, 120), note(0.5, 0.55, 100)});
+    const std::vector<int> moved = editor.move_notes({0, 1}, -1.0, 12);
+    CHECK(editor.labels().bass_notes[moved[0]].onset_s == 0.0);
+    CHECK(editor.labels().bass_notes[moved[1]].onset_s == doctest::Approx(0.3)); // Spacing kept.
+    CHECK(editor.labels().bass_notes[moved[0]].midi == 127);
+    CHECK(editor.labels().bass_notes[moved[1]].midi == 107); // Interval kept.
+    editor.mark_saved();
+    CHECK(editor.move_notes(moved, -1.0, 1) == moved); // Already at both limits: no edit.
+    CHECK_FALSE(editor.dirty());
+}
+
+TEST_CASE("label editor: delete_notes removes any set of notes in one undo step") {
+    LabelEditor editor;
+    editor.insert_notes({note(1.0, 1.05), note(2.0, 2.05), note(3.0, 3.05), note(4.0, 4.05)});
+    editor.delete_notes({3, 0, 2});
+    CHECK(onsets(editor) == std::vector<double>{2.0});
+    CHECK(editor.undo());
+    CHECK(onsets(editor).size() == 4);
+}
+
+TEST_CASE("label editor: undo_redo_count counts only calls that changed the labels") {
+    LabelEditor editor;
+    CHECK_FALSE(editor.undo());
+    CHECK(editor.undo_redo_count() == 0);
+    editor.add_note(note(1.0, 1.05));
+    CHECK(editor.undo_redo_count() == 0);
+    CHECK(editor.undo());
+    CHECK(editor.redo());
+    CHECK_FALSE(editor.redo());
+    CHECK(editor.undo_redo_count() == 2);
+}

@@ -37,6 +37,16 @@ class LabelEditor {
     int resize_note(int index, double onset_s, double offset_s);
     void delete_note(int index);
 
+    // Batch edits for multi-note selections, each one undo step. They return the new indices of
+    // the edited notes in input order.
+    // First deletes every note with an onset in [clear_from_s, clear_to_s), then adds notes.
+    std::vector<int> insert_notes(const std::vector<BassNoteLabel> &notes,
+                                  double clear_from_s = 0.0, double clear_to_s = 0.0);
+    // Shifts the notes together, keeping their relative timing and intervals: the shift is limited
+    // so every onset stays >= 0 and every pitch stays in MIDI 0 to 127.
+    std::vector<int> move_notes(const std::vector<int> &indices, double delta_s, int delta_midi);
+    void delete_notes(const std::vector<int> &indices);
+
     void set_grid(const LabelGrid &grid);
     void add_region(const LabelRegion &region);
     void set_region(int index, const LabelRegion &region);
@@ -46,15 +56,21 @@ class LabelEditor {
     bool can_redo() const { return !redo_.empty(); }
     bool undo();
     bool redo();
+    // Counts successful undo and redo calls, so views can drop note indices they hold.
+    size_t undo_redo_count() const { return undo_redo_count_; }
 
   private:
     void before_edit();
     int place(BassNoteLabel note); // Validates, inserts in order, returns the index.
+    // Removes the notes at indices, adds notes, keeps the order. Returns the added notes' indices.
+    std::vector<int> replace(const std::vector<int> &indices,
+                             const std::vector<BassNoteLabel> &notes);
     static BassNoteLabel valid(BassNoteLabel note);
 
     Labels labels_;
     std::vector<Labels> undo_;
     std::vector<Labels> redo_;
+    size_t undo_redo_count_ = 0;
     bool dirty_ = false;
     bool in_gesture_ = false;
     bool gesture_saved_ = false;
