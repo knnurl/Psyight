@@ -1,10 +1,11 @@
 // The loaded track and everything the panels share: transport, file-mode analysis, ground-truth
 // labels (which also hold the manual grid), the loop region and the visible time range. Loading
-// (decode, overview, front-end analysis) runs on a worker thread; update() swaps the result in on
-// the GUI thread.
+// (decode, overview, the whole track analysis from the mix or its stems) runs on a worker thread;
+// update() swaps the result in on the GUI thread.
 #pragma once
 
 #include "analysis/front_end.h"
+#include "analysis/track_analysis.h"
 #include "audio/transport.h"
 #include "core/timebase.h"
 #include "io/label_editor.h"
@@ -26,7 +27,10 @@ struct LoadedTrack {
     std::vector<double> overview_time_s; // Waveform overview: min and max per bucket.
     std::vector<double> overview_min;
     std::vector<double> overview_max;
-    std::shared_ptr<const FrontEndResult> analysis;
+    std::shared_ptr<const FrontEndResult> analysis; // The mix's features (in track_analysis).
+    // Beats, kicks, bass notes, sections, hats, residual and aggregates; null when the analysis
+    // found no tempo (then only `analysis` exists).
+    std::shared_ptr<const TrackAnalysis> track_analysis;
 };
 
 struct LoopRegion {

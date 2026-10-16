@@ -1,6 +1,7 @@
 #include "gui/session.h"
 
 #include "core/paths.h"
+#include "io/stems.h"
 
 #include <spdlog/spdlog.h>
 
@@ -56,16 +57,47 @@ Session::LoadResult Session::load(std::filesystem::path path) {
         track->overview_max.push_back(std::max(0.0f, *high));
     }
 
+    // The whole file-mode analysis: from the Demucs stems when they exist, on the labelled grid
+    // when the track has a labels file (else the beat tracker's). Without a tempo (and no labels)
+    // only the front end runs, so the views still work.
     const auto start = std::chrono::steady_clock::now();
-    Result<FrontEndResult> analysis = analyse_front_end(mono, buffer.sample_rate_hz, {});
+    TrackAnalysisOptions options;
+    options.source =
+        analysis_stems_exist(stem_paths_for(path)) ? AnalysisSource::stems : AnalysisSource::mix;
+    if (std::filesystem::exists(labels_path_for(path))) {
+        if (const Result<Labels> labels = load_labels(labels_path_for(path)); labels) {
+            options.grid = Grid{
+                labels.value().grid.bpm,
+                seconds_to_samples(labels.value().grid.first_downbeat_s, buffer.sample_rate_hz),
+                buffer.sample_rate_hz};
+        }
+    }
+    Result<TrackAnalysis> analysis = analyse_track(mono, buffer.sample_rate_hz, path, options);
+    if (!analysis && options.source == AnalysisSource::stems) {
+        spdlog::warn("Stems analysis of {} failed ({}); analysing the mix", track->name,
+                     analysis.error().message);
+        options.source = AnalysisSource::mix;
+        analysis = analyse_track(mono, buffer.sample_rate_hz, path, options);
+    }
+    const double elapsed_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (analysis) {
-        track->analysis = std::make_shared<const FrontEndResult>(std::move(analysis.value()));
-        spdlog::info(
-            "Analysed {} in {:.0f} ms", track->name,
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
-                .count());
+        const auto shared = std::make_shared<const TrackAnalysis>(std::move(analysis.value()));
+        track->track_analysis = shared;
+        track->analysis = std::shared_ptr<const FrontEndResult>(shared, &shared->mix_features);
+        spdlog::info("Analysed {} from the {} in {:.0f} ms: {:.3f} BPM, {} bass notes, {} kicks, "
+                     "{} sections",
+                     track->name, options.source == AnalysisSource::stems ? "stems" : "mix",
+                     elapsed_ms, shared->beats.bpm, shared->bass.notes.size(),
+                     shared->bass.kick_times_s.size(), shared->sections.size());
     } else {
-        spdlog::error("Analysis of {} failed: {}", track->name, analysis.error().message);
+        spdlog::warn("Analysis of {} incomplete: {}", track->name, analysis.error().message);
+        Result<FrontEndResult> features = analyse_front_end(mono, buffer.sample_rate_hz, {});
+        if (features) {
+            track->analysis = std::make_shared<const FrontEndResult>(std::move(features.value()));
+        } else {
+            spdlog::error("Analysis of {} failed: {}", track->name, features.error().message);
+        }
     }
     result.track = std::move(track);
     return result;

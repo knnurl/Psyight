@@ -21,6 +21,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace psyight {
@@ -53,6 +54,11 @@ struct TrackAnalysis {
 // Fails when the audio (or, for stems, the drums or bass stem) cannot be decoded, or when the
 // beat tracker finds no tempo and no grid was given.
 Result<TrackAnalysis> analyse_track(const std::filesystem::path &audio_path,
+                                    const TrackAnalysisOptions &options);
+
+// The same for a mix already decoded (mono, at sample_rate_hz); audio_path locates its stems.
+Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_hz,
+                                    const std::filesystem::path &audio_path,
                                     const TrackAnalysisOptions &options);
 
 } // namespace psyight

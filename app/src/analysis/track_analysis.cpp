@@ -40,14 +40,22 @@ std::vector<float> shifted(const std::vector<float> &x, std::int64_t lag) {
 
 Result<TrackAnalysis> analyse_track(const std::filesystem::path &audio_path,
                                     const TrackAnalysisOptions &options) {
-    TrackAnalysis analysis;
-    Result<std::vector<float>> mix = decode_mono(audio_path, analysis.sample_rate_hz);
+    int sample_rate_hz = 0;
+    Result<std::vector<float>> mix = decode_mono(audio_path, sample_rate_hz);
     if (!mix) {
         return mix.error();
     }
+    return analyse_track(mix.value(), sample_rate_hz, audio_path, options);
+}
+
+Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_hz,
+                                    const std::filesystem::path &audio_path,
+                                    const TrackAnalysisOptions &options) {
+    TrackAnalysis analysis;
+    analysis.sample_rate_hz = sample_rate_hz;
     const int sr = analysis.sample_rate_hz;
-    analysis.duration_s = static_cast<double>(mix.value().size()) / sr;
-    Result<FrontEndResult> mix_features = analyse_front_end(mix.value(), sr, options.front_end);
+    analysis.duration_s = static_cast<double>(mix.size()) / sr;
+    Result<FrontEndResult> mix_features = analyse_front_end(mix, sr, options.front_end);
     if (!mix_features) {
         return mix_features.error();
     }
@@ -78,7 +86,7 @@ Result<TrackAnalysis> analyse_track(const std::filesystem::path &audio_path,
         for (size_t i = 0; i < stem_sum.size(); ++i) {
             stem_sum[i] = drums[i] + bass_stem[i];
         }
-        const std::int64_t lag = estimate_lag_samples(mix.value(), stem_sum, kMaxStemLagSamples);
+        const std::int64_t lag = estimate_lag_samples(mix, stem_sum, kMaxStemLagSamples);
         analysis.stems_lag_s = static_cast<double>(lag) / stem_rate;
         drums = shifted(drums, lag);
         bass_stem = shifted(bass_stem, lag);
@@ -137,7 +145,7 @@ Result<TrackAnalysis> analyse_track(const std::filesystem::path &audio_path,
         analysis.bass = std::move(notes.value());
     } else {
         Result<BassTrackResult> notes =
-            track_bass(mix.value(), analysis.mix_features, analysis.grid, options.bass);
+            track_bass(mix, analysis.mix_features, analysis.grid, options.bass);
         if (!notes) {
             return notes.error();
         }
