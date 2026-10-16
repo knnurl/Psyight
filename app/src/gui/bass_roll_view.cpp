@@ -821,6 +821,22 @@ void BassRollView::draw_inspector_regions(const LoadedTrack &track) {
         if (ImGui::SmallButton("Loop")) {
             session_.set_loop({true, region.start_s, region.end_s});
         }
+        if (const std::vector<BassNote> *found = detections(); found != nullptr) {
+            std::vector<BassNoteLabel> filled;
+            for (const BassNote &n : *found) {
+                if (n.onset_s >= region.start_s && n.onset_s < region.end_s) {
+                    filled.push_back({n.onset_s, n.offset_s, n.pitch_midi, n.cents, n.slide_in,
+                                      n.slide_out, n.velocity});
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Fill from detections")) {
+                set_selection(labels.insert_notes(filled, region.start_s, region.end_s));
+            }
+            ImGui::SetItemTooltip("Replaces this region's labelled notes with the %zu detected "
+                                  "ones (one undo step), to correct by hand.",
+                                  filled.size());
+        }
         ImGui::SameLine();
         if (ImGui::SmallButton("Delete")) {
             labels.delete_region(i);

@@ -156,6 +156,20 @@ void AnalysisView::draw_toolbar(const LoadedTrack &track) {
         grid.first_downbeat_s = session_.playhead_s();
         labels.set_grid(grid);
     }
+    if (track.track_analysis != nullptr && track.track_analysis->beats.bpm > 0.0) {
+        const BeatTrackResult &beats = track.track_analysis->beats;
+        const double downbeat_s =
+            samples_to_seconds(beats.grid.first_downbeat, beats.grid.sample_rate_hz);
+        ImGui::SameLine();
+        if (ImGui::Button("Use detected grid")) {
+            labels.set_grid({beats.bpm, downbeat_s});
+        }
+        ImGui::SetItemTooltip("The beat tracker's grid: %.3f BPM (confidence %.2f), first "
+                              "downbeat %.3f s (confidence %.2f). One undo step; check the "
+                              "downbeat by ear.",
+                              beats.bpm, beats.tempo_confidence, downbeat_s,
+                              beats.downbeat_confidence);
+    }
     ImGui::SameLine();
     ImGui::Checkbox("Follow playhead", &session_.view.follow_playhead);
     ImGui::SameLine();
