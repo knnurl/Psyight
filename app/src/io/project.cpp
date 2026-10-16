@@ -7,7 +7,9 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <charconv>
 #include <cmath>
+#include <cstdio>
 
 namespace psyight {
 
@@ -101,6 +103,70 @@ const char *colour_order_name(ColourOrder order) {
         return "bgr";
     }
     return "grb";
+}
+
+std::optional<std::vector<Vec3>> parse_polyline_text(const std::string &text) {
+    std::vector<Vec3> points;
+    size_t i = 0;
+    while (i < text.size()) {
+        while (i < text.size() && (text[i] == ' ' || text[i] == ';' || text[i] == '\t')) {
+            ++i;
+        }
+        if (i == text.size()) {
+            break;
+        }
+        std::array<double, 3> xyz{};
+        int n = 0;
+        while (true) {
+            if (n == 3) {
+                return std::nullopt;
+            }
+            const auto [next, ec] =
+                std::from_chars(text.data() + i, text.data() + text.size(), xyz[n]);
+            if (ec != std::errc() || !std::isfinite(xyz[n])) {
+                return std::nullopt;
+            }
+            ++n;
+            i = static_cast<size_t>(next - text.data());
+            if (i < text.size() && text[i] == ',') {
+                ++i;
+                continue;
+            }
+            break;
+        }
+        if (n < 2 || (i < text.size() && text[i] != ' ' && text[i] != ';' && text[i] != '\t')) {
+            return std::nullopt;
+        }
+        points.push_back({xyz[0], xyz[1], xyz[2]});
+    }
+    if (points.size() < 2) {
+        return std::nullopt;
+    }
+    return points;
+}
+
+std::string polyline_text(const std::vector<Vec3> &polyline) {
+    std::string out;
+    for (const Vec3 &q : polyline) {
+        char buffer[96];
+        if (q.z == 0.0) {
+            std::snprintf(buffer, sizeof(buffer), "%g,%g", q.x, q.y);
+        } else {
+            std::snprintf(buffer, sizeof(buffer), "%g,%g,%g", q.x, q.y, q.z);
+        }
+        out += (out.empty() ? "" : " ") + std::string(buffer);
+    }
+    return out;
+}
+
+int pixels_to_fill(const StripSpec &spec) {
+    double length_m = 0.0;
+    for (size_t i = 1; i < spec.polyline.size(); ++i) {
+        const Vec3 &a = spec.polyline[i - 1];
+        const Vec3 &b = spec.polyline[i];
+        length_m += std::hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    }
+    return static_cast<int>(std::floor(length_m * spec.pixels_per_m + 1e-9));
 }
 
 Project default_project() {

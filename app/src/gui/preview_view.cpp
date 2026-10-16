@@ -26,10 +26,9 @@ ImU32 to_imgui(const std::uint8_t *rgb, double gamma) {
 
 } // namespace
 
-PreviewView::PreviewView(Session &session)
-    : session_(session), show_([&session] { return session.transport().position(); }) {
-    config_.output.cid = cid_from_name("Psyight");
-}
+PreviewView::PreviewView(Session &session, ProjectState &project)
+    : session_(session), project_(project),
+      show_([&session] { return session.transport().position(); }) {}
 
 void PreviewView::sync_config() {
     std::shared_ptr<const TrackAnalysis> analysis =
@@ -38,14 +37,21 @@ void PreviewView::sync_config() {
     const int sample_rate_hz = session_.has_track() ? session_.track().sample_rate_hz : 48000;
     dirty_ |= analysis != config_.analysis || grid.bpm != config_.grid.bpm ||
               grid.first_downbeat != config_.grid.first_downbeat ||
-              sample_rate_hz != config_.sample_rate_hz;
+              sample_rate_hz != config_.sample_rate_hz || project_.version() != project_version_;
     if (!dirty_) {
         return;
     }
     config_.analysis = std::move(analysis);
     config_.grid = grid;
     config_.sample_rate_hz = sample_rate_hz;
-    config_.latency_offset_s = 1e-3 * latency_offset_ms_;
+    const Project &p = project_.project();
+    config_.rig = project_.rig();
+    config_.patch = project_.patch();
+    config_.output = p.output;
+    config_.limiter = p.limiter;
+    config_.latency_offset_s = 1e-3 * p.latency_offset_ms;
+    config_.automation = p.automation;
+    project_version_ = project_.version();
     config_.version = ++version_;
     show_.set_config(std::make_shared<const ShowConfig>(config_));
     dirty_ = false;
@@ -85,8 +91,11 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(config_.scenes.size()) - 1);
     Scene &scene = config_.scenes[static_cast<size_t>(edit_scene_)];
     ImGui::SetNextItemWidth(7.0f * em);
-    dirty_ |= ImGui::DragFloat("Latency offset (ms)", &latency_offset_ms_, 1.0f, -200.0f, 200.0f,
-                               "%.0f");
+    float latency_ms = static_cast<float>(project_.project().latency_offset_ms);
+    if (ImGui::DragFloat("Latency offset (ms)", &latency_ms, 1.0f, -200.0f, 200.0f, "%.0f")) {
+        project_.edit().latency_offset_ms = latency_ms;
+        project_.changed();
+    }
     ImGui::SetItemTooltip("Render time minus playhead. About 2.9 ms per metre from the speakers "
                           "(SPEC 4.3).");
     const std::string layers_label = "Layers and palette of " + scene.name + "###layers";
@@ -117,20 +126,25 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Limiters")) {
-        LimiterParams &p = config_.limiter;
+        LimiterParams p = project_.project().limiter;
+        bool changed = false;
         float cap = static_cast<float>(p.brightness_cap);
         ImGui::SetNextItemWidth(8.0f * em);
         if (ImGui::SliderFloat("Brightness cap", &cap, 0.0f, 1.0f, "%.2f")) {
             p.brightness_cap = cap;
-            dirty_ = true;
+            changed = true;
         }
         float budget = static_cast<float>(p.budget_a);
         ImGui::SetNextItemWidth(8.0f * em);
         if (ImGui::DragFloat("Power budget (A, 0: off)", &budget, 0.1f, 0.0f, 100.0f, "%.1f")) {
             p.budget_a = budget;
-            dirty_ = true;
+            changed = true;
         }
-        dirty_ |= ImGui::Checkbox("Flash limiter (3 per second)", &p.flash_limiter);
+        changed |= ImGui::Checkbox("Flash limiter (3 per second)", &p.flash_limiter);
+        if (changed) {
+            project_.edit().limiter = p;
+            project_.changed();
+        }
         if (!p.flash_limiter) {
             ImGui::TextColored(kWarning, "Flash limiter off: photosensitive epilepsy risk "
                                          "(SPEC 7.7).");
@@ -197,51 +211,64 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
 
 void PreviewView::draw_output(const ShowFrame &frame) {
     const float em = ImGui::GetFontSize();
-    OutputSettings &o = config_.output;
+    OutputSettings o = project_.project().output;
+    int first_universe = project_.project().first_universe;
+    bool changed = false;
     dirty_ |= ImGui::Checkbox("Send to network", &config_.send_to_network);
     ImGui::SetItemTooltip("Off: packets go to the virtual node (this preview) only.");
     int protocol = o.protocol == OutputProtocol::sacn ? 0 : 1;
     ImGui::SetNextItemWidth(8.5f * em);
     if (ImGui::Combo("Protocol", &protocol, "sACN (E1.31)\0Art-Net 4\0")) {
         o.protocol = protocol == 0 ? OutputProtocol::sacn : OutputProtocol::art_net;
-        dirty_ = true;
+        changed = true;
     }
     if (o.protocol == OutputProtocol::sacn) {
         ImGui::SameLine();
-        dirty_ |= ImGui::Checkbox("Multicast", &o.multicast);
+        changed |= ImGui::Checkbox("Multicast", &o.multicast);
         ImGui::SetItemTooltip("239.255.hi.lo per universe. Switches need IGMP snooping, or "
                               "multicast floods the network (SPEC 8).");
     }
     if (o.protocol == OutputProtocol::art_net || !o.multicast) {
         ImGui::SetNextItemWidth(8.0f * em);
+        if (!address_active_ && parse_ipv4(address_text_) != o.address) {
+            address_text_ = std::to_string(o.address[0]) + "." + std::to_string(o.address[1]) +
+                            "." + std::to_string(o.address[2]) + "." +
+                            std::to_string(o.address[3]); // Loaded or reset elsewhere.
+        }
         if (ImGui::InputText("Node address", &address_text_)) {
             if (const auto address = parse_ipv4(address_text_)) {
                 o.address = *address;
-                dirty_ = true;
+                changed = true;
             }
         }
+        address_active_ = ImGui::IsItemActive();
         if (!parse_ipv4(address_text_)) {
             ImGui::SameLine();
             ImGui::TextColored(kWarning, "not an IPv4 address");
         }
     }
     ImGui::SetNextItemWidth(6.0f * em);
-    if (ImGui::InputInt("First universe", &first_universe_)) {
-        first_universe_ = std::clamp(first_universe_, 1, 63000);
-        config_.patch = build_patch(config_.rig, first_universe_);
-        dirty_ = true;
+    if (ImGui::InputInt("First universe", &first_universe)) {
+        first_universe = std::clamp(first_universe, 1, 63000);
+        changed = true;
     }
-    dirty_ |= ImGui::Checkbox("Sync", &o.sync);
+    changed |= ImGui::Checkbox("Sync", &o.sync);
     if (o.sync && o.protocol == OutputProtocol::sacn) {
         ImGui::SameLine();
         int sync_universe = o.sync_universe;
         ImGui::SetNextItemWidth(6.0f * em);
         if (ImGui::InputInt("Sync universe", &sync_universe)) {
             o.sync_universe = static_cast<std::uint16_t>(std::clamp(sync_universe, 1, 63999));
-            dirty_ = true;
+            changed = true;
         }
     }
-    const std::vector<int> &universes = config_.patch.universes;
+    if (changed) {
+        Project &p = project_.edit();
+        p.output = o;
+        p.first_universe = first_universe;
+        project_.changed();
+    }
+    const std::vector<int> &universes = project_.patch().universes;
     if (o.protocol == OutputProtocol::sacn && o.sync &&
         std::find(universes.begin(), universes.end(), o.sync_universe) != universes.end()) {
         ImGui::TextColored(kWarning, "The sync universe carries pixel data.");

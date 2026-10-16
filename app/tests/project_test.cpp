@@ -101,6 +101,23 @@ TEST_CASE("project: missing sections take defaults; bad input is rejected") {
     }
 }
 
+TEST_CASE("project: polylines as text, and pixels to fill a polyline") {
+    const auto points = parse_polyline_text("0,0 2.5,0;2.5,1.2,0.5");
+    REQUIRE(points.has_value());
+    REQUIRE(points->size() == 3);
+    CHECK((*points)[1].x == 2.5);
+    CHECK((*points)[2].z == 0.5);
+    CHECK(polyline_text(*points) == "0,0 2.5,0 2.5,1.2,0.5");
+    CHECK(parse_polyline_text(polyline_text(*points))->size() == 3);
+    CHECK_FALSE(parse_polyline_text("0,0").has_value());          // One point.
+    CHECK_FALSE(parse_polyline_text("0 1,1").has_value());        // A lone coordinate.
+    CHECK_FALSE(parse_polyline_text("0,0,0,0 1,1").has_value());  // Four coordinates.
+    CHECK_FALSE(parse_polyline_text("0,0 1,x").has_value());
+    CHECK_FALSE(parse_polyline_text("").has_value());
+    CHECK(pixels_to_fill({"s", {{0, 0, 0}, {2.5, 0, 0}}, 60.0, 0, {}}) == 150);
+    CHECK(pixels_to_fill({"s", {{0, 0, 0}, {3, 4, 0}, {3, 4, 1}}, 30.0, 0, {}}) == 180);
+}
+
 TEST_CASE("project: save and load through a file") {
     const auto path = std::filesystem::temp_directory_path() / "psyight_project_test.psyproj";
     Project p = default_project();

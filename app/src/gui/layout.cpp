@@ -32,6 +32,7 @@ void apply_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderSplitNode(views, ImGuiDir_Up, kAnalysisHeightFraction, &analysis, &bass_roll);
     ImGui::DockBuilderDockWindow("Transport", top);
     ImGui::DockBuilderDockWindow("Note inspector", inspector);
+    ImGui::DockBuilderDockWindow("Rig", preview); // Tabbed behind the preview.
     ImGui::DockBuilderDockWindow("Preview", preview);
     ImGui::DockBuilderDockWindow("Analysis", analysis);
     ImGui::DockBuilderDockWindow("Bass roll", bass_roll);

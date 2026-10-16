@@ -14,6 +14,7 @@
 #include "output/sender.h"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -45,6 +46,15 @@ Rig rig_of(const Project &project);
 Patch patch_of(const Project &project);
 
 const char *colour_order_name(ColourOrder order); // "rgb", "grb" and so on.
+
+// Polyline as editable text: points separated by spaces or semicolons, coordinates by commas, in
+// metres; z may be left out ("0,0 2.5,0" is two points at z = 0). nullopt when malformed or
+// shorter than two points.
+std::optional<std::vector<Vec3>> parse_polyline_text(const std::string &text);
+std::string polyline_text(const std::vector<Vec3> &polyline);
+
+// Pixels for the strip's polyline length at its density, rounded down.
+int pixels_to_fill(const StripSpec &spec);
 
 // Fails on malformed JSON, another schema, a wrongly typed or out-of-range field, a strip with
 // fewer than two polyline points, or an unknown colour order or protocol.
