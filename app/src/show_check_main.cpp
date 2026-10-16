@@ -88,6 +88,8 @@ int check(const std::filesystem::path &audio_path, const Project &project,
     config.output = project.output;
     config.limiter = project.limiter;
     config.automation = project.automation;
+    config.scenes = project.scenes;
+    config.palettes = project.palettes;
 
     ShowRenderer renderer;
     FlashMeter before(config.limiter);
