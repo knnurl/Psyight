@@ -109,7 +109,8 @@ M3 progress (2026-10-16):
   - Modulation matrix v0 (b5a6ff0): routes from 16 sources (phases, LFOs, kick, bass, residual, random per bar) through a curve onto a layer's opacity or hue, or the scene's brightness. Not yet: smoothing, sample-and-hold, quantise, MIDI CC, registry parameters as targets, rings on controls.
   - Scenes as data (c1fd7bc): effects are specs (type plus parameters, described once), so the project file saves scenes, routes and palettes, and the preview's scene editor edits names, palettes, section tags, layers (add, remove, reorder, blend, opacity) and every effect parameter.
   - State ladder and safety controls (b860bc6): Preflight, Preview, Ambient, React, Show in the top bar; Blackout (B) and Hold (H) fixed at the right.
-  - Not yet: palette editing in the GUI, group masks, per-group brightness caps, the recorder (SPEC 11), the Operate/Tune/Engineer tiers (so the flash limiter switch is not yet Engineer-only).
+  - Group masks and palette editor: a layer can be limited to one strip group; palettes are edited in the Preview's Palettes section; both saved.
+  - Not yet: per-group brightness caps, the recorder (SPEC 11), the Operate/Tune/Engineer tiers (so the flash limiter switch is not yet Engineer-only).
 
 ## Known issues
 - The show thread reads the transport position, which advances once per audio device period: 480 frames (10 ms) on this laptop's WASAPI device (app log on load). At 60 fps render time then moves 10 or 20 ms a frame instead of 16.7, a jitter of up to 5 ms; about 3 cm on the 6 m/s shockwave, invisible on the slower effects. Fix if it shows on real strips: publish a timestamp with the position (seqlock) and extrapolate while playing.
