@@ -1,17 +1,18 @@
 // psyight_eval: scores the bass tracker against a labels file, from the command line.
 //
-//   psyight_eval <audio> [labels.json] [--detail]
+//   psyight_eval <audio> [labels.json] [--detail] [--stems]
 //
-// Decodes the audio, runs the file-mode front end and bass tracker v0 on the labels' grid, and
-// prints the SPEC 6.10 metrics for each complete region and in total. The labels default to
+// Decodes the audio, runs the file-mode analysis (analysis/track_analysis.h) with bass tracker v0
+// on the labels' grid, and prints the SPEC 6.10 metrics for each complete region and in total.
+// --stems analyses the offline Demucs stems instead of the mix (kicks from drums, notes from bass).
+// The labels default to
 // "<audio>.labels.json". --detail adds distributions that separate tracker bias from label or
 // grid offsets: onset errors of notes matched within 50 ms, and detected kicks against the grid's
 // beats. For private reference tracks: run locally, never in CI.
 
 #include "analysis/bass_tracker.h"
-#include "analysis/front_end.h"
 #include "analysis/scoring.h"
-#include "audio/audio_file.h"
+#include "analysis/track_analysis.h"
 #include "core/paths.h"
 #include "io/labels.h"
 
@@ -86,15 +87,18 @@ void print_detail(const Labels &labels, const BassTrackResult &tracked, const Gr
 int wmain(int argc, wchar_t **argv) {
     std::vector<std::wstring> paths;
     bool detail = false;
+    TrackAnalysisOptions options;
     for (int i = 1; i < argc; ++i) {
         if (std::wcscmp(argv[i], L"--detail") == 0) {
             detail = true;
+        } else if (std::wcscmp(argv[i], L"--stems") == 0) {
+            options.source = AnalysisSource::stems;
         } else {
             paths.emplace_back(argv[i]);
         }
     }
     if (paths.empty() || paths.size() > 2) {
-        std::fprintf(stderr, "usage: psyight_eval <audio> [labels.json] [--detail]\n");
+        std::fprintf(stderr, "usage: psyight_eval <audio> [labels.json] [--detail] [--stems]\n");
         return 2;
     }
     const std::filesystem::path audio_path = paths[0];
@@ -106,36 +110,33 @@ int wmain(int argc, wchar_t **argv) {
         std::fprintf(stderr, "%s\n", labels.error().message.c_str());
         return 1;
     }
-    const Result<AudioBuffer> audio = decode_audio_file(audio_path);
-    if (!audio) {
-        std::fprintf(stderr, "%s\n", audio.error().message.c_str());
-        return 1;
-    }
-    const std::vector<float> mono = mono_mix(audio.value());
-    const int sample_rate_hz = audio.value().sample_rate_hz;
-
-    const auto start = std::chrono::steady_clock::now();
-    const Result<FrontEndResult> features = analyse_front_end(mono, sample_rate_hz, {});
-    if (!features) {
-        std::fprintf(stderr, "%s\n", features.error().message.c_str());
-        return 1;
-    }
     const LabelGrid &label_grid = labels.value().grid;
+    const int sample_rate_hz = labels.value().sample_rate;
     const Grid grid{label_grid.bpm, seconds_to_samples(label_grid.first_downbeat_s, sample_rate_hz),
                     sample_rate_hz};
-    const Result<BassTrackResult> tracked = track_bass(mono, features.value(), grid, {});
-    if (!tracked) {
-        std::fprintf(stderr, "%s\n", tracked.error().message.c_str());
+    options.grid = grid;
+    const auto start = std::chrono::steady_clock::now();
+    const Result<TrackAnalysis> analysis = analyse_track(audio_path, options);
+    if (!analysis) {
+        std::fprintf(stderr, "%s\n", analysis.error().message.c_str());
         return 1;
     }
+    const BassTrackResult *const tracked = &analysis.value().bass;
     const double analysis_s =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 
-    std::printf("%s: %.1f s of audio analysed in %.1f s; grid %.2f BPM, first downbeat %.3f s\n",
+    std::printf("%s (%s): %.1f s of audio analysed in %.1f s; grid %.2f BPM, first downbeat "
+                "%.3f s\n",
                 path_to_utf8(audio_path.filename()).c_str(),
-                static_cast<double>(mono.size()) / sample_rate_hz, analysis_s, label_grid.bpm,
+                options.source == AnalysisSource::stems ? "Demucs stems, aligned" : "mix",
+                analysis.value().duration_s, analysis_s, label_grid.bpm,
                 label_grid.first_downbeat_s);
-    const TrackScore score = score_track(labels.value(), to_labels(tracked.value().notes), {});
+    if (options.source == AnalysisSource::stems) {
+        const double lag_ms = 1e3 * analysis.value().stems_lag_s;
+        std::printf("  stems ran %.1f ms %s the mix; aligned before analysis\n", std::abs(lag_ms),
+                    lag_ms < 0.0 ? "ahead of" : "behind");
+    }
+    const TrackScore score = score_track(labels.value(), to_labels(tracked->notes), {});
     if (score.regions.empty()) {
         std::printf("No complete regions in %s: nothing to score.\n",
                     path_to_utf8(labels_path.filename()).c_str());
@@ -144,7 +145,7 @@ int wmain(int argc, wchar_t **argv) {
     const double beat_s = 60.0 / label_grid.bpm;
     for (const RegionScore &region : score.regions) {
         int kicks = 0;
-        for (const double t_s : tracked.value().kick_times_s) {
+        for (const double t_s : tracked->kick_times_s) {
             kicks += t_s >= region.region.start_s && t_s < region.region.end_s;
         }
         char name[160];
@@ -153,7 +154,7 @@ int wmain(int argc, wchar_t **argv) {
                       (region.region.end_s - region.region.start_s) / beat_s);
         print_score(name, region.score);
         if (detail) {
-            print_detail(labels.value(), tracked.value(), grid, region.region);
+            print_detail(labels.value(), *tracked, grid, region.region);
         }
     }
     if (score.regions.size() > 1) {

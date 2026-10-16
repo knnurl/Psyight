@@ -117,6 +117,12 @@ struct BassTrackResult {
 Result<BassTrackResult> track_bass(std::span<const float> mono, const FrontEndResult &features,
                                    const Grid &grid, const BassTrackerParams &params);
 
+// With kicks found elsewhere (for example on a drums stem while tracking the bass stem): step 1
+// is skipped and these kick times build the masks.
+Result<BassTrackResult> track_bass(std::span<const float> mono, const FrontEndResult &features,
+                                   const Grid &grid, const BassTrackerParams &params,
+                                   const std::vector<double> &kick_times_s);
+
 // For scoring against labels.
 std::vector<BassNoteLabel> to_labels(const std::vector<BassNote> &notes);
 

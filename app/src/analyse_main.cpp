@@ -1,6 +1,6 @@
 // psyight_analyse: the file-mode analysis of a track without labels, as a report.
 //
-//   psyight_analyse [--kicks] [--tempo] <audio> [more audio...]
+//   psyight_analyse [--kicks] [--tempo] [--stems] <audio> [more audio...]
 //
 // Runs the front end, the beat tracker and bass tracker v0 on the automatic grid, and prints
 // tempo, grid, downbeat and phrase (with confidences), kick coverage of the beats, and bass note
@@ -9,13 +9,15 @@
 // tracks; accuracy needs labels (psyight_eval). --kicks prints the kick detector's features at
 // the grid's beats against its offbeats (in psytrance kicks sit on beats, hats on offbeats), to
 // check its thresholds without kick labels. --tempo prints the tempo of each minute alone, which
-// shows tempo changes (DJ mixes) and unstable estimates.
+// shows tempo changes (DJ mixes) and unstable estimates. --stems analyses the offline Demucs stems
+// (kicks and beats from drums, notes from bass) instead of the mix.
 
 #include "analysis/bass_tracker.h"
 #include "analysis/beat_tracker.h"
 #include "analysis/front_end.h"
 #include "analysis/sections.h"
 #include "analysis/series.h"
+#include "analysis/track_analysis.h"
 #include "audio/audio_file.h"
 #include "core/paths.h"
 #include "core/pitch.h"
@@ -169,40 +171,26 @@ void print_local_tempo(const FrontEndResult &f) {
     std::printf("\n");
 }
 
-int analyse(const std::filesystem::path &audio_path, bool kick_features, bool local_tempo) {
-    const Result<AudioBuffer> audio = decode_audio_file(audio_path);
-    if (!audio) {
-        std::fprintf(stderr, "%s\n", audio.error().message.c_str());
-        return 1;
-    }
-    const std::vector<float> mono = mono_mix(audio.value());
-    const int sample_rate_hz = audio.value().sample_rate_hz;
-    const double duration_s = static_cast<double>(mono.size()) / sample_rate_hz;
+int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions &options,
+            bool kick_features, bool local_tempo) {
     const auto start = std::chrono::steady_clock::now();
-    const Result<FrontEndResult> features = analyse_front_end(mono, sample_rate_hz, {});
-    if (!features) {
-        std::fprintf(stderr, "%s\n", features.error().message.c_str());
-        return 1;
-    }
-    const Result<BeatTrackResult> beats = track_beats(features.value(), {});
-    if (!beats) {
-        std::fprintf(stderr, "%s\n", beats.error().message.c_str());
-        return 1;
-    }
-    const BeatTrackResult &b = beats.value();
-    std::printf("%s: %.1f s\n", path_to_utf8(audio_path.filename()).c_str(), duration_s);
-    if (b.bpm <= 0.0) {
-        std::printf("  no tempo found\n");
-        return 0;
-    }
-    const Result<BassTrackResult> bass = track_bass(mono, features.value(), b.grid, {});
-    if (!bass) {
-        std::fprintf(stderr, "%s\n", bass.error().message.c_str());
+    const Result<TrackAnalysis> analysis = analyse_track(audio_path, options);
+    if (!analysis) {
+        std::fprintf(stderr, "%s: %s\n", path_to_utf8(audio_path.filename()).c_str(),
+                     analysis.error().message.c_str());
         return 1;
     }
     const double analysis_s =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    const Grid &grid = b.grid;
+    const TrackAnalysis &a = analysis.value();
+    const BeatTrackResult &b = a.beats;
+    const FrontEndResult &features = a.mix_features;
+    const BassTrackResult &bass = a.bass;
+    const int sample_rate_hz = a.sample_rate_hz;
+    const double duration_s = a.duration_s;
+    std::printf("%s (%s): %.1f s\n", path_to_utf8(audio_path.filename()).c_str(),
+                options.source == AnalysisSource::stems ? "Demucs stems" : "mix", duration_s);
+    const Grid &grid = a.grid;
     const double beat_s = beat_s_of(grid);
     const double first_downbeat_s = samples_to_seconds(grid.first_downbeat, sample_rate_hz);
     std::printf("  analysed in %.1f s\n", analysis_s);
@@ -213,7 +201,7 @@ int analyse(const std::filesystem::path &audio_path, bool kick_features, bool lo
                 b.phrase_bar_offset, b.phrase_confidence, b.phrase_cues);
 
     // Kicks against the grid: coverage of beats, and timing.
-    const std::vector<double> &kicks = bass.value().kick_times_s;
+    const std::vector<double> &kicks = bass.kick_times_s;
     std::vector<double> kick_offsets_s;
     for (const double t : kicks) {
         kick_offsets_s.push_back(beat_offset_s(grid, t));
@@ -224,7 +212,7 @@ int analyse(const std::filesystem::path &audio_path, bool kick_features, bool lo
                 1e3 * median(kick_offsets_s));
 
     // Bass notes.
-    const std::vector<BassNote> &notes = bass.value().notes;
+    const std::vector<BassNote> &notes = bass.notes;
     std::array<int, kSlotsPerBar> slots{};
     std::map<int, int> pitches;
     std::vector<double> confidences;
@@ -260,21 +248,19 @@ int analyse(const std::filesystem::path &audio_path, bool kick_features, bool lo
     }
     std::printf("\n");
 
-    if (const Result<std::vector<DetectedSection>> sections =
-            detect_sections(features.value(), b, {});
-        sections) {
+    {
         std::printf("  sections:");
-        for (const DetectedSection &section : sections.value()) {
+        for (const DetectedSection &section : a.sections) {
             std::printf(" %s %.0f-%.0f s (%.2f);", section.label.c_str(), section.start_s,
                         section.end_s, section.confidence);
         }
         std::printf("\n");
     }
     if (local_tempo) {
-        print_local_tempo(features.value());
+        print_local_tempo(features);
     }
     if (kick_features) {
-        print_kick_features(features.value(), grid);
+        print_kick_features(features, grid);
         // Kicks per beat, one bar per group from the first grid beat: K kick, . none.
         std::printf("  kick timeline from %.3f s (bars of 4 beats from the first downbeat):\n  ",
                     b.first_kick_beat_s);
@@ -302,24 +288,28 @@ int analyse(const std::filesystem::path &audio_path, bool kick_features, bool lo
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
+    TrackAnalysisOptions options;
     std::vector<std::wstring> paths;
     for (int i = 1; i < argc; ++i) {
         if (std::wcscmp(argv[i], L"--kicks") == 0) {
             kick_features = true;
         } else if (std::wcscmp(argv[i], L"--tempo") == 0) {
             local_tempo = true;
+        } else if (std::wcscmp(argv[i], L"--stems") == 0) {
+            options.source = AnalysisSource::stems;
         } else {
             paths.emplace_back(argv[i]);
         }
     }
     if (paths.empty()) {
-        std::fprintf(stderr,
-                     "usage: psyight_analyse [--kicks] [--tempo] <audio> [more audio...]\n");
+        std::fprintf(
+            stderr,
+            "usage: psyight_analyse [--kicks] [--tempo] [--stems] <audio> [more audio...]\n");
         return 2;
     }
     int status = 0;
     for (const std::wstring &path : paths) {
-        status = std::max(status, analyse(path, kick_features, local_tempo));
+        status = std::max(status, analyse(path, options, kick_features, local_tempo));
     }
     return status;
 }

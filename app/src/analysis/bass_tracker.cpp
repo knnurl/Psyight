@@ -85,8 +85,8 @@ void add_with_gap(std::vector<Peak> &peaks, const Peak &peak, double min_gap_fra
 class Tracker {
   public:
     Tracker(std::span<const float> mono, const FrontEndResult &features, const Grid &grid,
-            const BassTrackerParams &params)
-        : mono_(mono), f_(features), grid_(grid), p_(params),
+            const BassTrackerParams &params, const std::vector<double> *kick_times_s)
+        : mono_(mono), f_(features), grid_(grid), p_(params), given_kicks_(kick_times_s),
           frame_s_(static_cast<double>(features.hop_samples) / features.sample_rate_hz) {}
 
     Result<BassTrackResult> run();
@@ -116,6 +116,7 @@ class Tracker {
     void finish_notes();
 
     std::span<const float> mono_;
+    const std::vector<double> *given_kicks_; // Null: detect kicks from the features.
     const FrontEndResult &f_;
     const Grid &grid_;
     const BassTrackerParams &p_;
@@ -495,7 +496,12 @@ Result<BassTrackResult> Tracker::run() {
         low_db_[f] = static_cast<float>(db_sum(sub_db[f], bass_db_[f]));
     }
     bass_level_db_ = quantile(bass_db_, 0.95);
-    detect_kicks();
+    if (given_kicks_ != nullptr) {
+        result_.kick_times_s = *given_kicks_;
+        std::sort(result_.kick_times_s.begin(), result_.kick_times_s.end());
+    } else {
+        detect_kicks();
+    }
     if (Result<void> r = compute_onset_function(); !r) {
         return r.error();
     }
@@ -558,7 +564,13 @@ const ParamEntry kParamTable[] = {
 
 Result<BassTrackResult> track_bass(std::span<const float> mono, const FrontEndResult &features,
                                    const Grid &grid, const BassTrackerParams &params) {
-    return Tracker(mono, features, grid, params).run();
+    return Tracker(mono, features, grid, params, nullptr).run();
+}
+
+Result<BassTrackResult> track_bass(std::span<const float> mono, const FrontEndResult &features,
+                                   const Grid &grid, const BassTrackerParams &params,
+                                   const std::vector<double> &kick_times_s) {
+    return Tracker(mono, features, grid, params, &kick_times_s).run();
 }
 
 std::vector<BassNoteLabel> to_labels(const std::vector<BassNote> &notes) {
