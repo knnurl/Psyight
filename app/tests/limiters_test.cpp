@@ -64,6 +64,50 @@ TEST_CASE("limiters: a 10 Hz full-field strobe is held to 3 flashes in any secon
     CHECK(max_flashes_per_second(output, p) <= 3);
     CHECK(max_flashes_per_second(output, p) >= 3); // The allowed ones still pass.
     CHECK(limited > 0);
+    // The meter agrees with the test's own count.
+    FlashMeter before(p);
+    FlashMeter after(p);
+    for (size_t f = 0; f < output.size(); ++f) {
+        before.add(input[f], static_cast<double>(f) / kFps);
+        after.add(output[f], static_cast<double>(f) / kFps);
+    }
+    CHECK(before.max_in_any_second() == max_flashes_per_second(input, p));
+    CHECK(after.max_in_any_second() == max_flashes_per_second(output, p));
+    CHECK(before.flashes() == 30); // 10 Hz for 3 s.
+}
+
+TEST_CASE("limiters: a rise spread over consecutive frames is one flash") {
+    LimiterParams p;
+    p.budget_a = 0.0;
+    // A bright rise every 0.35 s, each ramped up over four frames (as a kick ring sweeping the
+    // rig), then off: at most three flashes in any second, so nothing is clipped.
+    std::vector<Frame> frames;
+    for (int f = 0; f < 3 * 60; ++f) {
+        const int phase = f % 21;
+        const float v = phase < 4 ? 0.25f * static_cast<float>(phase + 1) : 0.0f;
+        frames.emplace_back(kPixels, Rgb{v, v, v});
+    }
+    FlashMeter meter(p);
+    Limiters limiters(p);
+    int clipped = 0;
+    for (size_t f = 0; f < frames.size(); ++f) {
+        meter.add(frames[f], static_cast<double>(f) / kFps);
+        Frame out = frames[f];
+        clipped += limiters.process(out, static_cast<double>(f) / kFps).flash_limited;
+    }
+    CHECK(meter.flashes() == 9);
+    CHECK(meter.max_in_any_second() == 3);
+    CHECK(clipped == 0);
+    // Four ramped rises a second: the fourth flash in each second is clipped on all its frames.
+    Limiters strict(p);
+    clipped = 0;
+    for (int f = 0; f < 60; ++f) {
+        const int phase = f % 15;
+        const float v = phase < 4 ? 0.25f * static_cast<float>(phase + 1) : 0.0f;
+        Frame out(kPixels, Rgb{v, v, v});
+        clipped += strict.process(out, f / kFps).flash_limited;
+    }
+    CHECK(clipped == 4);
 }
 
 TEST_CASE("limiters: slow fades pass unchanged; a disabled limiter passes the strobe") {
