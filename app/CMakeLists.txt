@@ -61,7 +61,8 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/analysis/front_end.cpp src/analysis/bass_tracker.cpp
                                src/analysis/beat_tracker.cpp src/analysis/sections.cpp
                                src/analysis/track_analysis.cpp src/io/stems.cpp
-                               src/analysis/align.cpp)
+                               src/analysis/align.cpp src/analysis/residual.cpp
+                               src/analysis/bass_aggregates.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch)
@@ -92,7 +93,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/label_editor_test.cpp tests/note_pattern_test.cpp
                              tests/synthetic_set.cpp tests/bass_tracker_test.cpp
                              tests/beat_tracker_test.cpp tests/sections_test.cpp
-                             tests/align_test.cpp)
+                             tests/align_test.cpp tests/residual_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)
