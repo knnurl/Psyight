@@ -77,12 +77,21 @@ Done (details in docs/results/M2.md and SPEC 6.4 to 6.6, decision log 2026-10-16
 - Hats, residual and bass aggregates (`src/analysis/residual.*`, `src/analysis/bass_aggregates.*`), run by `analyse_track` (stems: hats from drums, residual from the "other" stem). Every reference track: median 12 bass notes and 4 rests per bar.
 - Owner facts: Hagios is a single track at about 187 BPM (long beatless intro and outro); Hall of Purity is A# minor and really that low (A#0 is plausible).
 
-Next, in order:
-1. GUI: run `analyse_track` in `Session::load` (mix, or stems when present); automatic grid option; beats, downbeats, phrases, sections and detected notes on the time plots and bass roll. Overlaps the parked M1 item "detected notes in the bass roll".
-2. Phrase reset on section changes (SPEC 6.5); build detection with spectral flatness (SPEC 6.6).
-3. Hat labels or another check of the hats (about 12 per bar found, a quarter on offbeats: 16th hats, unverified).
-4. With owner labels later (see Waiting on the owner): the M2 exit table for all four tracks, DSP against Demucs-assisted.
-- Open: Hall of Purity's drums stem finds fewer kicks (40%) than its mix (61%); Hagios tempo 187.65 (mix) against 189.13 (stems), weak in both.
+- GUI (all checked in the app on scratch copies): the whole analysis runs on track load (stems when present, labelled grid when present, front end alone without a tempo); detected notes and kicks in the bass roll (click a detection to inspect, "Copy to labels"); "Use detected grid"; "Fill from detections" per region; sections strip with phrase ticks on the spectrogram; unlabelled tracks start on the detected grid; foldable plots (owner request); residual view (folded by default: level, centroid, flatness, bass rests shaded, hats); source choice and Re-analyse on the current grid; time axes aligned across plots.
+- Phrases restart at section changes (`phrase_starts`, SPEC 6.5).
+
+M2 status (2026-10-16): complete except what needs owner labels (the exit table, label-based tuning). Not built: build detection with spectral flatness (high-band rise only), hat verification.
+
+## M3 plan (owner, 2026-10-16: "continue with M3 and if possible M4" once M2 is satisfactory without labels)
+No hardware here: the exit (a show on real strips via the F767 node) stays with the owner; everything up to a virtual node is buildable and testable.
+1. Engine core (`src/engine/`): pixel model (strips from polylines, positions in metres), deterministic effect functions of (position, render time, inputs, params, seed), layers with blend modes and opacity, a 60 Hz render clock on render time (playhead plus latency offset). Tests: determinism, blend maths, effect outputs.
+2. Engine inputs from the analysis at a render time: beat phase, bar and phrase position, kicks, active bass note (pitch, gate, decay), section, residual, hats.
+3. Effect library v0 (SPEC 7.3): ambient plasma, kick shockwave, bass conveyor, hats sparkle, residual shimmer; palettes, pitch-to-hue.
+4. Limiters (SPEC 7.7): flash limiter (3 per second), brightness cap, power estimate, gamma. Tests.
+5. Preview panel: the rig's pixels drawn at the playhead.
+6. Output (`src/output/`): patch, sACN (E1.31) and Art-Net packets with sync, UDP sender (Winsock behind an interface), virtual node receiver feeding the preview. Tests against the protocol byte layouts and a loopback round trip.
+7. Scenes, scene automation by section, modulation matrix basics; rig editor GUI; recorder and preflight later.
+Threads (SPEC 4.2): engine and output get their own threads once the pure render is in place.
 
 ## Known issues
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).

@@ -678,6 +678,7 @@ Initial metric targets are placeholders, marked **[Guessing]**. Replace them wit
 | 2026-10-16 | A breakdown needs 2 kickless bars (SPEC 6.6 said 4 beats) | One-bar fills and missed kicks split every groove into short breakdowns |
 | 2026-10-16 | Kick gates loosened (rise 1 dB, click ratio 0.1) and kicks required in runs | Measured at grid beats against offbeats on the reference tracks; the synthetic-tuned gates found kicks on 7 to 33% of beats |
 | 2026-10-16 | Demucs v4 (htdemucs) stems through tools/python (torch 2.5.1 CUDA 12.4, demucs 4.0.1), aligned to the mix by cross-correlation before analysis | Owner approved the install; stems decoded by Demucs ran 47 ms ahead of the app's MP3 decoding |
+| 2026-10-16 | M2 closed as far as it can go without owner labels; M3 started, then M4 if possible | Owner decision. Labels for the M2 exit table remain an owner task (docs/PROGRESS.txt) |
 | 2026-10-15 | Labelling audition at 0.5x with pitch kept, using Signalsmith Stretch 1.4.0 and Signalsmith Linear 0.6.4 (MIT, header-only, vendored in `app/third_party`) | Owner chose it over writing WSOLA: much cleaner transients and sustained bass. Rubber Band (GPL) and SoundTouch (LGPL) are excluded by the licensing rule. Measured latency at 0.5x: 90 ms of input, compensated in the displayed playhead |
 
 Superseded during the conversation: an early suggestion to use JUCE for the C++ engine (replaced by the permissive stack) and an early "prototype in Python first" plan (replaced by the owner's choice of C++ from the start).
