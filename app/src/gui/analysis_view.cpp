@@ -102,6 +102,9 @@ void AnalysisView::draw() {
             labels.end_gesture();
             dragging_downbeat_ = false;
         }
+        std::vector<double> handles = draw_loop(session_, true, 10);
+        handles.push_back(label_grid.first_downbeat_s);
+        seek_on_click(session_, handles);
         ImPlot::EndPlot();
     }
     if (ImPlot::BeginPlot("Band energy", ImVec2(), ImPlotFlags_None)) {
@@ -116,6 +119,7 @@ void AnalysisView::draw() {
         }
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
+        seek_on_click(session_, draw_loop(session_, false, 20));
         ImPlot::EndPlot();
     }
     if (ImPlot::BeginPlot("Spectral flux", ImVec2(), ImPlotFlags_NoLegend)) {
@@ -125,6 +129,7 @@ void AnalysisView::draw() {
         plot_series("total", analysis->flux_total, frame_s, limits.X.Min, limits.X.Max);
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
+        seek_on_click(session_, draw_loop(session_, false, 30));
         ImPlot::EndPlot();
     }
     ImPlot::EndSubplots();

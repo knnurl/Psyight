@@ -164,6 +164,7 @@ void BassRollView::draw_roll() {
         draw_notes();
         ImPlot::PopPlotClipRect();
         draw_playhead(session_.playhead_s());
+        draw_loop(session_, false, 10); // Shaded only: dragging here edits notes.
         handle_mouse(track);
         ImPlot::EndPlot();
     }
