@@ -44,6 +44,9 @@ struct EngineInputs {
     // Section.
     std::string section = "intro";
     double section_progress = 0.0; // 0 to 1 through the section.
+    int section_index = -1;        // Into TrackAnalysis::sections; -1 outside them.
+    double since_section_s = 0.0;  // Since the section started.
+    double section_length_s = 0.0;
     // Residual and hats.
     double residual_level = 0.0; // 0 to 1 (-90 to 0 dB).
     double residual_centroid_hz = 0.0;

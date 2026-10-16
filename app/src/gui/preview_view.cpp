@@ -72,8 +72,8 @@ void PreviewView::draw() {
     }
 
     draw_controls(*frame);
-    ImGui::Text("%s, beat %d of the bar, %zu pixels, %.1f A estimated%s", frame->section.c_str(),
-                frame->beat_in_bar + 1, config_.rig.pixels.size(), frame->report.current_a,
+    ImGui::Text("%s, beat %d of the bar, %.1f A estimated%s", frame->section.c_str(),
+                frame->beat_in_bar + 1, frame->report.current_a,
                 frame->report.power_scale < 1.0 ? " (power limited)" : "");
     draw_rig(*frame);
     ImGui::End();
@@ -81,26 +81,30 @@ void PreviewView::draw() {
 
 void PreviewView::draw_controls(const ShowFrame &frame) {
     const float em = ImGui::GetFontSize();
-    Scene &scene = config_.scene;
-    ImGui::SetNextItemWidth(9.0f * em);
-    if (ImGui::BeginCombo("Palette",
-                          config_.palettes[static_cast<size_t>(scene.palette)].name.c_str())) {
-        for (int i = 0; i < static_cast<int>(config_.palettes.size()); ++i) {
-            if (ImGui::Selectable(config_.palettes[static_cast<size_t>(i)].name.c_str(),
-                                  i == scene.palette)) {
-                scene.palette = i;
-                dirty_ = true;
-            }
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::SameLine();
+    draw_scene_cards(frame);
+    edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(config_.scenes.size()) - 1);
+    Scene &scene = config_.scenes[static_cast<size_t>(edit_scene_)];
     ImGui::SetNextItemWidth(7.0f * em);
     dirty_ |= ImGui::DragFloat("Latency offset (ms)", &latency_offset_ms_, 1.0f, -200.0f, 200.0f,
                                "%.0f");
     ImGui::SetItemTooltip("Render time minus playhead. About 2.9 ms per metre from the speakers "
                           "(SPEC 4.3).");
-    if (ImGui::TreeNode("Layers")) {
+    const std::string layers_label = "Layers and palette of " + scene.name + "###layers";
+    if (ImGui::TreeNode(layers_label.c_str())) {
+        ImGui::SetNextItemWidth(9.0f * em);
+        if (ImGui::BeginCombo("Palette (base)",
+                              config_.palettes[static_cast<size_t>(scene.palette)].name.c_str())) {
+            for (int i = 0; i < static_cast<int>(config_.palettes.size()); ++i) {
+                if (ImGui::Selectable(config_.palettes[static_cast<size_t>(i)].name.c_str(),
+                                      i == scene.palette)) {
+                    scene.palette = i;
+                    dirty_ = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SetItemTooltip("Automation shifts it by one every %d phrases.",
+                              config_.automation.palette_every_phrases);
         for (size_t i = 0; i < scene.layers.size(); ++i) {
             Layer &layer = scene.layers[i];
             ImGui::PushID(static_cast<int>(i));
@@ -137,6 +141,57 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     if (ImGui::TreeNode("Output")) {
         draw_output(frame);
         ImGui::TreePop();
+    }
+}
+
+void PreviewView::draw_scene_cards(const ShowFrame &frame) {
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    const bool manual = config_.manual_scene >= 0;
+    for (int i = 0; i < static_cast<int>(config_.scenes.size()); ++i) {
+        const std::string &name = config_.scenes[static_cast<size_t>(i)].name;
+        const float width = ImGui::CalcTextSize(name.c_str()).x + 2.0f * style.FramePadding.x;
+        if (i > 0 && ImGui::GetItemRectMax().x + style.ItemSpacing.x + width < right) {
+            ImGui::SameLine();
+        }
+        const bool playing = frame.mix.to == i;
+        const bool fading_out = frame.mix.from == i;
+        if (playing || fading_out) {
+            ImVec4 colour = style.Colors[ImGuiCol_ButtonActive];
+            colour.w = playing ? 1.0f : 0.5f;
+            ImGui::PushStyleColor(ImGuiCol_Button, colour);
+        }
+        ImGui::PushID(i);
+        if (ImGui::Button(name.c_str())) {
+            config_.manual_scene = i;
+            edit_scene_ = i;
+            dirty_ = true;
+        }
+        ImGui::PopID();
+        if (playing || fading_out) {
+            ImGui::PopStyleColor();
+        }
+        std::string tags;
+        for (const std::string &s : config_.scenes[static_cast<size_t>(i)].sections) {
+            tags += (tags.empty() ? "" : ", ") + s;
+        }
+        ImGui::SetItemTooltip("For: %s. Click to hold this scene.",
+                              tags.empty() ? "manual use only" : tags.c_str());
+    }
+    bool automatic = !manual;
+    if (ImGui::Checkbox("Auto (by section)", &automatic)) {
+        config_.manual_scene = automatic ? -1 : std::max(0, frame.mix.to);
+        dirty_ = true;
+    }
+    ImGui::SetItemTooltip("Scenes follow the sections; clicking a scene holds it until this is "
+                          "ticked again.");
+    if (frame.mix.from >= 0) {
+        ImGui::SameLine();
+        ImGui::Text("crossfade %.0f%%", 100.0 * frame.mix.to_weight);
+    }
+    if (frame.mix.palette_shift != 0) {
+        ImGui::SameLine();
+        ImGui::Text("palette +%d", frame.mix.palette_shift);
     }
 }
 

@@ -150,6 +150,64 @@ class Shimmer final : public Effect {
     ShimmerParams p_;
 };
 
+class Build final : public Effect {
+  public:
+    explicit Build(const BuildParams &p) : p_(p) {}
+    const char *name() const override { return "Build compression"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        if (c.in.section != "build" || c.in.section_length_s <= 0.0) {
+            std::fill(out.begin(), out.end(), Rgb{});
+            return;
+        }
+        // Speed rises with the square of the progress p; the phase is its integral over time,
+        // f0 * (t + ramp * L * p^3 / 3), so the motion is continuous.
+        const double p = std::clamp(c.in.section_progress, 0.0, 1.0);
+        const double phase =
+            p_.start_speed_hz *
+            (c.in.since_section_s + p_.speed_ramp * c.in.section_length_s * p * p * p / 3.0);
+        const double level = p_.start_level + (p_.end_level - p_.start_level) * p * p;
+        const Vec3 centre = centre_of(c.rig);
+        const Rgb colour = c.palette.at(0.25 * p);
+        for (size_t i = 0; i < out.size(); ++i) {
+            const Vec3 &q = c.rig.pixels[i].position;
+            const double d = std::hypot(q.x - centre.x, q.y - centre.y, q.z - centre.z);
+            // Constant-phase points sit at d = wavelength * (k - phase): they move inward.
+            const double v = 0.5 + 0.5 * std::cos(2.0 * kPi * (d / p_.wavelength_m + phase));
+            out[i] = scaled(colour, level * v * v * v);
+        }
+    }
+
+  private:
+    BuildParams p_;
+};
+
+class DropBurst final : public Effect {
+  public:
+    explicit DropBurst(const DropBurstParams &p) : p_(p) {}
+    const char *name() const override { return "Drop burst"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        const double t = c.in.since_section_s;
+        if (c.in.section != "drop" || t >= p_.duration_s) {
+            std::fill(out.begin(), out.end(), Rgb{});
+            return;
+        }
+        const double radius_m = p_.speed_m_per_s * t;
+        const double level = std::exp(-t / p_.decay_s);
+        const Vec3 centre = centre_of(c.rig);
+        for (size_t i = 0; i < out.size(); ++i) {
+            const Vec3 &q = c.rig.pixels[i].position;
+            const double d = std::hypot(q.x - centre.x, q.y - centre.y, q.z - centre.z);
+            // A filled disc with a soft 10 cm edge, brightest at its rim.
+            const double inside = std::clamp((radius_m - d) / 0.1 + 1.0, 0.0, 1.0);
+            const double rim = radius_m > 0.0 ? 0.5 + 0.5 * std::min(1.0, d / radius_m) : 1.0;
+            out[i] = scaled({1.0f, 1.0f, 1.0f}, level * inside * rim);
+        }
+    }
+
+  private:
+    DropBurstParams p_;
+};
+
 } // namespace
 
 std::unique_ptr<Effect> make_plasma(const PlasmaParams &params) {
@@ -167,15 +225,27 @@ std::unique_ptr<Effect> make_sparkle(const SparkleParams &params) {
 std::unique_ptr<Effect> make_shimmer(const ShimmerParams &params) {
     return std::make_unique<Shimmer>(params);
 }
+std::unique_ptr<Effect> make_build(const BuildParams &params) {
+    return std::make_unique<Build>(params);
+}
+std::unique_ptr<Effect> make_drop_burst(const DropBurstParams &params) {
+    return std::make_unique<DropBurst>(params);
+}
 
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
                    const std::vector<Palette> &palettes, std::uint64_t seed) {
-    Frame frame(rig.pixels.size());
     if (palettes.empty()) {
-        return frame;
+        return Frame(rig.pixels.size());
     }
-    const Palette &palette = palettes[static_cast<size_t>(
-        std::clamp(scene.palette, 0, static_cast<int>(palettes.size()) - 1))];
+    return render_scene(scene, rig, inputs,
+                        palettes[static_cast<size_t>(
+                            std::clamp(scene.palette, 0, static_cast<int>(palettes.size()) - 1))],
+                        seed);
+}
+
+Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
+                   const Palette &palette, std::uint64_t seed) {
+    Frame frame(rig.pixels.size());
     const EffectContext context{rig, inputs, palette, seed};
     Frame layer(rig.pixels.size());
     for (const Layer &l : scene.layers) {
@@ -199,6 +269,46 @@ Scene default_scene() {
     scene.layers.push_back({make_sparkle(), BlendMode::add, 0.8f, true});
     scene.layers.push_back({make_shockwave(), BlendMode::screen, 1.0f, true});
     return scene;
+}
+
+std::vector<Scene> default_scenes() {
+    std::vector<Scene> scenes;
+    Scene groove = default_scene();
+    groove.name = "Groove";
+    groove.sections = {"groove"};
+    scenes.push_back(groove);
+
+    Scene staccato = default_scene();
+    staccato.name = "Groove, staccato";
+    staccato.sections = {"groove"};
+    staccato.palette = 1;
+    staccato.layers[1].effect = make_conveyor({6, 28.0, 270.0, 0.02});
+    scenes.push_back(staccato);
+
+    Scene drop = default_scene();
+    drop.name = "Drop";
+    drop.sections = {"drop"};
+    drop.layers.push_back({make_drop_burst(), BlendMode::screen, 1.0f, true});
+    scenes.push_back(drop);
+
+    Scene ambient;
+    ambient.name = "Ambient";
+    ambient.sections = {"intro", "breakdown", "outro"};
+    ambient.layers.push_back({make_plasma(), BlendMode::alpha, 1.0f, true});
+    ambient.layers.push_back({make_shimmer(), BlendMode::add, 1.0f, true});
+    ambient.layers.push_back({make_sparkle(), BlendMode::add, 0.5f, true});
+    ambient.layers.push_back({make_conveyor(), BlendMode::add, 0.4f, true});
+    scenes.push_back(ambient);
+
+    Scene build;
+    build.name = "Build";
+    build.sections = {"build"};
+    build.layers.push_back({make_plasma(), BlendMode::alpha, 0.5f, true});
+    build.layers.push_back({make_build(), BlendMode::add, 1.0f, true});
+    build.layers.push_back({make_sparkle(), BlendMode::add, 0.8f, true});
+    build.layers.push_back({make_shockwave(), BlendMode::screen, 1.0f, true});
+    scenes.push_back(build);
+    return scenes;
 }
 
 } // namespace psyight

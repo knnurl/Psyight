@@ -73,12 +73,15 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s) {
     }
 
     // Section.
-    for (const DetectedSection &section : a.sections) {
+    for (size_t i = 0; i < a.sections.size(); ++i) {
+        const DetectedSection &section = a.sections[i];
         if (t_s >= section.start_s && t_s < section.end_s) {
             in.section = section.label;
-            in.section_progress = section.end_s > section.start_s
-                                      ? (t_s - section.start_s) / (section.end_s - section.start_s)
-                                      : 0.0;
+            in.section_index = static_cast<int>(i);
+            in.since_section_s = t_s - section.start_s;
+            in.section_length_s = section.end_s - section.start_s;
+            in.section_progress =
+                in.section_length_s > 0.0 ? in.since_section_s / in.section_length_s : 0.0;
             break;
         }
     }

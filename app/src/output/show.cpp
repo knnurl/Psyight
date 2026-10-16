@@ -64,7 +64,10 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     out.t_s = t_s;
     if (config.analysis != nullptr) {
         const EngineInputs inputs = inputs_at(*config.analysis, config.grid, t_s);
-        out.frame = render_scene(config.scene, config.rig, inputs, config.palettes, config.seed);
+        out.mix = automate(config.scenes, *config.analysis, config.grid, inputs, config.automation,
+                           config.manual_scene);
+        out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
+                               config.seed);
         out.section = inputs.section;
         out.beat_in_bar = inputs.beat_in_bar;
     } else {

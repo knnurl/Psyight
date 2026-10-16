@@ -12,6 +12,7 @@
 
 #include "analysis/track_analysis.h"
 #include "core/timebase.h"
+#include "engine/automation.h"
 #include "engine/limiters.h"
 #include "engine/rig.h"
 #include "engine/scene.h"
@@ -36,7 +37,9 @@ struct ShowConfig {
     int sample_rate_hz = 48000;
     double latency_offset_s = 0.0; // Render time minus playhead (SPEC 4.3).
     Rig rig = default_rig();
-    Scene scene = default_scene();
+    std::vector<Scene> scenes = default_scenes();
+    AutomationParams automation;
+    int manual_scene = -1; // Overrides the section automation while >= 0.
     std::vector<Palette> palettes = default_palettes();
     LimiterParams limiter;
     Patch patch = build_patch(default_rig());
@@ -52,6 +55,7 @@ struct ShowFrame {
     LimiterReport report;
     std::int64_t flashes_limited = 0; // Frames the flash limiter clipped so far.
     std::string section;
+    SceneMix mix;
     int beat_in_bar = 0;
     std::vector<std::uint8_t> node_rgb; // What the virtual node latched (gamma-encoded bytes).
     VirtualNodeStats node;
