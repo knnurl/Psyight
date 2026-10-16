@@ -103,7 +103,7 @@ M3 progress (2026-10-16):
 - Next: step 7 (scenes and section automation, modulation basics, rig editor), then the recorder and preflight.
 
 ## Known issues
-- The show thread reads the transport position, which advances once per audio device period, so render time steps rather than glides between periods [measure the period and the visible effect; interpolate with the wall clock if needed].
+- The show thread reads the transport position, which advances once per audio device period: 480 frames (10 ms) on this laptop's WASAPI device (app log on load). At 60 fps render time then moves 10 or 20 ms a frame instead of 16.7, a jitter of up to 5 ms; about 3 cm on the 6 m/s shockwave, invisible on the slower effects. Fix if it shows on real strips: publish a timestamp with the position (seqlock) and extrapolate while playing.
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
 - Spectrogram display resolution at the low end is about half a bin (SPEC 6.1); CQT is an M2 option.
 - Bass tracker v0 limits: gaps shorter than the 25 ms envelope window run to the next onset (a dip-depth estimate was tried and reverted: decay looks like a gap); long notes decaying below k x peak end before their gate; long notes held under a kick are split; notes under about two periods get a wrong pitch with low confidence.
