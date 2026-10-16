@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string>
 #include <vector>
 
 namespace psyight {
@@ -25,6 +26,8 @@ constexpr const char *kFrequencyTickLabels[] = {"50", "100", "200", "500", "1k",
 // height in lines of text.
 constexpr std::array<float, 3> kPlotRatios{0.55f, 0.25f, 0.20f};
 constexpr float kMinPlotHeight = 4.0f;
+int kWholeNumbers = 0; // Decimals for format_fixed_width (ImPlot takes a non-const pointer).
+int kHundredths = 2;
 
 // Plots the visible part of a per-frame series, decimated to at most kMaxPlotPoints.
 void plot_series(const char *label, const std::vector<float> &values, double frame_s, double from_s,
@@ -97,8 +100,16 @@ void AnalysisView::draw() {
                                     (spectrogram.rows - 1) +
                                 0.5);
         }
+        std::vector<std::string> tick_names;
+        std::vector<const char *> tick_labels;
+        for (const char *name : kFrequencyTickLabels) {
+            tick_names.push_back(fixed_width_label(name));
+        }
+        for (const std::string &name : tick_names) {
+            tick_labels.push_back(name.c_str());
+        }
         ImPlot::SetupAxisTicks(ImAxis_Y1, tick_rows.data(), static_cast<int>(tick_rows.size()),
-                               kFrequencyTickLabels);
+                               tick_labels.data());
         const ImPlotRect limits = ImPlot::GetPlotLimits();
         textures_.draw(limits.X.Min, limits.X.Max);
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
@@ -132,6 +143,7 @@ void AnalysisView::draw() {
     if (open_[1] && ImPlot::BeginPlot("##band energy", ImVec2(-1, height(1)), ImPlotFlags_None)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "dBFS");
+        ImPlot::SetupAxisFormat(ImAxis_Y1, format_fixed_width, &kWholeNumbers);
         ImPlot::SetupAxisLimits(ImAxis_Y1, -80.0, 0.0, ImPlotCond_Once);
         ImPlot::SetupLegend(ImPlotLocation_NorthWest, ImPlotLegendFlags_Horizontal);
         const ImPlotRect limits = ImPlot::GetPlotLimits();
@@ -149,6 +161,7 @@ void AnalysisView::draw() {
         ImPlot::BeginPlot("##spectral flux", ImVec2(-1, height(2)), ImPlotFlags_NoLegend)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "flux", ImPlotAxisFlags_AutoFit);
+        ImPlot::SetupAxisFormat(ImAxis_Y1, format_fixed_width, &kHundredths);
         const ImPlotRect limits = ImPlot::GetPlotLimits();
         plot_series("total", analysis->flux_total, frame_s, limits.X.Min, limits.X.Max);
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);

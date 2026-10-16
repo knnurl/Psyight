@@ -86,6 +86,5 @@ Next, in order:
 
 ## Known issues
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
-- The bass roll's time axis is not pixel-aligned with the analysis plots (different y-axis label widths).
 - Spectrogram display resolution at the low end is about half a bin (SPEC 6.1); CQT is an M2 option.
 - Bass tracker v0 limits: gaps shorter than the 25 ms envelope window run to the next onset (a dip-depth estimate was tried and reverted: decay looks like a gap); long notes decaying below k x peak end before their gate; long notes held under a kick are split; notes under about two periods get a wrong pitch with low confidence.

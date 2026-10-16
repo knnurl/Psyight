@@ -5,12 +5,21 @@
 #include "core/timebase.h"
 #include "gui/session.h"
 
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace psyight {
 
 // Sets up ImAxis_X1 in seconds, linked to view.min_s and view.max_s.
 void setup_time_axis(TimeView &view);
+
+// Every time plot's y tick labels are this many characters wide and every y axis has a title:
+// with the monospaced font, all time axes then start at the same x and line up.
+inline constexpr int kValueLabelChars = 5;
+std::string fixed_width_label(std::string_view text); // Right-aligned in kValueLabelChars.
+// ImPlot formatter: the value with *static_cast<int *>(decimals) decimals, fixed width.
+int format_fixed_width(double value, char *buffer, int size, void *decimals);
 
 // Bar, beat and 16th lines over [from_s, to_s], thinned when zoomed out.
 void draw_grid_lines(const Grid &grid, double from_s, double to_s);

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,19 @@ ImU32 section_colour(const std::string &label) {
 }
 
 } // namespace
+
+std::string fixed_width_label(std::string_view text) {
+    std::string label(text);
+    if (label.size() < static_cast<size_t>(kValueLabelChars)) {
+        label.insert(0, kValueLabelChars - label.size(), ' ');
+    }
+    return label;
+}
+
+int format_fixed_width(double value, char *buffer, int size, void *decimals) {
+    return std::snprintf(buffer, static_cast<size_t>(size), "%*.*f", kValueLabelChars,
+                         *static_cast<int *>(decimals), value);
+}
 
 void setup_time_axis(TimeView &view) {
     ImPlot::SetupAxis(ImAxis_X1, nullptr, ImPlotAxisFlags_NoLabel);

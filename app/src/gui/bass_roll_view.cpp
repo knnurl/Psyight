@@ -174,14 +174,14 @@ void BassRollView::draw_roll() {
     if (ImPlot::BeginPlot("##bass roll", ImVec2(-1, -1),
                           ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect)) {
         setup_time_axis(session_.view);
-        ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_Lock);
+        ImPlot::SetupAxis(ImAxis_Y1, "pitch", ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_Y1, kLowestMidi, kHighestMidi + 1, ImPlotCond_Always);
         std::vector<double> tick_rows;
         std::vector<std::string> tick_names;
         for (int midi = kLowestMidi; midi <= kHighestMidi; ++midi) {
             if (midi % 12 == 0 || midi % 12 == 5) { // C and F rows.
                 tick_rows.push_back(midi + 0.5);
-                tick_names.push_back(midi_to_note_name(midi));
+                tick_names.push_back(fixed_width_label(midi_to_note_name(midi)));
             }
         }
         std::vector<const char *> tick_labels;
