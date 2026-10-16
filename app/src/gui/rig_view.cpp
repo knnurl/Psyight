@@ -105,9 +105,9 @@ void RigView::draw_strips() {
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX;
     // Horizontal scrolling needs a fixed height: the rows, the header and the scrollbar.
-    const float height = std::min(ImGui::GetContentRegionAvail().y * 0.6f,
-                                  (static_cast<float>(strips.size()) + 2.5f) *
-                                      ImGui::GetFrameHeightWithSpacing());
+    const float height =
+        std::min(ImGui::GetContentRegionAvail().y * 0.6f,
+                 (static_cast<float>(strips.size()) + 2.5f) * ImGui::GetFrameHeightWithSpacing());
     if (ImGui::BeginTable("strips", 7, flags, ImVec2(0.0f, height))) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 4.5f * em);
         ImGui::TableSetupColumn("Points (x,y[,z] m)", ImGuiTableColumnFlags_WidthFixed, 10.0f * em);
@@ -139,8 +139,9 @@ void RigView::draw_strips() {
             if (!points) {
                 ImGui::PopStyleColor();
             }
-            ImGui::SetItemTooltip("Points separated by spaces, coordinates by commas, in metres; "
-                                  "z may be left out. Pixels start half a pitch in from the first.");
+            ImGui::SetItemTooltip(
+                "Points separated by spaces, coordinates by commas, in metres; "
+                "z may be left out. Pixels start half a pitch in from the first.");
             ImGui::TableNextColumn();
             ImGui::SetNextItemWidth(-1.0f);
             float density = static_cast<float>(s.spec.pixels_per_m);

@@ -59,10 +59,10 @@ struct ShowFrame {
     int beat_in_bar = 0;
     std::vector<std::uint8_t> node_rgb; // What the virtual node latched (gamma-encoded bytes).
     VirtualNodeStats node;
-    int packets_sent = 0;      // This frame.
+    int packets_sent = 0; // This frame.
     std::int64_t send_errors = 0;
-    std::string network_error; // The last one, if any.
-    double render_ms = 0.0;    // Measured: this frame's render, limit, patch and send.
+    std::string network_error;    // The last one, if any.
+    double render_ms = 0.0;       // Measured: this frame's render, limit, patch and send.
     std::int64_t late_frames = 0; // Ticks that started more than a frame late.
 };
 

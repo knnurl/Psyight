@@ -67,8 +67,9 @@ int check(const std::filesystem::path &audio_path, const Project &project,
     if (std::filesystem::exists(labels_path)) {
         if (const Result<Labels> labels = load_labels(labels_path); labels) {
             const LabelGrid &g = labels.value().grid;
-            options.grid = Grid{g.bpm, seconds_to_samples(g.first_downbeat_s, kAnalysisSampleRateHz),
-                                kAnalysisSampleRateHz};
+            options.grid =
+                Grid{g.bpm, seconds_to_samples(g.first_downbeat_s, kAnalysisSampleRateHz),
+                     kAnalysisSampleRateHz};
         }
     }
     const Result<TrackAnalysis> analysed = analyse_track(audio_path, options);
@@ -119,8 +120,7 @@ int check(const std::filesystem::path &audio_path, const Project &project,
         const EngineInputs inputs = inputs_at(*analysis, config.grid, t_s);
         const SceneMix mix = automate(config.scenes, *analysis, config.grid, inputs,
                                       config.automation, config.manual_scene);
-        before.add(render_mix(config.scenes, mix, config.rig, inputs, config.palettes,
-                              config.seed),
+        before.add(render_mix(config.scenes, mix, config.rig, inputs, config.palettes, config.seed),
                    t_s);
         for (size_t i = 0; i < solo.size(); ++i) {
             solo_meters[i].add(
@@ -156,8 +156,7 @@ int check(const std::filesystem::path &audio_path, const Project &project,
     std::printf("  scenes:");
     for (size_t i = 0; i < scene_s.size(); ++i) {
         std::printf(" %s %.0f%%%s", config.scenes[i].name.c_str(),
-                    100.0 * scene_s[i] / analysis->duration_s,
-                    i + 1 < scene_s.size() ? "," : "\n");
+                    100.0 * scene_s[i] / analysis->duration_s, i + 1 < scene_s.size() ? "," : "\n");
     }
     std::printf("  render, limit, patch and send: p50 %.3f ms, p99 %.3f ms, max %.3f ms\n",
                 quantile(render_ms, 0.5), quantile(render_ms, 0.99), quantile(render_ms, 1.0));

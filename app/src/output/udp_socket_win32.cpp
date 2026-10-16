@@ -1,6 +1,7 @@
 #include "output/udp_socket.h"
 
-#include <winsock2.h>
+#include <winsock2.h> // Before the other Windows networking headers.
+
 #include <iphlpapi.h>
 #include <ws2tcpip.h>
 
@@ -165,12 +166,12 @@ std::vector<NetworkInterface> list_ipv4_interfaces() {
                 continue;
             }
             NetworkInterface iface;
-            const int name_bytes = WideCharToMultiByte(CP_UTF8, 0, a->FriendlyName, -1, nullptr,
-                                                       0, nullptr, nullptr);
+            const int name_bytes =
+                WideCharToMultiByte(CP_UTF8, 0, a->FriendlyName, -1, nullptr, 0, nullptr, nullptr);
             if (name_bytes > 1) {
                 iface.name.resize(static_cast<size_t>(name_bytes - 1));
-                WideCharToMultiByte(CP_UTF8, 0, a->FriendlyName, -1, iface.name.data(),
-                                    name_bytes, nullptr, nullptr);
+                WideCharToMultiByte(CP_UTF8, 0, a->FriendlyName, -1, iface.name.data(), name_bytes,
+                                    nullptr, nullptr);
             }
             const auto *in = reinterpret_cast<const sockaddr_in *>(u->Address.lpSockaddr);
             std::memcpy(iface.address.data(), &in->sin_addr, 4);

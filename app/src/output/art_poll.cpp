@@ -53,10 +53,10 @@ void put_text(std::vector<std::uint8_t> &out, size_t at, size_t bytes, const std
 size_t build_art_poll(std::vector<std::uint8_t> &out) {
     out.assign(kArtPollBytes, 0);
     put_header(out, kOpPoll);
-    out[10] = 0;  // Protocol version, big-endian: 14.
+    out[10] = 0; // Protocol version, big-endian: 14.
     out[11] = 14;
-    out[12] = 0;  // Flags: reply to polls only, no diagnostics.
-    out[13] = 0;  // Diagnostics priority.
+    out[12] = 0; // Flags: reply to polls only, no diagnostics.
+    out[13] = 0; // Diagnostics priority.
     return out.size();
 }
 

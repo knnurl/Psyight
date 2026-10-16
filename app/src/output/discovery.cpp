@@ -17,8 +17,8 @@ Result<std::vector<ArtNode>> discover_art_nodes(UdpSocket &socket, const Ipv4End
     std::vector<ArtNode> nodes;
     std::vector<std::uint8_t> buffer(1500);
     while (true) {
-        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline -
-                                                                                Clock::now());
+        const auto left =
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now());
         if (left.count() <= 0) {
             break;
         }

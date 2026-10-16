@@ -18,8 +18,7 @@ namespace {
 bool has(const std::vector<PreflightCheck> &checks, const std::string &area, CheckLevel level,
          const std::string &fragment) {
     return std::any_of(checks.begin(), checks.end(), [&](const PreflightCheck &c) {
-        return c.area == area && c.level == level &&
-               c.message.find(fragment) != std::string::npos;
+        return c.area == area && c.level == level && c.message.find(fragment) != std::string::npos;
     });
 }
 
@@ -110,8 +109,8 @@ TEST_CASE("discovery: a poll over loopback collects a fake node's replies once e
         build_art_poll_reply(b, reply);
         fake.value()->send_to(reply, from);
     });
-    const Result<std::vector<ArtNode>> nodes = discover_art_nodes(
-        *controller.value(), {{127, 0, 0, 1}, fake.value()->local_port()}, 300);
+    const Result<std::vector<ArtNode>> nodes =
+        discover_art_nodes(*controller.value(), {{127, 0, 0, 1}, fake.value()->local_port()}, 300);
     node_thread.join();
     REQUIRE(nodes.ok());
     REQUIRE(nodes.value().size() == 2);
@@ -185,7 +184,8 @@ TEST_CASE("preflight: failures and warnings that matter") {
     art.in.nodes = std::vector<ArtNode>{node};
     art.project.output.address = {10, 0, 0, 5};
     checks = art.run();
-    CHECK(has(checks, "Nodes", CheckLevel::ok, "F767 at 192.168.1.50: outputs on universes 1 to 2"));
+    CHECK(
+        has(checks, "Nodes", CheckLevel::ok, "F767 at 192.168.1.50: outputs on universes 1 to 2"));
     CHECK(has(checks, "Nodes", CheckLevel::warn, "universes 3"));
     CHECK(has(checks, "Network", CheckLevel::warn, "10.0.0.5 is not on any local subnet"));
 }

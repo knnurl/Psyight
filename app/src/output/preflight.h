@@ -26,9 +26,9 @@ struct PreflightCheck {
 };
 
 struct PreflightInputs {
-    const Project *project = nullptr; // Required.
-    const Rig *rig = nullptr;         // Required: built from the project.
-    const Patch *patch = nullptr;     // Required.
+    const Project *project = nullptr;        // Required.
+    const Rig *rig = nullptr;                // Required: built from the project.
+    const Patch *patch = nullptr;            // Required.
     const TrackAnalysis *analysis = nullptr; // Null: no track or no tempo.
     bool track_loaded = false;
     int device_sample_rate_hz = 0; // 0: no device open.

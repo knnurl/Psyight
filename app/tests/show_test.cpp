@@ -144,8 +144,7 @@ TEST_CASE("show renderer: deterministic, and the node shows the limited frame's 
     config.analysis = nullptr; // No analysis: black.
     ++config.version;
     const ShowFrame black = a.render(config, 3.0);
-    CHECK(std::all_of(black.node_rgb.begin(), black.node_rgb.end(),
-                      [](auto v) { return v == 0; }));
+    CHECK(std::all_of(black.node_rgb.begin(), black.node_rgb.end(), [](auto v) { return v == 0; }));
 }
 
 TEST_CASE("UDP socket: an Art-Net packet over loopback, and IPv4 parsing") {
@@ -209,9 +208,8 @@ TEST_CASE("show thread: timing" * doctest::skip()) {
     const auto started = std::chrono::steady_clock::now();
     ShowThread thread(
         [started] {
-            const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() -
-                                                           started)
-                                 .count();
+            const double s =
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
             return static_cast<SampleIndex>(s * 48000.0);
         },
         60.0);
@@ -242,7 +240,7 @@ TEST_CASE("show thread: timing" * doctest::skip()) {
     };
     MESSAGE("frames " << last_index + 1 << " in 10 s; interval ms p5 " << q(intervals_ms, 0.05)
                       << " p50 " << q(intervals_ms, 0.5) << " p95 " << q(intervals_ms, 0.95)
-                      << "; render ms p50 " << q(render_ms, 0.5) << " p99 "
-                      << q(render_ms, 0.99) << " max " << render_ms.back()
-                      << "; late frames " << thread.latest()->late_frames);
+                      << "; render ms p50 " << q(render_ms, 0.5) << " p99 " << q(render_ms, 0.99)
+                      << " max " << render_ms.back() << "; late frames "
+                      << thread.latest()->late_frames);
 }

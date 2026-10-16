@@ -63,7 +63,8 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
     if (in.device_sample_rate_hz == 0) {
         add("Audio", CheckLevel::warn, "No audio device is open (load a track).");
     } else {
-        add("Audio", in.device_sample_rate_hz == kExpectedRateHz ? CheckLevel::ok : CheckLevel::warn,
+        add("Audio",
+            in.device_sample_rate_hz == kExpectedRateHz ? CheckLevel::ok : CheckLevel::warn,
             format("Device at %d Hz, period %d frames (%.1f ms).", in.device_sample_rate_hz,
                    in.device_period_frames,
                    1e3 * in.device_period_frames / in.device_sample_rate_hz));
@@ -121,8 +122,8 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
                        p.pixels_per_universe));
         }
         if (sacn && p.output.sync &&
-            std::find(patch.universes.begin(), patch.universes.end(),
-                      p.output.sync_universe) != patch.universes.end()) {
+            std::find(patch.universes.begin(), patch.universes.end(), p.output.sync_universe) !=
+                patch.universes.end()) {
             add("Patch", CheckLevel::fail,
                 format("The sync universe %d also carries pixel data.", p.output.sync_universe));
         }
@@ -179,8 +180,9 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
     } else {
         const auto &address = p.output.address;
         const std::string text = ipv4_text(address);
-        const auto on = std::find_if(in.interfaces.begin(), in.interfaces.end(),
-                                     [&](const NetworkInterface &i) { return i.contains(address); });
+        const auto on =
+            std::find_if(in.interfaces.begin(), in.interfaces.end(),
+                         [&](const NetworkInterface &i) { return i.contains(address); });
         if (address[0] == 127) {
             add("Network", CheckLevel::info,
                 format("Sending to %s, this machine: no node will receive it.", text.c_str()));

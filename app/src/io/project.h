@@ -32,7 +32,7 @@ struct Project {
     std::vector<ProjectStrip> strips;
     int first_universe = 1;
     int pixels_per_universe = 170;
-    OutputSettings output;            // cid is derived from source_name.
+    OutputSettings output;               // cid is derived from source_name.
     std::string source_name = "Psyight"; // sACN source name and CID seed.
     LimiterParams limiter;
     double latency_offset_ms = 0.0;

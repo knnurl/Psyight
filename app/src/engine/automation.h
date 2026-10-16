@@ -43,8 +43,8 @@ struct SceneMix {
 int scene_for_section(const std::vector<Scene> &scenes,
                       const std::vector<DetectedSection> &sections, size_t index);
 
-SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis,
-                  const Grid &grid, const EngineInputs &inputs, const AutomationParams &params,
+SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
+                  const EngineInputs &inputs, const AutomationParams &params,
                   int manual_scene = -1);
 
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,

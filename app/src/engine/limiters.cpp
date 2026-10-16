@@ -54,8 +54,8 @@ bool FlashTracker::detect(Frame &frame, double t_s, bool limit) {
             candidate_[i] = luminance(frame[i]) - ref_[i] >= p_.flash_delta;
             rising += candidate_[i];
         } else { // Still up after a recent rise (a pixel falling now no longer counts).
-            rising += t_s - rose_s_[i] < kRiseWindowS &&
-                      luminance(frame[i]) > ref_[i] - p_.flash_delta;
+            rising +=
+                t_s - rose_s_[i] < kRiseWindowS && luminance(frame[i]) > ref_[i] - p_.flash_delta;
         }
     }
     expire(allowed_starts_s_, t_s);

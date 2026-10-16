@@ -103,8 +103,8 @@ size_t build_sacn_data(const SacnSource &source, std::uint16_t universe, std::ui
     put16(out, 115, flags_length(out.size() - 115));
     out[117] = kVectorDmpSetProperty;
     out[118] = kDmpAddressDataType;
-    put16(out, 119, 0x0000); // First property address.
-    put16(out, 121, 0x0001); // Address increment.
+    put16(out, 119, 0x0000);                            // First property address.
+    put16(out, 121, 0x0001);                            // Address increment.
     put16(out, 123, static_cast<std::uint16_t>(n + 1)); // Property count, with the start code.
     out[125] = 0;                                       // DMX512 start code.
     std::copy(slots.begin(), slots.end(), out.begin() + kSacnHeaderBytes);
@@ -134,8 +134,8 @@ size_t build_art_dmx(std::uint16_t port_address, std::uint8_t sequence,
     out.assign(kArtDmxHeaderBytes + length, 0);
     put_art_header(out, kOpDmx);
     out[12] = sequence;
-    out[13] = 0;                                           // Physical input port.
-    out[14] = static_cast<std::uint8_t>(port_address);     // SubUni: sub-net and universe.
+    out[13] = 0;                                            // Physical input port.
+    out[14] = static_cast<std::uint8_t>(port_address);      // SubUni: sub-net and universe.
     out[15] = static_cast<std::uint8_t>(port_address >> 8); // Net.
     put16(out, 16, static_cast<std::uint16_t>(length));
     std::copy(slots.begin(), slots.end(), out.begin() + kArtDmxHeaderBytes);
@@ -166,7 +166,8 @@ std::optional<ParsedPacket> parse_sacn(std::span<const std::uint8_t> in) {
     const size_t n = in.size() - kSacnHeaderBytes;
     if (pdu_length(in, 38) != in.size() - 38 || get32(in, 40) != kVectorFramingData ||
         pdu_length(in, 115) != in.size() - 115 || in[117] != kVectorDmpSetProperty ||
-        in[118] != kDmpAddressDataType || get16(in, 123) != static_cast<std::uint16_t>(n + 1) || in[125] != 0) {
+        in[118] != kDmpAddressDataType || get16(in, 123) != static_cast<std::uint16_t>(n + 1) ||
+        in[125] != 0) {
         return std::nullopt;
     }
     ParsedPacket p;

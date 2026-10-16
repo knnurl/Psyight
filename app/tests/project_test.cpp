@@ -109,9 +109,9 @@ TEST_CASE("project: polylines as text, and pixels to fill a polyline") {
     CHECK((*points)[2].z == 0.5);
     CHECK(polyline_text(*points) == "0,0 2.5,0 2.5,1.2,0.5");
     CHECK(parse_polyline_text(polyline_text(*points))->size() == 3);
-    CHECK_FALSE(parse_polyline_text("0,0").has_value());          // One point.
-    CHECK_FALSE(parse_polyline_text("0 1,1").has_value());        // A lone coordinate.
-    CHECK_FALSE(parse_polyline_text("0,0,0,0 1,1").has_value());  // Four coordinates.
+    CHECK_FALSE(parse_polyline_text("0,0").has_value());         // One point.
+    CHECK_FALSE(parse_polyline_text("0 1,1").has_value());       // A lone coordinate.
+    CHECK_FALSE(parse_polyline_text("0,0,0,0 1,1").has_value()); // Four coordinates.
     CHECK_FALSE(parse_polyline_text("0,0 1,x").has_value());
     CHECK_FALSE(parse_polyline_text("").has_value());
     CHECK(pixels_to_fill({"s", {{0, 0, 0}, {2.5, 0, 0}}, 60.0, 0, {}}) == 150);

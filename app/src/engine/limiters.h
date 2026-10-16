@@ -58,14 +58,14 @@ class FlashTracker {
     void commit(const Frame &frame);
 
     bool flash_started() const { return started_; } // At the last detect().
-    int flashes() const { return flashes_; }         // All that started.
+    int flashes() const { return flashes_; }        // All that started.
     int max_in_any_second() const { return max_in_any_second_; }
 
   private:
     LimiterParams p_;
-    std::vector<char> armed_;   // May rise (else waiting to fall).
-    std::vector<double> ref_;   // Armed: trough since arming. Disarmed: peak since rising.
-    std::vector<double> rose_s_; // When the pixel last rose.
+    std::vector<char> armed_;     // May rise (else waiting to fall).
+    std::vector<double> ref_;     // Armed: trough since arming. Disarmed: peak since rising.
+    std::vector<double> rose_s_;  // When the pixel last rose.
     std::vector<char> candidate_; // Rising at this frame.
     std::deque<double> allowed_starts_s_; // Flashes let through, within the last second.
     std::deque<double> all_starts_s_;     // Every flash, within the last second.

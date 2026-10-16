@@ -18,9 +18,8 @@ int OutputSender::send_frame(const OutputSettings &settings,
             if (build_sacn_data(source, universe, sacn_sequence, u.channels, buffer_) == 0) {
                 continue;
             }
-            const Ipv4Endpoint to{settings.multicast ? sacn_multicast_group(universe)
-                                                     : settings.address,
-                                  kSacnPort};
+            const Ipv4Endpoint to{
+                settings.multicast ? sacn_multicast_group(universe) : settings.address, kSacnPort};
             sink.send(buffer_, to);
             ++sent;
         }
@@ -36,9 +35,8 @@ int OutputSender::send_frame(const OutputSettings &settings,
     }
     const Ipv4Endpoint to{settings.address, kArtNetPort};
     for (const UniverseData &u : universes) {
-        if (u.universe < 1 ||
-            build_art_dmx(static_cast<std::uint16_t>(u.universe - 1), art_sequence, u.channels,
-                          buffer_) == 0) {
+        if (u.universe < 1 || build_art_dmx(static_cast<std::uint16_t>(u.universe - 1),
+                                            art_sequence, u.channels, buffer_) == 0) {
             continue;
         }
         sink.send(buffer_, to);

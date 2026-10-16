@@ -21,7 +21,7 @@ struct PatchedPixel {
 };
 
 struct Patch {
-    std::vector<int> universes; // sACN universe numbers (1 to 63999), ascending.
+    std::vector<int> universes;       // sACN universe numbers (1 to 63999), ascending.
     std::vector<PatchedPixel> pixels; // One per rig pixel.
 };
 

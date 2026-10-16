@@ -66,8 +66,8 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         const EngineInputs inputs = inputs_at(*config.analysis, config.grid, t_s);
         out.mix = automate(config.scenes, *config.analysis, config.grid, inputs, config.automation,
                            config.manual_scene);
-        out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
-                               config.seed);
+        out.frame =
+            render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes, config.seed);
         out.section = inputs.section;
         out.beat_in_bar = inputs.beat_in_bar;
     } else {
@@ -87,9 +87,9 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     out.node = node_.stats();
     out.send_errors = send_errors_;
     out.network_error = network_error_;
-    out.render_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
-                                                              started)
-                        .count();
+    out.render_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+            .count();
     return out;
 }
 
@@ -103,16 +103,16 @@ ShowThread::~ShowThread() {
 
 void ShowThread::run() {
     using Clock = std::chrono::steady_clock;
-    const auto period = std::chrono::duration_cast<Clock::duration>(
-        std::chrono::duration<double>(1.0 / rate_hz_));
+    const auto period =
+        std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(1.0 / rate_hz_));
     ShowRenderer renderer;
     std::int64_t late_frames = 0;
     auto next = Clock::now();
     while (!stop_) {
         const std::shared_ptr<const ShowConfig> config = config_.load();
         if (config != nullptr) {
-            const double t_s = samples_to_seconds(position_(), config->sample_rate_hz) +
-                               config->latency_offset_s;
+            const double t_s =
+                samples_to_seconds(position_(), config->sample_rate_hz) + config->latency_offset_s;
             auto frame = std::make_shared<ShowFrame>(renderer.render(*config, t_s));
             frame->late_frames = late_frames;
             frame_.store(std::move(frame));

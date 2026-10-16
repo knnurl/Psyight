@@ -30,9 +30,9 @@ TrackAnalysis arrangement() {
     a.sample_rate_hz = kSampleRateHz;
     a.duration_s = 110.0;
     a.grid = {150.0, 0, kSampleRateHz};
-    a.sections = {{0.0, 12.8, "intro", 1.0},       {12.8, 38.4, "groove", 1.0},
-                  {38.4, 51.2, "breakdown", 1.0},  {51.2, 57.6, "build", 1.0},
-                  {57.6, 83.2, "drop", 1.0},       {83.2, 100.0, "groove", 1.0},
+    a.sections = {{0.0, 12.8, "intro", 1.0},      {12.8, 38.4, "groove", 1.0},
+                  {38.4, 51.2, "breakdown", 1.0}, {51.2, 57.6, "build", 1.0},
+                  {57.6, 83.2, "drop", 1.0},      {83.2, 100.0, "groove", 1.0},
                   {100.0, 110.0, "outro", 1.0}};
     for (double t = 0.0; t < 110.0; t += kPhraseS) {
         a.phrase_starts_s.push_back(t);
@@ -65,7 +65,7 @@ TEST_CASE("automation: each section takes its tagged scene, in rotation") {
     REQUIRE(scenes.size() == 5);
     CHECK(scenes[kBuild].name == "Build");
     const TrackAnalysis a = arrangement();
-    const std::vector<int> expected = {kAmbient, kGroove, kAmbient, kBuild,
+    const std::vector<int> expected = {kAmbient, kGroove,   kAmbient, kBuild,
                                        kDrop,    kStaccato, kAmbient};
     for (size_t i = 0; i < a.sections.size(); ++i) {
         CAPTURE(i);
@@ -208,7 +208,7 @@ TEST_CASE("drop burst: a disc from the centre at the drop's start, then nothing"
     const double early = lit_share(0.05);
     const double later = lit_share(0.25);
     CHECK(early < later); // The disc grows.
-    CHECK(later > 0.4); // A 1 m disc on the 2.5 by 1.2 m frame.
+    CHECK(later > 0.4);   // A 1 m disc on the 2.5 by 1.2 m frame.
     CHECK(lit_share(1.6) == 0.0);
     in.section = "groove";
     CHECK(lit_share(0.25) == 0.0);

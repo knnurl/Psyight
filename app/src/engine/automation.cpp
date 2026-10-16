@@ -53,9 +53,8 @@ int scene_for_section(const std::vector<Scene> &scenes,
     return candidates[occurrence % candidates.size()];
 }
 
-SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis,
-                  const Grid &grid, const EngineInputs &inputs, const AutomationParams &params,
-                  int manual_scene) {
+SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
+                  const EngineInputs &inputs, const AutomationParams &params, int manual_scene) {
     SceneMix mix;
     const double beat_s = grid.bpm > 0.0 ? 60.0 / grid.bpm : 0.5;
 
@@ -90,8 +89,7 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         return mix;
     }
     const int previous = scene_for_section(scenes, analysis.sections, index - 1);
-    const double fade_s =
-        std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
+    const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
     if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
         mix.from = previous;
         mix.to_weight = inputs.since_section_s / fade_s;
