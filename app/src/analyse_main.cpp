@@ -205,10 +205,11 @@ int analyse(const std::filesystem::path &audio_path, bool kick_features, bool lo
     const double beat_s = beat_s_of(grid);
     const double first_downbeat_s = samples_to_seconds(grid.first_downbeat, sample_rate_hz);
     std::printf("  analysed in %.1f s\n", analysis_s);
-    std::printf("  tempo %.3f BPM (confidence %.2f); first downbeat %.3f s (confidence %.2f); "
-                "phrases of 8 bars start %d bars later (confidence %.2f)\n",
+    std::printf("  tempo %.3f BPM (confidence %.2f); first downbeat %.3f s (confidence %.2f, "
+                "%d kick breaks); phrases of 8 bars start %d bars later (confidence %.2f, %d "
+                "breaks)\n",
                 b.bpm, b.tempo_confidence, first_downbeat_s, b.downbeat_confidence,
-                b.phrase_bar_offset, b.phrase_confidence);
+                b.downbeat_breaks, b.phrase_bar_offset, b.phrase_confidence, b.phrase_breaks);
 
     // Kicks against the grid: coverage of beats, and timing.
     const std::vector<double> &kicks = bass.value().kick_times_s;

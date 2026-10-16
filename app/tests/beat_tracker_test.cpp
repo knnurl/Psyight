@@ -98,6 +98,40 @@ TEST_CASE("beat tracker: a bar-level bass progression gives the downbeat") {
     }
 }
 
+TEST_CASE("beat tracker: kick breakdowns give the downbeat when the bass has no bar cue") {
+    for (const double bpm : {150.0, 160.0}) {
+        CAPTURE(bpm);
+        synth::SynthParams params;
+        params.bpm = bpm;
+        params.bars = 24;
+        // An unchanging rolling bass, and kicks removed from bars 8 to 9 and 16 to 18.
+        synth::SynthParams bass_params = params;
+        bass_params.kick = false;
+        synth::SynthOutput mix =
+            synth::render(bass_params, synth::make_pattern(synth::Pattern::rolling, 24, 29, 0.7));
+        synth::SynthParams kick_params = params;
+        kick_params.bass_level = 0.0;
+        const synth::SynthOutput kicks = synth::render(kick_params, {});
+        const double bar_s = 4.0 * 60.0 / bpm;
+        const double downbeat_s = mix.labels.downbeats.front().t_s;
+        for (size_t i = 0; i < mix.samples.size(); ++i) {
+            const double bar = (static_cast<double>(i) / kSampleRateHz - downbeat_s) / bar_s;
+            const bool removed = (bar >= 8.0 && bar < 10.0) || (bar >= 16.0 && bar < 19.0);
+            mix.samples[i] += removed ? 0.0f : kicks.samples[i];
+        }
+        const Result<FrontEndResult> features = analyse_front_end(mix.samples, kSampleRateHz, {});
+        REQUIRE(features.ok());
+        const Result<BeatTrackResult> beats = track_beats(features.value(), {});
+        REQUIRE(beats.ok());
+        const double bars =
+            (samples_to_seconds(beats.value().grid.first_downbeat, kSampleRateHz) - downbeat_s) /
+            bar_s;
+        CHECK(std::abs(bars - std::round(bars)) * bar_s <= 0.005);
+        CHECK(beats.value().downbeat_breaks == 2);
+        CHECK(beats.value().downbeat_confidence > 0.5);
+    }
+}
+
 TEST_CASE("beat tracker: identical input gives bit-identical beats") {
     const synth::SyntheticCase c = synth::synthetic_set()[2];
     const BeatRun a = run_beats(c.params, c.events);

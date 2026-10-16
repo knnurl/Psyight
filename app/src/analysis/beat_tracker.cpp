@@ -15,6 +15,7 @@ constexpr int kBeatsPerBar = kSlotsPerBar / kSlotsPerBeat;
 constexpr int kFeatureBands = 24; // Log-spectrogram rows grouped for the novelty features.
 constexpr int kNoveltyBars = 4;   // Bars compared on each side of a candidate phrase start.
 constexpr double kNoveltyClipQuantile = 0.95;
+constexpr int kMinPhraseBreakBars = 2;
 constexpr double kOtherPeakFraction = 0.05; // Tempo peaks within 5% are the same peak.
 // Grid search: period within +-1% of the autocorrelation peak in 0.02% steps, phase in half
 // frames; then 0.002% and 0.1 frame steps around the best.
@@ -92,6 +93,52 @@ void best_phase(const std::vector<double> &novelty, int offset, int period, int 
         }
     }
     confidence = mean[phase] > 0.0 ? (mean[phase] - second) / mean[phase] : 0.0;
+}
+
+// Phase votes from breaks in a presence sequence (kick present per beat, or per bar): a break of
+// at least min_gap absent units, with presence on both sides, votes for the phase of its first
+// absent unit and of the first present unit after it, weighted by the break's length (a long
+// breakdown is a surer structural boundary than a short one). Returns the number of breaks.
+int break_votes(const std::vector<bool> &present, int offset, int period, int min_gap,
+                std::vector<double> &votes) {
+    votes.assign(period, 0.0);
+    int breaks = 0;
+    const int n = static_cast<int>(present.size());
+    int i = 0;
+    while (i < n && !present[i]) {
+        ++i; // An intro without kicks has no start boundary to trust.
+    }
+    while (i < n) {
+        while (i < n && present[i]) {
+            ++i;
+        }
+        const int gap_begin = i;
+        while (i < n && !present[i]) {
+            ++i;
+        }
+        const int gap = i - gap_begin;
+        if (i < n && gap >= min_gap) {
+            for (const int unit : {gap_begin, i}) {
+                votes[((unit + offset) % period + period) % period] += gap;
+            }
+            ++breaks;
+        }
+    }
+    return breaks;
+}
+
+// The best-voted phase and its margin over the next, relative to all votes.
+void decide(const std::vector<double> &votes, int &phase, double &confidence) {
+    double total = 0.0;
+    for (const double v : votes) {
+        total += v;
+    }
+    phase = static_cast<int>(std::max_element(votes.begin(), votes.end()) - votes.begin());
+    double second = 0.0;
+    for (int q = 0; q < static_cast<int>(votes.size()); ++q) {
+        second = q != phase ? std::max(second, votes[q]) : second;
+    }
+    confidence = total > 0.0 ? (votes[phase] - second) / total : 0.0;
 }
 
 } // namespace
@@ -347,8 +394,33 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     for (int k = kBeatsPerBar; k + kBeatsPerBar <= beats; ++k) {
         beat_novelty[k] = mean_distance(beat_features, k, k - kBeatsPerBar, kBeatsPerBar);
     }
+    // Kicks per grid beat: breakdowns start and end on bar lines, so where the kick stops and
+    // returns is the surest downbeat cue in psytrance. Bar-level novelty decides when a track has
+    // no breaks.
+    std::vector<float> beat_strength;
+    for (int k = first_beat; k <= last_beat; ++k) {
+        const int centre = static_cast<int>(std::lround((origin_s + k * period_s) / frame_s));
+        float strength = 0.0f;
+        for (int i = std::max(0, centre - 2); i <= std::min(frames - 1, centre + 2); ++i) {
+            strength = std::max(strength, odf[i]);
+        }
+        beat_strength.push_back(strength);
+    }
+    const double presence_threshold = p.kick_presence_fraction * quantile(beat_strength, 0.9);
+    std::vector<bool> kick_present;
+    for (const float strength : beat_strength) {
+        kick_present.push_back(strength >= presence_threshold);
+    }
     int downbeat_phase = 0;
-    best_phase(beat_novelty, first_beat, kBeatsPerBar, downbeat_phase, result.downbeat_confidence);
+    std::vector<double> votes;
+    result.downbeat_breaks =
+        break_votes(kick_present, first_beat, kBeatsPerBar, kBeatsPerBar, votes);
+    if (result.downbeat_breaks > 0) {
+        decide(votes, downbeat_phase, result.downbeat_confidence);
+    } else {
+        best_phase(beat_novelty, first_beat, kBeatsPerBar, downbeat_phase,
+                   result.downbeat_confidence);
+    }
     // Beat index k (from origin_s) is a downbeat when k = downbeat_phase (mod 4).
     int first_downbeat = first_beat;
     while (((first_downbeat % kBeatsPerBar) + kBeatsPerBar) % kBeatsPerBar != downbeat_phase) {
@@ -374,8 +446,22 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     for (int m = kNoveltyBars; m + kNoveltyBars <= bars; ++m) {
         bar_novelty[m] = mean_distance(bar_features, m, m - kNoveltyBars, kNoveltyBars);
     }
+    // A bar has a kick when most of its beats do; breaks of two bars or more mark phrases.
+    std::vector<bool> bar_kick;
+    for (int k = first_downbeat - first_beat; k + kBeatsPerBar <= beats; k += kBeatsPerBar) {
+        int with_kick = 0;
+        for (int j = 0; j < kBeatsPerBar; ++j) {
+            with_kick += kick_present[k + j];
+        }
+        bar_kick.push_back(2 * with_kick > kBeatsPerBar);
+    }
     if (bars >= 2 * phrase) {
-        best_phase(bar_novelty, 0, phrase, result.phrase_bar_offset, result.phrase_confidence);
+        result.phrase_breaks = break_votes(bar_kick, 0, phrase, kMinPhraseBreakBars, votes);
+        if (result.phrase_breaks > 0) {
+            decide(votes, result.phrase_bar_offset, result.phrase_confidence);
+        } else {
+            best_phase(bar_novelty, 0, phrase, result.phrase_bar_offset, result.phrase_confidence);
+        }
     }
     return result;
 }
@@ -406,6 +492,7 @@ const ParamEntry kParamTable[] = {
     {&BeatTrackerParams::fit_strength_quantile, "beat.fit_strength_quantile", "Grid fit strength", "", 0.0, 0.95, ParamTier::engineer, "Beats stronger than this quantile anchor the constant-tempo grid."},
     {&BeatTrackerParams::fit_outlier_ms, "beat.fit_outlier_ms", "Grid fit outlier", "ms", 1.0, 200.0, ParamTier::engineer, "Beats further than this from the fitted grid are dropped from the fit."},
     {&BeatTrackerParams::beat_bias_ms, "beat.beat_bias_ms", "Beat time bias", "ms", -30.0, 30.0, ParamTier::engineer, "Subtracted from detected beat times."},
+    {&BeatTrackerParams::kick_presence_fraction, "beat.kick_presence_fraction", "Kick presence", "", 0.01, 1.0, ParamTier::engineer, "A beat has a kick when its onset strength reaches this fraction of the track's strong beats (90th percentile)."},
     {&BeatTrackerParams::bars_per_phrase, "beat.bars_per_phrase", "Bars per phrase", "bars", 1.0, 64.0, ParamTier::tune, "Phrases are counted in groups of this many bars."},
 };
 // clang-format on

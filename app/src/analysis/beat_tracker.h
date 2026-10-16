@@ -13,10 +13,12 @@
 // 4. Grid: the constant-tempo period and phase whose beats collect the most onset strength over
 //    the whole track (grid search), refined by least squares on the strong beats near it. DJ
 //    mixes with tempo changes need the per-beat times instead (M5).
-// 5. Downbeat and phrase: the beat (and bar) positions where the music changes most between the
-//    preceding and following bars (log-spectrogram band energies and bass pitch salience, each
-//    group scaled over the track), with a confidence margin. Phrases are counted in groups of
-//    bars_per_phrase from the strongest bar position.
+// 5. Downbeat and phrase: breakdowns start and end on bar lines, so where the kick stops and
+//    returns (breaks of a bar or more, weighted by length) votes for the downbeat, and breaks of
+//    two bars or more for the phrase position. Without breaks, the beat (and bar) positions where
+//    the music changes most between the preceding and following bars decide (log-spectrogram
+//    band energies and bass pitch salience, each group scaled over the track). Phrases are
+//    counted in groups of bars_per_phrase.
 //
 // Assumptions: 4/4, a roughly constant tempo, kicks with a click transient. Deterministic.
 // Latency: non-causal (file mode); uses the whole track.
@@ -41,6 +43,7 @@ struct BeatTrackerParams {
     double fit_strength_quantile = 0.5; // Beats stronger than this quantile anchor the grid fit.
     double fit_outlier_ms = 30.0;       // Beats further than this from the grid are not fitted.
     double beat_bias_ms = 0.0;          // Subtracted from beat times.
+    double kick_presence_fraction = 0.3; // Of the strong beats' onset strength (p90).
     double bars_per_phrase = 8.0;
 };
 
@@ -50,8 +53,10 @@ struct BeatTrackResult {
     std::vector<double> beat_times_s; // Dynamic-programming beats.
     Grid grid; // Constant tempo; first_downbeat is the first one at 0 or later.
     double downbeat_confidence = 0.0; // 0 to 1: margin of the best beat position over the next.
+    int downbeat_breaks = 0;          // Kick breaks that voted; 0: decided by novelty.
     int phrase_bar_offset = 0;        // Bars from grid.first_downbeat to the first phrase start.
     double phrase_confidence = 0.0;
+    int phrase_breaks = 0;
     std::vector<float> onset_function; // Per front-end frame, normalised.
 };
 
