@@ -9,3 +9,5 @@ torchaudio==2.5.1+cu124  # demucs 4.0.1 saves through torchaudio I/O, removed in
 demucs==4.0.1            # MIT code; repository archived 2025-01-01, weights licence unstated (SPEC A6).
 soundfile==0.14.0
 numpy==2.2.6
+onnx==1.17.0                  # M4: student export (Apache-2.0).
+onnxruntime-directml==1.20.1  # M4: student inference latency, DirectML and CPU (MIT).
