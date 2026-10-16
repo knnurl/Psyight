@@ -1,0 +1,64 @@
+// Beat, downbeat and phrase tracker (SPEC section 6.5), file mode.
+//
+// Steps:
+// 1. Beat onset function: the geometric mean of the low band's (sub plus bass) level rise and the
+//    click band's flux, each normalised to the track. A kick has both; a bass onset has little
+//    click and a hat has no low rise. The level is averaged over one bass period first (as in
+//    the bass tracker) and the rise is a centred difference, so it peaks at the kick.
+// 2. Tempo: autocorrelation of the onset function with a harmonic comb (1, 2 and 4 beats),
+//    weighted by a log-Gaussian prior and limited to min_bpm..max_bpm, which excludes the half and
+//    double tempos of psytrance.
+// 3. Beats: dynamic programming (Ellis 2007): each beat maximises onset strength minus a cost on
+//    log-period deviation, so beats continue through breakdowns.
+// 4. Grid: a constant-tempo fit to the strong beats (robust least squares), precise to about
+//    0.01 BPM over a track. DJ mixes with tempo changes need the per-beat times instead (M5).
+// 5. Downbeat and phrase: the beat (and bar) positions where the music changes most between the
+//    preceding and following bars (log-spectrogram band energies and bass pitch salience, each
+//    group scaled over the track), with a confidence margin. Phrases are counted in groups of
+//    bars_per_phrase from the strongest bar position.
+//
+// Assumptions: 4/4, a roughly constant tempo, kicks with a click transient. Deterministic.
+// Latency: non-causal (file mode); uses the whole track.
+#pragma once
+
+#include "analysis/front_end.h"
+#include "core/params.h"
+#include "core/result.h"
+#include "core/timebase.h"
+
+#include <vector>
+
+namespace psyight {
+
+struct BeatTrackerParams {
+    double min_bpm = 120.0;
+    double max_bpm = 190.0;
+    double prior_bpm = 150.0;
+    double prior_width_octaves = 0.5;   // Standard deviation of the log2 tempo prior.
+    double tightness = 100.0;           // Cost weight on squared log-period deviation (Ellis 2007).
+    double envelope_window_ms = 25.0;   // Low-band level averaged over about one bass period.
+    double fit_strength_quantile = 0.5; // Beats stronger than this quantile anchor the grid fit.
+    double fit_outlier_ms = 30.0;       // Beats further than this from the fit are dropped.
+    double beat_bias_ms = 0.0;          // Subtracted from beat times.
+    double bars_per_phrase = 8.0;
+};
+
+struct BeatTrackResult {
+    double bpm = 0.0;                 // Of the constant-tempo grid fit.
+    double tempo_confidence = 0.0;    // 0 to 1: autocorrelation peak margin.
+    std::vector<double> beat_times_s; // Dynamic-programming beats.
+    Grid grid; // Constant tempo; first_downbeat is the first one at 0 or later.
+    double downbeat_confidence = 0.0; // 0 to 1: margin of the best beat position over the next.
+    int phrase_bar_offset = 0;        // Bars from grid.first_downbeat to the first phrase start.
+    double phrase_confidence = 0.0;
+    std::vector<float> onset_function; // Per front-end frame, normalised.
+};
+
+Result<BeatTrackResult> track_beats(const FrontEndResult &features,
+                                    const BeatTrackerParams &params);
+
+// Registry declarations ("beat.*") with the defaults above, and the reverse mapping.
+Result<void> declare_beat_tracker_params(ParamRegistry &registry);
+BeatTrackerParams beat_tracker_params_from(const ParamValues &values);
+
+} // namespace psyight
