@@ -1,6 +1,6 @@
 // Analysis view (SPEC section 9.4, M1): scrolling log-frequency spectrogram, band energies and
 // spectral flux on one shared time axis that follows the playhead, with the manual grid (BPM and
-// a draggable first downbeat) drawn on every plot.
+// a draggable first downbeat) drawn on every plot. Each plot folds under its own header.
 #pragma once
 
 #include <array>
@@ -25,8 +25,8 @@ class AnalysisView {
     float max_db_ = -10.0f;
     bool colours_changed_ = false;
     bool dragging_downbeat_ = false;
-    // Plot heights. ImPlot writes divider drags into this, so it must persist between frames.
-    std::array<float, 3> row_ratios_{0.55f, 0.25f, 0.20f};
+    // Which of the spectrogram, band energy and flux plots are unfolded.
+    std::array<bool, 3> open_{true, true, true};
 };
 
 } // namespace psyight

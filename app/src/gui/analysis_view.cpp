@@ -6,6 +6,7 @@
 #include <implot.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -20,6 +21,10 @@ constexpr float kMinDisplayDb = -120.0f;
 constexpr float kMaxDisplayDb = 0.0f;
 constexpr double kFrequencyTicksHz[] = {50, 100, 200, 500, 1000, 2000, 5000, 10000};
 constexpr const char *kFrequencyTickLabels[] = {"50", "100", "200", "500", "1k", "2k", "5k", "10k"};
+// Shares of the height for the spectrogram, band energy and flux plots, and a plot's minimum
+// height in lines of text.
+constexpr std::array<float, 3> kPlotRatios{0.55f, 0.25f, 0.20f};
+constexpr float kMinPlotHeight = 4.0f;
 
 // Plots the visible part of a per-frame series, decimated to at most kMaxPlotPoints.
 void plot_series(const char *label, const std::vector<float> &values, double frame_s, double from_s,
@@ -60,14 +65,27 @@ void AnalysisView::draw() {
     const double playhead_s = session_.playhead_s();
     const Grid grid = session_.grid();
 
-    if (!ImPlot::BeginSubplots("##analysis", 3, 1, ImVec2(-1, -1), ImPlotSubplotFlags_None,
-                               row_ratios_.data())) {
-        ImGui::End();
-        return;
+    // Each plot folds under its own header; the open ones share the height by their ratios. The
+    // heights use the previous frame's open states (a one-frame lag when folding).
+    float open_ratio = 0.0f;
+    int open_count = 0;
+    for (size_t i = 0; i < kPlotRatios.size(); ++i) {
+        open_ratio += open_[i] ? kPlotRatios[i] : 0.0f;
+        open_count += open_[i];
     }
+    const float available =
+        ImGui::GetContentRegionAvail().y -
+        static_cast<float>(kPlotRatios.size()) * ImGui::GetFrameHeightWithSpacing() -
+        static_cast<float>(open_count) * ImGui::GetStyle().ItemSpacing.y;
+    const auto height = [&](size_t i) {
+        return std::max(kMinPlotHeight * ImGui::GetFontSize(),
+                        available * kPlotRatios[i] / std::max(open_ratio, 1e-3f));
+    };
 
     const LogSpectrogram &spectrogram = analysis->spectrogram;
-    if (ImPlot::BeginPlot("Spectrogram", ImVec2(), ImPlotFlags_NoLegend)) {
+    open_[0] = ImGui::CollapsingHeader("Spectrogram", ImGuiTreeNodeFlags_DefaultOpen);
+    if (open_[0] &&
+        ImPlot::BeginPlot("##spectrogram", ImVec2(-1, height(0)), ImPlotFlags_NoLegend)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "Hz", ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, spectrogram.rows, ImPlotCond_Always);
@@ -110,7 +128,8 @@ void AnalysisView::draw() {
         seek_on_click(session_, handles);
         ImPlot::EndPlot();
     }
-    if (ImPlot::BeginPlot("Band energy", ImVec2(), ImPlotFlags_None)) {
+    open_[1] = ImGui::CollapsingHeader("Band energy", ImGuiTreeNodeFlags_DefaultOpen);
+    if (open_[1] && ImPlot::BeginPlot("##band energy", ImVec2(-1, height(1)), ImPlotFlags_None)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "dBFS");
         ImPlot::SetupAxisLimits(ImAxis_Y1, -80.0, 0.0, ImPlotCond_Once);
@@ -125,7 +144,9 @@ void AnalysisView::draw() {
         seek_on_click(session_, draw_loop(session_, false, 20));
         ImPlot::EndPlot();
     }
-    if (ImPlot::BeginPlot("Spectral flux", ImVec2(), ImPlotFlags_NoLegend)) {
+    open_[2] = ImGui::CollapsingHeader("Spectral flux", ImGuiTreeNodeFlags_DefaultOpen);
+    if (open_[2] &&
+        ImPlot::BeginPlot("##spectral flux", ImVec2(-1, height(2)), ImPlotFlags_NoLegend)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "flux", ImPlotAxisFlags_AutoFit);
         const ImPlotRect limits = ImPlot::GetPlotLimits();
@@ -135,7 +156,6 @@ void AnalysisView::draw() {
         seek_on_click(session_, draw_loop(session_, false, 30));
         ImPlot::EndPlot();
     }
-    ImPlot::EndSubplots();
     ImGui::End();
 }
 
