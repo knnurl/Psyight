@@ -211,23 +211,25 @@ When a slot is a rest, the residual features (non-bass content) drive the residu
 
 ### 6.4 Kick, hats and residual
 
-- **Kick:** click-band onset plus low-band rise. In M2, add a BPM-aware minimum inter-onset gap and expected-position weighting from the beat tracker.
+- **Kick:** click-band onset plus low-band rise, within ±35 ms of a grid beat, in runs (another candidate one beat away). Real kicks forced looser gates than the synthetic ones: sidechained mixes barely raise the low band at a kick (Phase Change: 2.3 dB median) and distorted kicks carry low-mid energy (Hall of Purity click ratio 0.19), so the rise gate is 1 dB and the click ratio 0.1. With Demucs stems, kicks come from the drums stem.
 - **Hats:** 8 to 12 kHz onsets with a minimum gap, used for sparkle and detail layers.
 - **Residual:** content outside the bass and kick bands: centroid, flux, flatness, energy. With stems available, use the "other" stem instead.
 
 ### 6.5 Beat, bar and phrase
 
-- **File mode:** offline tempo estimation constrained to a prior (default 150 to 170 BPM, centred on 160), then dynamic-programming beat tracking (Ellis 2007 style). Downbeats come from bar-level patterns: bass note changes, crashes, phrase-level energy changes.
+- **File mode** (`app/src/analysis/beat_tracker.*`): a kick onset function (low-band rise times click flux, weighted down where the click is weak against the low-mid flux, as in bass attacks); tempo from its autocorrelation with a harmonic comb and a prior of 120 to 190 BPM centred on 150 (the reference tracks run at 150, 152, 170 and 187.5 BPM); dynamic-programming beats (Ellis 2007 style); a constant-tempo grid by template matching over the whole track (the period and phase whose beats collect the most onset strength), refined by least squares. Downbeats come from kick breakdowns first: where the kick returns after a break of a bar or more (and, at half weight, where it stops), plus every isolated kick (kick-on-one sections). Bar-level novelty of band energies and bass salience decides only when a track has no breaks.
 - **Live mode:** a phase-locked loop on kick onsets. **[Likely]** This suits a control engineer's toolset: kick onsets feed the phase detector, and the loop filter gains become registry parameters. Lock state and confidence are exposed. Manual tap and nudge controls are always available.
-- **Phrase:** counted from the downbeat in groups of 8 or 16 bars, configurable. It resets on section changes.
+- **Phrase:** counted from the downbeat in groups of 8 or 16 bars, configurable (default 8), positioned by kick breaks of two bars or more. Resetting on section changes is not built yet.
 - **Prediction:** the PLL provides the next expected 16th times, so the engine can schedule ahead in live mode.
 
 ### 6.6 Section detection
 
-- **Breakdown:** no kick for N beats (default 4).
-- **Build:** kick absent or sparse, with high-band energy and spectral flatness rising (risers, noise sweeps).
-- **Drop:** **[Likely]** the kick returning after 8 or more bars without one is a reliable drop detector.
-- **Groove:** a stable kick and bass pattern.
+Built per bar of the beat grid (`app/src/analysis/sections.*`); a bar has a kick when most of its beats do, one with exactly half takes its nearest decisive neighbour's state, and a lone kick bar inside a breakdown is a blip.
+- **Intro and outro:** the bars without kicks before the first and after the last kick bar.
+- **Breakdown:** no kick for 2 bars or more. One kickless bar is a fill: real tracks are full of them, so the SPEC's first default of 4 beats was too short.
+- **Build:** the end of a breakdown where the high band (8 to 12 kHz) rises 6 dB or more above the breakdown's quietest bar. Spectral flatness is not used yet.
+- **Drop:** **[Likely]** the kick returning after 8 or more bars without one is a reliable drop detector; the 8 bars after it are labelled drop.
+- **Groove:** every other bar with kicks.
 - Outputs carry a label, a confidence and a timestamp. Scene automation (section 7.6) consumes them.
 
 ### 6.7 Confidence and fallback
@@ -668,6 +670,13 @@ Initial metric targets are placeholders, marked **[Guessing]**. Replace them wit
 | 2026-10-16 | In M1, kicks must lie within 35 ms of a beat of the manual grid | A synth bass attack's click passed the click-flux and low-rise tests; the grid is the M1 beat prior until M2's beat tracking |
 | 2026-10-16 | Bass tracker v0 ends a note at the next kick | The slot-3 note of K-B-B-B closes at the kick, whose own energy hides the drop; cost: long notes held under a kick are split |
 | 2026-10-16 | psyight_eval scores the tracker from the command line; the scoring panel remains M1 work | First real numbers before the panel; reproducible command for docs/results |
+| 2026-10-16 | M2 starts before the remaining M1 GUI items (detections in the bass roll, scoring panel, golden metrics, log panel), which are parked in docs/PROGRESS.txt | Owner decision |
+| 2026-10-16 | Tempo prior 120 to 190 BPM centred on 150 (was 150 to 170 centred on 160) | The reference tracks run at 150, 152, 170 and 187.5 BPM (owner confirmed Hagios); the range still excludes the half and double tempos |
+| 2026-10-16 | Constant-tempo grid by template matching over the whole track | Numbering beats from one origin, or by counting dynamic-programming beats, slipped in breakdowns (Hall of Purity: 170.26 against 170.0 BPM) |
+| 2026-10-16 | Downbeats and phrases from kick breakdowns, with novelty as the fallback | Rolling grooves repeat every beat; bar-level novelty put OculusDrift's downbeat one beat off, kick breaks get it right |
+| 2026-10-16 | A breakdown needs 2 kickless bars (SPEC 6.6 said 4 beats) | One-bar fills and missed kicks split every groove into short breakdowns |
+| 2026-10-16 | Kick gates loosened (rise 1 dB, click ratio 0.1) and kicks required in runs | Measured at grid beats against offbeats on the reference tracks; the synthetic-tuned gates found kicks on 7 to 33% of beats |
+| 2026-10-16 | Demucs v4 (htdemucs) stems through tools/python (torch 2.5.1 CUDA 12.4, demucs 4.0.1), aligned to the mix by cross-correlation before analysis | Owner approved the install; stems decoded by Demucs ran 47 ms ahead of the app's MP3 decoding |
 | 2026-10-15 | Labelling audition at 0.5x with pitch kept, using Signalsmith Stretch 1.4.0 and Signalsmith Linear 0.6.4 (MIT, header-only, vendored in `app/third_party`) | Owner chose it over writing WSOLA: much cleaner transients and sustained bass. Rubber Band (GPL) and SoundTouch (LGPL) are excluded by the licensing rule. Measured latency at 0.5x: 90 ms of input, compensated in the displayed playhead |
 
 Superseded during the conversation: an early suggestion to use JUCE for the C++ engine (replaced by the permissive stack) and an early "prototype in Python first" plan (replaced by the owner's choice of C++ from the start).
@@ -696,14 +705,14 @@ Superseded during the conversation: an early suggestion to use JUCE for the C++ 
 | A3 | ITU-R BT.1359 thresholds: about 45 ms sound-leads-picture detectability | [Likely] | Latency targets and offset helper |
 | A4 | Ofcom guidance of 3 flashes per second is a sensible event default | [Likely] | Flash limiter |
 | A5 | WS2812B draws about 20 mA per channel at full (about 60 mA per pixel at full white) | [Likely] | Power budget |
-| A6 | Demucs v4 code licence, weights licence and repository maintenance status | [Verify] | M2 and M4 teacher |
+| A6 | Demucs v4 code licence, weights licence and repository maintenance status. Checked 2026-10-16: code MIT; upstream archived 2025-01-01, maintained fork github.com/adefossez/demucs (important fixes only); weights licence not stated, so weights are never shipped | [Verify] weights | M2 and M4 teacher |
 | A7 | ONNX Runtime with DirectML gives a few ms per frame for the student on a laptop GPU | [Guessing] | M4 and M5 latency |
 | A8 | mir_eval defaults: onset ±50 ms; note offset ratio 0.2 with 50 ms minimum | [Likely] | Metric cross-check |
 | A9 | The kick returning after 8 or more bars is a reliable drop detector in dark psy | [Likely] | Section detection |
 | A10 | vcpkg ports exist for imgui (docking), implot, miniaudio, pffft, nlohmann-json, spdlog, doctest, rtmidi; ONNX Runtime DirectML may need NuGet or a manual package. The M1 set was verified on 2026-10-15 at baseline `b1b19307`: it builds and links with MSVC 19.44, and `ctest --preset windows-msvc-release` passes smoke tests for pffft, miniaudio and nlohmann-json. rtmidi and ONNX Runtime are not yet checked | [Certain] for the M1 set; [Verify] for rtmidi and ONNX Runtime | Build setup |
 | A11 | WASAPI loopback via miniaudio captures the laptop output reliably at 48 kHz | [Likely] | M5 |
 | A12 | Single-ended 5 V pixel data is reliable over only a few metres | [Likely] | Rig and node placement |
-| A13 | Kick click flux at least 0.2 × low-mid flux separates real kicks from bass attacks (synthetic: kicks 0.29 and up, bass attacks median 0.07). On OculusDrift 151 of 153 beats in the labelled region had a kick | [Likely] | Bass tracker kick mask |
+| A13 | A click to low-mid flux ratio separates real kicks from bass attacks. Synthetic: kicks 0.29 and up, bass attacks 0.03 to 0.07. Real kicks at grid beats: median 0.63 (OculusDrift), 0.68 (Phase Change), 0.19 (Hall of Purity, distorted kicks), so the gate is 0.1 | [Likely] | Kick detection, beat onset function |
 | A14 | The slide split bias of 20 ms (half the generator's 40 ms glide) suits real slides | [Guessing] | Slide onset timing |
 | A15 | On OculusDrift the tracker's bass onsets sit 7 ms (p5 to p95: 3 to 10 ms) before the 16ths of a grid aligned to the detected kicks: production timing or tracker bias on real attacks, undecided | [Verify] | Onset bias parameter |
 

@@ -18,6 +18,7 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - vcpkg manifest mode, triplet `x64-windows-static-md`, baseline pinned to `b1b19307` (the snapshot bundled with VS). CMakeLists.txt sets `VCPKG_VISUAL_STUDIO_PATH` from the shell's `VSINSTALLDIR` (trailing backslash stripped) so dependencies and app share one toolset.
 - Commands (from `app/`): `cmake --preset windows-msvc`, `cmake --build --preset windows-msvc-release`, `ctest --preset windows-msvc-release`. Run from the repo root: `app\build\windows-msvc\release\psyight.exe data\OculusDrift.mp3`.
 - Score the tracker on a labelled track (repo root): `app\build\windows-msvc\release\psyight_eval.exe data\OculusDrift.mp3 [labels.json] [--detail]`. Local only, never in CI.
+- Unlabelled analysis report: `appuild\windows-msvcelease\psyight_analyse.exe [--stems] [--kicks] [--tempo] <audio...>`. Stems: `tools\python\.venv\Scripts\python tools\python\separate.py <audio...>` (setup in tools/python/README.md).
 - Tracker tuning tools (skipped by default; from `app/`): `build\windows-msvc\release\psyight_tests.exe -tc="bass tracker: table" --no-skip`; also "bass tracker: errors", "bass tracker: sweep", "bass tracker: click ratio".
 
 ## Gotchas learned the hard way
@@ -33,6 +34,8 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - Ask before taking focus for a scripted GUI test when the owner is in another app (they approved a ~20 s test on 2026-10-16).
 - Bash heredocs or `python -c` with apostrophes or `\n` escapes break in this tool: write edit scripts to the scratchpad and run them with `python -I <file>`, and assert each replacement matched (two silent misses cost time here).
 - `std::getenv` triggers C4996, an error under /WX. Don't hide build output with `Select-Object -Skip`: errors scrolled away and a stale binary ran.
+- The C: drive is 96% full (about 35 GB free): stems take about 0.4 GB per 7-minute track.
+- Demucs decodes MP3 differently from miniaudio: its stems ran 47 ms ahead on OculusDrift. Always align stems to the mix (analyse_track does).
 - Low bass needs analysis windows of at least one period (24 ms at E1). Shorter ones see the waveform: per-hop energy and 1024-sample flux swing 30 dB within a period and fire false onsets.
 - clang-format: `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\Llvm\x64\bin\clang-format.exe`. Run `-i`, then `--dry-run --Werror` on app/src and app/tests before committing.
 
@@ -49,7 +52,7 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - **Bass tracker v0** (`src/analysis/bass_tracker.*`, SPEC 6.3 updated): kicks (click flux, broadband ratio, low rise, near a grid beat), onsets (per-bin magnitudes averaged over one period, centred difference), offsets (k x peak with window lag removed, next onset, next kick), pitch (front-end salience, central half), slides (salience changepoint, 20 ms bias), gate ratio, slot index, long notes, velocity, decay tau, confidence. Every threshold is a registry parameter (`bass.*`, `declare_bass_tracker_params`). Tracker takes the mono audio plus the front-end features and a Grid.
 - Synthetic set (`tests/synthetic_set.*`, 13 cases) with exact labels: onset F 1.000 on every case, gate MAE 0.100 pooled (SPEC target 0.10 just met), pitch >= 0.90 except 28 ms notes (physics; low confidence). Full table in `docs/results/M1.md`.
 - `psyight_eval` CLI and the **M1 baseline** (`docs/results/M1.md`): OculusDrift region F 0.994 (452/452 matched, 5 false positives), pitch 0.989, gate MAE 0.037, offsets -6.8 ms median. Before the grid fix it scored F 0.858: the gap was the grid offset, not tracker scatter.
-- Tests: 110 doctest cases, 4183 assertions, Release.
+- Tests: 122 doctest cases, 4756 assertions, Release.
 
 ## Parked M1 to-dos (owner, 2026-10-16: "keep as a note for later")
 - Detected notes in the bass roll (second colour, opacity is confidence; kicks as markers), the inspector showing every tracker field, and a "pre-fill labels from detections" button. Run the tracker in `Session::load` after the front end.
@@ -58,15 +61,22 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - Log panel (SPEC 9.4 lists it for M1).
 - A "shift all labels by N ms" action in the inspector (the OculusDrift grid fix was a script).
 
-## Next steps: M2, owner-approved 2026-10-16 (unlabelled tracks first; labels later)
-1. **Beat, downbeat and phrase tracking** (file mode, SPEC 6.5): tempo with a prior, dynamic-programming beats, downbeat and phrase phase from bar-level novelty, and a constant-tempo Grid fit. Ground truth: the synthetic set and the OculusDrift grid (150 BPM, downbeat 16.042 s).
-2. **`psyight_analyse`**: unlabelled report for any track (tempo, grid, kick coverage, bass note statistics, pitch histogram), run on Hagios, Hall of Purity and Phase Change.
-3. Kick (standalone, with confidence), hats and residual detectors (SPEC 6.4); bass aggregates per bar and phrase (SPEC 6.2).
-4. Section detection (SPEC 6.6): breakdown, build, drop, groove (A9).
-5. GUI: automatic grid option, beats, downbeats, phrases and sections on the time plots.
-6. Offline Demucs stems (`tools/python/`, ask before installing; A6), loaded as an optional analysis source.
-7. With owner labels later: the M2 exit table for all four tracks, DSP against Demucs-assisted.
-- Open questions in SPEC 18: A13 (kick click ratio on real kicks), A14 (slide bias), A15 (detected onsets 7 ms early on real attacks?). The OculusDrift minute is the evaluation set: don't tune on it.
+## M2 progress (owner-approved 2026-10-16: unlabelled tracks first, labels later)
+Done (details in docs/results/M2.md and SPEC 6.4 to 6.6, decision log 2026-10-16):
+- Beat tracker (`src/analysis/beat_tracker.*`): kick onset function weighted by click / low-mid ratio, tempo prior 120 to 190 BPM centred 150, DP beats, constant-tempo grid by template matching, downbeats and phrases from kick breaks (novelty fallback), kick presence per beat. OculusDrift: matches the labelled grid (0.1 ms, same bar phase).
+- Sections (`src/analysis/sections.*`): intro, groove, breakdown (2+ bars), build (high band +6 dB), drop (8 bars after 8+ bar breakdown), outro.
+- Kick detection loosened on real-track evidence (rise 1 dB, click ratio 0.1), kicks in runs.
+- Demucs stems: `tools/python` venv (torch 2.5.1 cu124, demucs 4.0.1; README), `separate.py` writes `data/stems/htdemucs/<track>/`; app pipeline `src/analysis/track_analysis.*` (mix or stems; stems aligned by cross-correlation, `src/analysis/align.*`). OculusDrift labelled minute: stems F 0.999 / pitch 1.000 against mix 0.994 / 0.989.
+- Tools: `psyight_analyse [--stems] [--kicks] [--tempo]` (unlabelled report, kick timeline, per-minute tempo), `psyight_eval [--stems] [--detail]`.
+- Owner facts: Hagios is a single track at about 187 BPM (long beatless intro and outro); Hall of Purity is A# minor and really that low (A#0 is plausible).
+
+Next, in order:
+1. Owner: one downbeat by ear for Phase Change, Hall of Purity and Hagios (set the grid's first downbeat in the app; it saves to the labels file). Then compare with `psyight_analyse` (it reads the labels' grid).
+2. Hats and residual detectors (SPEC 6.4); bass aggregates per bar and phrase (SPEC 6.2).
+3. GUI: run `analyse_track` in `Session::load` (mix, or stems when present); automatic grid option; beats, downbeats, phrases, sections and detected notes on the time plots and bass roll. Overlaps the parked M1 item "detected notes in the bass roll".
+4. Phrase reset on section changes (SPEC 6.5); build detection with spectral flatness (SPEC 6.6).
+5. With owner labels later: the M2 exit table for all four tracks, DSP against Demucs-assisted.
+- Open: Hall of Purity's drums stem finds fewer kicks (40%) than its mix (61%); Hagios tempo 187.65 (mix) against 189.13 (stems), weak in both.
 
 ## Known issues
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
