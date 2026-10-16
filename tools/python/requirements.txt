@@ -1,0 +1,11 @@
+# Offline tooling only; nothing here is linked into the app. Install into tools/python/.venv:
+#   python -m venv tools/python/.venv
+#   tools/python/.venv/Scripts/python -m pip install -r tools/python/requirements.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cu124
+# CUDA 12.4 wheels run on drivers reporting CUDA 12.4 or later; without a GPU, drop the
+# "+cu124" suffixes for the CPU builds (much slower separation).
+torch==2.5.1+cu124
+torchaudio==2.5.1+cu124  # demucs 4.0.1 saves through torchaudio I/O, removed in later releases.
+demucs==4.0.1            # MIT code; repository archived 2025-01-01, weights licence unstated (SPEC A6).
+soundfile==0.14.0
+numpy==2.2.6
