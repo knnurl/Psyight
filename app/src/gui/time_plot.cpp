@@ -14,7 +14,7 @@ namespace {
 constexpr size_t kMaxGridLines = 400;    // Finer levels are dropped beyond this.
 constexpr float kClickSlopPixels = 3.0f; // Mouse travel below this is a click, not a pan.
 constexpr float kHandleGrabPixels = 6.0f;
-const ImVec4 kLoopShade(0.95f, 0.75f, 0.2f, 0.10f);
+const ImVec4 kLoopShade(0.95f, 0.75f, 0.2f, 0.05f); // Faint on purpose: the edges mark the loop.
 const ImVec4 kLoopEdge(0.95f, 0.75f, 0.2f, 1.0f); // As in the transport overview.
 
 } // namespace
