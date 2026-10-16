@@ -16,6 +16,8 @@ constexpr int kFeatureBands = 24; // Log-spectrogram rows grouped for the novelt
 constexpr int kNoveltyBars = 4;   // Bars compared on each side of a candidate phrase start.
 constexpr double kNoveltyClipQuantile = 0.95;
 constexpr int kMinPhraseBreakBars = 2;
+constexpr double kStopVoteWeight = 0.5; // Of a drop's vote, for the start of a breakdown.
+constexpr double kIsolatedKickVote = 1.0;
 constexpr double kOtherPeakFraction = 0.05; // Tempo peaks within 5% are the same peak.
 // Grid search: period within +-1% of the autocorrelation peak in 0.02% steps, phase in half
 // frames; then 0.002% and 0.1 frame steps around the best.
@@ -95,15 +97,24 @@ void best_phase(const std::vector<double> &novelty, int offset, int period, int 
     confidence = mean[phase] > 0.0 ? (mean[phase] - second) / mean[phase] : 0.0;
 }
 
-// Phase votes from breaks in a presence sequence (kick present per beat, or per bar): a break of
-// at least min_gap absent units, with presence on both sides, votes for the phase of its first
-// absent unit and of the first present unit after it, weighted by the break's length (a long
-// breakdown is a surer structural boundary than a short one). Returns the number of breaks.
+// Phase votes from a presence sequence (kick present per beat, or per bar), returning the number
+// of cues. A break of at least min_gap absent units, with presence on both sides, votes for the
+// phase of the first present unit after it (the drop, weight: the break's length, since a long
+// breakdown is a surer boundary) and, at half that weight, of its first absent unit (breakdowns
+// often start after a fill or a stray kick). Each isolated present unit (a kick with none on the
+// beats either side, as in a kick-on-one section) adds isolated_weight to its own phase.
 int break_votes(const std::vector<bool> &present, int offset, int period, int min_gap,
-                std::vector<double> &votes) {
+                double isolated_weight, std::vector<double> &votes) {
     votes.assign(period, 0.0);
+    const auto phase_of = [&](int unit) { return ((unit + offset) % period + period) % period; };
     int breaks = 0;
     const int n = static_cast<int>(present.size());
+    for (int k = 0; k < n && isolated_weight > 0.0; ++k) {
+        if (present[k] && (k == 0 || !present[k - 1]) && (k + 1 == n || !present[k + 1])) {
+            votes[phase_of(k)] += isolated_weight;
+            ++breaks;
+        }
+    }
     int i = 0;
     while (i < n && !present[i]) {
         ++i; // An intro without kicks has no start boundary to trust.
@@ -118,9 +129,8 @@ int break_votes(const std::vector<bool> &present, int offset, int period, int mi
         }
         const int gap = i - gap_begin;
         if (i < n && gap >= min_gap) {
-            for (const int unit : {gap_begin, i}) {
-                votes[((unit + offset) % period + period) % period] += gap;
-            }
+            votes[phase_of(i)] += gap;
+            votes[phase_of(gap_begin)] += kStopVoteWeight * gap;
             ++breaks;
         }
     }
@@ -147,8 +157,9 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     const int sub = band_index(f, "sub");
     const int bass = band_index(f, "bass");
     const int click = band_index(f, "click");
-    if (sub < 0 || bass < 0 || click < 0) {
-        return Error{"beat tracker needs the front-end bands sub, bass and click"};
+    const int lowmid = band_index(f, "low mid");
+    if (sub < 0 || bass < 0 || click < 0 || lowmid < 0) {
+        return Error{"beat tracker needs the front-end bands sub, bass, low mid and click"};
     }
     if (!(p.min_bpm > 0.0 && p.min_bpm < p.max_bpm) || p.bars_per_phrase < 1.0) {
         return Error{"invalid beat tracker parameters"};
@@ -181,7 +192,12 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     std::vector<float> &odf = result.onset_function;
     odf.resize(frames);
     for (int i = 0; i < frames; ++i) {
-        odf[i] = std::sqrt(rise_n[i] * click_n[i]);
+        // A kick's click is broadband; a bass attack's brightness falls off above its filter.
+        // Weighting by the click to low-mid flux ratio keeps a rolling bass through kickless
+        // passages from carrying the grid onto its own 16ths.
+        const double ratio = f.bands[click].flux[i] / std::max(f.bands[lowmid].flux[i], 1e-6f);
+        const double kick_like = std::clamp(ratio / p.click_ratio_full, 0.0, 1.0);
+        odf[i] = static_cast<float>(std::sqrt(rise_n[i] * click_n[i]) * kick_like);
     }
 
     // 2. Tempo.
@@ -270,7 +286,12 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     // breakdowns only add noise. (Numbering dynamic-programming beats instead slips a beat
     // wherever they wander in a breakdown, which skews the whole fit.) Then least squares on the
     // strong beats near that grid refines it; with an accurate grid, rounding indices is safe.
-    const std::vector<float> spread = box_mean(odf, 1); // Tolerates a frame of jitter.
+    // Squared, so the strongest onsets (kicks) carry the grid: a rolling bass through long
+    // kickless passages would otherwise pull the phase onto its own 16ths.
+    std::vector<float> spread = box_mean(odf, 1); // Tolerates a frame of jitter.
+    for (float &v : spread) {
+        v *= v;
+    }
     const auto grid_strength = [&](double period, double phase) {
         double sum = 0.0;
         int count = 0;
@@ -411,11 +432,13 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     for (const float strength : beat_strength) {
         kick_present.push_back(strength >= presence_threshold);
     }
+    result.first_kick_beat_s = origin_s + first_beat * period_s;
+    result.beat_has_kick = kick_present;
     int downbeat_phase = 0;
     std::vector<double> votes;
-    result.downbeat_breaks =
-        break_votes(kick_present, first_beat, kBeatsPerBar, kBeatsPerBar, votes);
-    if (result.downbeat_breaks > 0) {
+    result.downbeat_cues =
+        break_votes(kick_present, first_beat, kBeatsPerBar, kBeatsPerBar, kIsolatedKickVote, votes);
+    if (result.downbeat_cues > 0) {
         decide(votes, downbeat_phase, result.downbeat_confidence);
     } else {
         best_phase(beat_novelty, first_beat, kBeatsPerBar, downbeat_phase,
@@ -456,8 +479,8 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
         bar_kick.push_back(2 * with_kick > kBeatsPerBar);
     }
     if (bars >= 2 * phrase) {
-        result.phrase_breaks = break_votes(bar_kick, 0, phrase, kMinPhraseBreakBars, votes);
-        if (result.phrase_breaks > 0) {
+        result.phrase_cues = break_votes(bar_kick, 0, phrase, kMinPhraseBreakBars, 0.0, votes);
+        if (result.phrase_cues > 0) {
             decide(votes, result.phrase_bar_offset, result.phrase_confidence);
         } else {
             best_phase(bar_novelty, 0, phrase, result.phrase_bar_offset, result.phrase_confidence);
@@ -488,6 +511,7 @@ const ParamEntry kParamTable[] = {
     {&BeatTrackerParams::prior_bpm, "beat.prior_bpm", "Expected tempo", "BPM", 40.0, 300.0, ParamTier::tune, "Centre of the tempo prior."},
     {&BeatTrackerParams::prior_width_octaves, "beat.prior_width_octaves", "Tempo prior width", "octaves", 0.05, 4.0, ParamTier::engineer, "Standard deviation of the log2 tempo prior."},
     {&BeatTrackerParams::tightness, "beat.tightness", "Beat tightness", "", 0.0, 1000.0, ParamTier::engineer, "Cost on deviations from the tempo between beats (Ellis 2007)."},
+    {&BeatTrackerParams::click_ratio_full, "beat.click_ratio_full", "Kick click ratio", "", 0.01, 10.0, ParamTier::engineer, "Click to low-mid flux ratio at which an onset counts fully as a kick; below it the onset is weighted down (bass attacks: 0.03 to 0.07)."},
     {&BeatTrackerParams::envelope_window_ms, "beat.envelope_window_ms", "Low-band window", "ms", 5.0, 100.0, ParamTier::engineer, "The low band's level is averaged over this before its rise is measured."},
     {&BeatTrackerParams::fit_strength_quantile, "beat.fit_strength_quantile", "Grid fit strength", "", 0.0, 0.95, ParamTier::engineer, "Beats stronger than this quantile anchor the constant-tempo grid."},
     {&BeatTrackerParams::fit_outlier_ms, "beat.fit_outlier_ms", "Grid fit outlier", "ms", 1.0, 200.0, ParamTier::engineer, "Beats further than this from the fitted grid are dropped from the fit."},

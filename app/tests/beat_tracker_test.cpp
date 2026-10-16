@@ -127,7 +127,7 @@ TEST_CASE("beat tracker: kick breakdowns give the downbeat when the bass has no 
             (samples_to_seconds(beats.value().grid.first_downbeat, kSampleRateHz) - downbeat_s) /
             bar_s;
         CHECK(std::abs(bars - std::round(bars)) * bar_s <= 0.005);
-        CHECK(beats.value().downbeat_breaks == 2);
+        CHECK(beats.value().downbeat_cues == 2);
         CHECK(beats.value().downbeat_confidence > 0.5);
     }
 }

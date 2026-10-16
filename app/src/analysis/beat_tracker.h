@@ -5,6 +5,7 @@
 //    click band's flux, each normalised to the track. A kick has both; a bass onset has little
 //    click and a hat has no low rise. The level is averaged over one bass period first (as in
 //    the bass tracker) and the rise is a centred difference, so it peaks at the kick.
+//    Onsets whose click is weak against their low-mid flux (bass attacks) are weighted down.
 // 2. Tempo: autocorrelation of the onset function with a harmonic comb (1, 2 and 4 beats),
 //    weighted by a log-Gaussian prior and limited to min_bpm..max_bpm, which excludes the half and
 //    double tempos of psytrance.
@@ -13,9 +14,10 @@
 // 4. Grid: the constant-tempo period and phase whose beats collect the most onset strength over
 //    the whole track (grid search), refined by least squares on the strong beats near it. DJ
 //    mixes with tempo changes need the per-beat times instead (M5).
-// 5. Downbeat and phrase: breakdowns start and end on bar lines, so where the kick stops and
-//    returns (breaks of a bar or more, weighted by length) votes for the downbeat, and breaks of
-//    two bars or more for the phrase position. Without breaks, the beat (and bar) positions where
+// 5. Downbeat and phrase: breakdowns start and end on bar lines, so where the kick returns (and,
+//    at half weight, stops) after a break of a bar or more votes for the downbeat, as does every
+//    isolated kick (kick-on-one sections); breaks of two bars or more vote for the phrase
+//    position. Without breaks, the beat (and bar) positions where
 //    the music changes most between the preceding and following bars decide (log-spectrogram
 //    band energies and bass pitch salience, each group scaled over the track). Phrases are
 //    counted in groups of bars_per_phrase.
@@ -39,6 +41,7 @@ struct BeatTrackerParams {
     double prior_bpm = 150.0;
     double prior_width_octaves = 0.5;   // Standard deviation of the log2 tempo prior.
     double tightness = 100.0;           // Cost weight on squared log-period deviation (Ellis 2007).
+    double click_ratio_full = 0.2;      // Click / low-mid flux ratio counting fully as a kick.
     double envelope_window_ms = 25.0;   // Low-band level averaged over about one bass period.
     double fit_strength_quantile = 0.5; // Beats stronger than this quantile anchor the grid fit.
     double fit_outlier_ms = 30.0;       // Beats further than this from the grid are not fitted.
@@ -53,10 +56,14 @@ struct BeatTrackResult {
     std::vector<double> beat_times_s; // Dynamic-programming beats.
     Grid grid; // Constant tempo; first_downbeat is the first one at 0 or later.
     double downbeat_confidence = 0.0; // 0 to 1: margin of the best beat position over the next.
-    int downbeat_breaks = 0;          // Kick breaks that voted; 0: decided by novelty.
+    int downbeat_cues = 0;            // Kick breaks and isolated kicks; 0: decided by novelty.
     int phrase_bar_offset = 0;        // Bars from grid.first_downbeat to the first phrase start.
     double phrase_confidence = 0.0;
-    int phrase_breaks = 0;
+    int phrase_cues = 0;
+    // Kick presence on every grid beat from first_kick_beat_s on (the grid's first beat at 0 s or
+    // later), one entry per beat; sections are derived from it.
+    double first_kick_beat_s = 0.0;
+    std::vector<bool> beat_has_kick;
     std::vector<float> onset_function; // Per front-end frame, normalised.
 };
 
