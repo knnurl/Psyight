@@ -10,7 +10,7 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 ## Owner's labelling state (2026-10-16)
 - `data/OculusDrift.mp3.labels.json`: 62 bass notes, grid **150 BPM** (not 160), first downbeat 16.017 s, one region 93.217 to 154.44 s, not yet marked complete.
 - The bassline there is E1 (MIDI 28), rolling K-B-B-B at gate about 1.0 (100 ms slots at 150 BPM).
-- The owner finds placing notes one by one too slow: see next step 1.
+- The owner found placing notes one by one too slow; select, copy, paste and duplicate now exist (see Done), so one labelled bar can fill the region.
 
 ## Toolchain (this machine)
 - Use the x64 **VS 2022 Build Tools** shell (MSVC 19.44, v143), inside the same PowerShell call as the build:
@@ -27,6 +27,8 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - VS Code's CMake Tools auto-reconfigures `app/build` when CMakeLists.txt is saved; concurrent CLI configures corrupt the cache. Wait a few seconds after editing CMakeLists.txt.
 - Keep scratch builds at short paths (MAX_PATH: about 120-character prefixes break cl with C1083).
 - PowerShell 5.1 mangles stdin piped to native tools; use the Bash tool (Git Bash) for that. `git credential fill` works from Bash.
+- Scripted key input: GLFW maps keys by scancode. `keybd_event` with scancode 0 turns arrows and Delete into numpad keys, and the extended flag with scancode 0 gives an unknown key (one such run even left the app in a state where a later key deleted notes). Send the real scancode with the extended flag: Up 0x48, Down 0x50, Delete 0x53. Letters with Ctrl work with scancode 0. In PowerShell, don't name helpers Move, Drag or Click: `Move` is an alias of Move-Item and aliases win.
+- Verify GUI tests through the saved labels file (Ctrl+S, then read the JSON), not only screenshots.
 - clang-format: `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\Llvm\x64\bin\clang-format.exe`. Run `-i`, then `--dry-run --Werror` on app/src and app/tests before committing.
 
 ## Done so far (M1)
@@ -38,20 +40,15 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - Scoring (no panel yet): onset P/R/F with maximum, closest-pairing matching; offset errors and the mir_eval offset rule; pitch within 50 cents with octave errors; gate-ratio MAE; per complete region with edge-aware matching. Matches mir_eval 0.8.2 on 3576 cases.
 - Synthetic generator (SPEC 6.11) with exact labels, six patterns, slides, ducking, hats, noise; checked by mutation testing.
 - GUI: transport panel; analysis view (spectrogram, band energy, flux; click to seek; loop shown; follow playhead, pan, zoom); bass roll (pitch background, create/move/resize/delete, snap with Alt for free, Ctrl+click seek, middle-drag pan, middle double-click fit); note inspector (all fields, typed pitch F1/29, regions); default layout v2 with View > Reset layout.
-- Tests: 88 doctest cases, about 1500 assertions, Release and Debug.
+- Multi-note editing in the bass roll: drag a box on empty space (Shift adds), Shift+click toggles, Ctrl+A selects the notes in view, Escape clears. Drag, Up/Down (Shift: octave) and Delete act on the whole selection. Ctrl+C, Ctrl+V (at the mouse, else the playhead), Ctrl+D or Duplicate with "Repeat every" (Auto, 1/16 to 4 bars) and a count, and "Fill to region end". Rules in `src/io/note_pattern.h`: anchor at the slot nearest the first onset (off-grid offsets kept), Auto period = slots covered by onsets rounded up to whole beats (a K-B-B-B bar repeats per bar), placing replaces the notes in the covered slots (half-slot margins). Each operation is one undo step (`LabelEditor::insert_notes`, `move_notes`, `delete_notes`); undo, redo and track loads clear the selection. Verified in the app on a scratch copy, through the saved labels file.
+- Tests: 99 doctest cases, 1591 assertions, Release and Debug.
 
 ## Next steps, in order
-1. **Select and duplicate in the bass roll** (owner request, top priority: labelling note by note is too slow).
-   - Box select: Shift+drag on empty space (a left drag on empty space is free, since panning moved to the middle button). Ctrl+A selects the notes in view.
-   - Ctrl+C / Ctrl+V: paste at the playhead (or mouse), snapped to the 16th grid, keeping relative timing and pitch.
-   - Ctrl+D or a "Duplicate" button: repeat the selected interval right after itself, with a repeat count (for example one bar repeated to fill the region).
-   - Move, delete and transpose (Up/Down) a multi-selection.
-   - Each operation is one undo step in `LabelEditor` (add batch calls such as add_notes, delete_notes, move_notes). Unit-test the editor parts.
-2. **Bass tracker v0** (SPEC 6.3): kick mask from the click band, bass envelope (80 to 400 Hz with sub), onsets from bass-band flux, offsets at k x peak (k = 0.25) outside the kick mask, pitch from the existing salience, gate ratio, decay tau, slides, long notes, velocity, confidence. Every threshold in the parameter registry. Tune and test on the synthetic generator first.
-3. **Detected notes in the bass roll** (second colour, opacity is confidence) and a "pre-fill labels from detections" button for faster labelling.
-4. **Scoring panel**: per complete region and total; onset P/R/F, offset error median and p90, pitch accuracy, octave errors, gate-ratio MAE; jump to the worst errors.
-5. **Golden-metric regression test** on the synthetic set (a metric that worsens fails), and a Python cross-check `tools/python/eval_mir.py` using the same closest-pairing rule.
-6. Baseline: owner marks the OculusDrift region complete; record the scored result in `docs/results/M1.md` with the command that reproduces it.
+1. **Bass tracker v0** (SPEC 6.3): kick mask from the click band, bass envelope (80 to 400 Hz with sub), onsets from bass-band flux, offsets at k x peak (k = 0.25) outside the kick mask, pitch from the existing salience, gate ratio, decay tau, slides, long notes, velocity, confidence. Every threshold in the parameter registry. Tune and test on the synthetic generator first.
+2. **Detected notes in the bass roll** (second colour, opacity is confidence) and a "pre-fill labels from detections" button for faster labelling.
+3. **Scoring panel**: per complete region and total; onset P/R/F, offset error median and p90, pitch accuracy, octave errors, gate-ratio MAE; jump to the worst errors.
+4. **Golden-metric regression test** on the synthetic set (a metric that worsens fails), and a Python cross-check `tools/python/eval_mir.py` using the same closest-pairing rule.
+5. Baseline: owner labels the region (one bar, then Fill to region end, then fix the deviations), marks the OculusDrift region complete; record the scored result in `docs/results/M1.md` with the command that reproduces it.
 
 ## Known issues
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
