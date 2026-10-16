@@ -124,6 +124,16 @@ void ShowThread::run() {
                 samples_to_seconds(position_(), config->sample_rate_hz) + config->latency_offset_s;
             auto frame = std::make_shared<ShowFrame>(renderer.render(*config, t_s));
             frame->late_frames = late_frames;
+            if (const std::shared_ptr<Recorder> recorder = recorder_.load()) {
+                auto record = std::make_shared<RecordedFrame>();
+                record->t_s = frame->t_s;
+                record->index = frame->index;
+                record->config_version = config->version;
+                record->flags = static_cast<std::uint8_t>((config->blackout ? kFrameBlackout : 0) |
+                                                          (config->hold ? kFrameHold : 0));
+                record->rgb = frame->node_rgb;
+                recorder->push_frame(std::move(record));
+            }
             frame_.store(std::move(frame));
         }
         next += period;

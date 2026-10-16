@@ -17,6 +17,7 @@
 #include "engine/rig.h"
 #include "engine/scene.h"
 #include "output/patch.h"
+#include "output/recorder.h"
 #include "output/sender.h"
 #include "output/udp_socket.h"
 #include "output/virtual_node.h"
@@ -101,6 +102,8 @@ class ShowThread {
 
     void set_config(std::shared_ptr<const ShowConfig> config) { config_.store(std::move(config)); }
     std::shared_ptr<const ShowFrame> latest() const { return frame_.load(); }
+    // Frames go to the recorder too while one is set (null stops).
+    void set_recorder(std::shared_ptr<Recorder> recorder) { recorder_.store(std::move(recorder)); }
     double rate_hz() const { return rate_hz_; }
 
   private:
@@ -110,6 +113,7 @@ class ShowThread {
     double rate_hz_;
     std::atomic<std::shared_ptr<const ShowConfig>> config_;
     std::atomic<std::shared_ptr<const ShowFrame>> frame_;
+    std::atomic<std::shared_ptr<Recorder>> recorder_;
     std::atomic<bool> stop_{false};
     std::thread thread_;
 };

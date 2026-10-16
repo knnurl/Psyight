@@ -36,7 +36,8 @@ find_path(MINIAUDIO_INCLUDE_DIR miniaudio.h REQUIRED)
 add_library(psyight_options INTERFACE)
 target_compile_options(psyight_options INTERFACE /W4 /permissive- /utf-8 /Zc:__cplusplus
                                                  /fp:precise)
-target_compile_definitions(psyight_options INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_definitions(psyight_options INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN
+                                                     PSYIGHT_VERSION="${PROJECT_VERSION}")
 
 # miniaudio is a single-header library: its implementation is compiled once here, as third-party
 # code outside the warning policy.
@@ -67,7 +68,8 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/engine/scene.cpp src/engine/limiters.cpp
                                src/engine/automation.cpp src/engine/modulation.cpp
                                src/engine/effect_spec.cpp
-                               src/io/text_file.cpp
+                               src/io/text_file.cpp src/io/session_record.cpp
+                               src/output/recorder.cpp
                                src/io/project.cpp
                                src/output/patch.cpp src/output/packets.cpp
                                src/output/sender.cpp src/output/virtual_node.cpp
@@ -102,6 +104,10 @@ target_link_libraries(psyight_analyse PRIVATE psyight_options psyight_lib)
 add_executable(psyight_show_check src/show_check_main.cpp)
 target_link_libraries(psyight_show_check PRIVATE psyight_options psyight_lib)
 
+# Replays a recorded session and checks it reproduces byte for byte.
+add_executable(psyight_replay src/replay_main.cpp)
+target_link_libraries(psyight_replay PRIVATE psyight_options psyight_lib)
+
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp tests/core_test.cpp
                              tests/audio_test.cpp tests/front_end_test.cpp
@@ -115,7 +121,8 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/engine_test.cpp tests/limiters_test.cpp
                              tests/output_test.cpp tests/show_test.cpp
                              tests/automation_test.cpp tests/project_test.cpp
-                             tests/preflight_test.cpp tests/modulation_test.cpp)
+                             tests/preflight_test.cpp tests/modulation_test.cpp
+                             tests/recorder_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)

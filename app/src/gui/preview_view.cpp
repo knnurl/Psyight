@@ -1,7 +1,11 @@
 #include "gui/preview_view.h"
 
+#include "core/paths.h"
 #include "engine/effect_spec.h"
 #include "gui/tier.h"
+#include "io/session_record.h"
+
+#include <ctime>
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -58,6 +62,63 @@ int PreviewView::ambient_scene() const {
     return 0;
 }
 
+void PreviewView::start_recording() {
+    if (!session_.has_track() || session_.track().track_analysis == nullptr) {
+        record_status_ = "Recording needs a track with an analysis.";
+        return;
+    }
+    sync_config(); // So the configuration recorded first is the one being shown.
+    const TrackAnalysis &analysis = *session_.track().track_analysis;
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+    localtime_s(&local, &now);
+    char stamp[32];
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d_%H-%M-%S", &local);
+    SessionMeta meta;
+    meta.app_version = PSYIGHT_VERSION;
+    meta.track = session_.track().path;
+    meta.source = analysis.source;
+    meta.analysis_grid = analysis.grid;
+    meta.pixels = static_cast<int>(config_.rig.pixels.size());
+    meta.frame_rate_hz = show_.rate_hz();
+    Result<std::unique_ptr<Recorder>> started =
+        Recorder::start(std::filesystem::path("recordings") / stamp, meta, events_jsonl(analysis));
+    if (!started) {
+        record_status_ = started.error().message;
+        return;
+    }
+    recorder_ = std::move(started.value());
+    record_status_.clear();
+    record_params();
+    show_.set_recorder(recorder_);
+}
+
+void PreviewView::stop_recording(const std::string &why) {
+    if (recorder_ == nullptr) {
+        return;
+    }
+    show_.set_recorder(nullptr);
+    record_status_ = why + " " + path_to_utf8(recorder_->folder()) + ": " +
+                     std::to_string(recorder_->frames_written()) + " frames, " +
+                     std::to_string(recorder_->dropped()) + " dropped.";
+    recorder_.reset(); // Writes what is queued.
+}
+
+void PreviewView::record_params() {
+    if (recorder_ == nullptr) {
+        return;
+    }
+    RuntimeState runtime;
+    runtime.manual_scene = config_.manual_scene;
+    runtime.blackout = config_.blackout;
+    runtime.hold = config_.hold;
+    runtime.grid = config_.grid;
+    Result<std::string> line = params_line(config_.version, project_.project(), runtime);
+    if (line) {
+        recorder_->push_params(std::make_shared<const std::string>(std::move(line.value())));
+    }
+}
+
 void PreviewView::draw_top_bar() {
     struct Step {
         Ladder step;
@@ -94,6 +155,30 @@ void PreviewView::draw_top_bar() {
     ImGui::SetItemTooltip("Depth of control (SPEC 9.1): Operate shows scenes and master "
                           "controls, Tune adds scene, layer and output settings, Engineer adds "
                           "everything else, including the flash limiter switch and the rig.");
+    ImGui::SameLine();
+    if (recorder_ == nullptr) {
+        if (ImGui::Button("Record")) {
+            start_recording();
+        }
+        ImGui::SetItemTooltip("Record the show to recordings/ (frames, settings, detections). "
+                              "psyight_replay checks a recording replays identically.");
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.15f, 0.1f, 1.0f));
+        if (ImGui::Button("Stop recording")) {
+            stop_recording("Recorded");
+        }
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::Text("REC %lld frames%s", static_cast<long long>(recorder_->frames_written()),
+                    recorder_->dropped() > 0 ? ", some dropped" : "");
+        if (!recorder_->error().empty()) {
+            stop_recording(recorder_->error());
+        }
+    }
+    if (!record_status_.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", record_status_.c_str());
+    }
     if (!project_.project().limiter.flash_limiter) { // Persistent, at every tier (SPEC 7.7).
         ImGui::SameLine();
         ImGui::TextColored(kWarning, "FLASH LIMITER OFF");
@@ -142,6 +227,9 @@ void PreviewView::sync_config() {
     if (!dirty_) {
         return;
     }
+    if (recorder_ != nullptr && analysis != config_.analysis) {
+        stop_recording("Stopped (the track or its analysis changed):");
+    }
     config_.analysis = std::move(analysis);
     config_.grid = grid;
     config_.sample_rate_hz = sample_rate_hz;
@@ -161,6 +249,7 @@ void PreviewView::sync_config() {
     config_.version = ++version_;
     show_.set_config(std::make_shared<const ShowConfig>(config_));
     dirty_ = false;
+    record_params();
 }
 
 void PreviewView::draw() {

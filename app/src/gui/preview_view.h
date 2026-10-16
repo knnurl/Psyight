@@ -8,7 +8,9 @@
 // It also owns the top bar's show controls (SPEC 9.1 and 9.3): the state ladder (Preflight and
 // Preview keep the network off, Ambient sends the ambient scene only, React sends with scenes
 // held by hand, Show runs the section automation) and Blackout (B) and Hold (H), fixed at the
-// right and acting at once. The app starts in Preview.
+// right and acting at once. The app starts in Preview. Record writes a session folder
+// (output/recorder.h) under recordings/ in the working directory; it stops by itself when the
+// track or its analysis changes.
 #pragma once
 
 #include "gui/project_state.h"
@@ -36,6 +38,9 @@ class PreviewView {
     enum class Ladder { preflight, preview, ambient, react, show };
 
     void set_ladder(Ladder step);
+    void start_recording();
+    void stop_recording(const std::string &why);
+    void record_params();
     int ambient_scene() const;
     void sync_config(); // Publishes config_ when it or the track changed.
     void draw_controls(const ShowFrame &frame);
@@ -56,6 +61,8 @@ class PreviewView {
     bool scene_edited_ = false; // A scene changed this frame: the project is told once.
     Ladder ladder_ = Ladder::preview;
     int playing_scene_ = 0; // The automation's current scene, from the latest frame.
+    std::shared_ptr<Recorder> recorder_;
+    std::string record_status_;
     std::string address_text_ = "127.0.0.1";
     bool address_active_ = false;
     // Measured frame rate, from the frame index over about a second.
