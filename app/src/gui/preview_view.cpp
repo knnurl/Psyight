@@ -198,6 +198,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         project_.changed();
         scene_edited_ = false;
     }
+    draw_palettes();
     if (ImGui::TreeNode("Limiters")) {
         LimiterParams p = project_.project().limiter;
         bool changed = false;
@@ -310,6 +311,30 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
         }
         ImGui::SetItemTooltip("Remove this layer and its routes.");
         if (open) {
+            // Group mask: the rig's group tags.
+            std::vector<std::string> groups;
+            for (const ProjectStrip &strip : project_.project().strips) {
+                for (const std::string &g : strip.spec.groups) {
+                    if (std::find(groups.begin(), groups.end(), g) == groups.end()) {
+                        groups.push_back(g);
+                    }
+                }
+            }
+            ImGui::SetNextItemWidth(8.0f * em);
+            if (ImGui::BeginCombo("Strips", layer.group.empty() ? "All" : layer.group.c_str())) {
+                if (ImGui::Selectable("All", layer.group.empty())) {
+                    layer.group.clear();
+                    scene_edited_ = true;
+                }
+                for (const std::string &g : groups) {
+                    if (ImGui::Selectable(g.c_str(), g == layer.group)) {
+                        layer.group = g;
+                        scene_edited_ = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SetItemTooltip("Group mask: only the strips tagged with this group (Rig tab).");
             const std::vector<EffectParamInfo> infos = effect_param_infos(layer.spec.type());
             bool params_changed = false;
             for (size_t k = 0; k < infos.size(); ++k) {
@@ -381,6 +406,78 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
         scene_edited_ = true;
     }
     ImGui::EndDisabled();
+}
+
+void PreviewView::draw_palettes() {
+    if (!ImGui::TreeNode("Palettes")) {
+        return;
+    }
+    Project &project = project_.edit();
+    std::vector<Palette> &palettes = project.palettes;
+    bool changed = false;
+    int remove = -1;
+    for (size_t p = 0; p < palettes.size(); ++p) {
+        Palette &palette = palettes[p];
+        ImGui::PushID(static_cast<int>(p));
+        ImGui::SetNextItemWidth(7.0f * ImGui::GetFontSize());
+        changed |= ImGui::InputText("##name", &palette.name);
+        int remove_colour = -1;
+        for (size_t c = 0; c < palette.colours.size(); ++c) {
+            ImGui::SameLine();
+            ImGui::PushID(static_cast<int>(c));
+            float rgb[3] = {palette.colours[c].r, palette.colours[c].g, palette.colours[c].b};
+            if (ImGui::ColorEdit3("##colour", rgb, ImGuiColorEditFlags_NoInputs)) {
+                palette.colours[c] = {rgb[0], rgb[1], rgb[2]};
+                changed = true;
+            }
+            if (ImGui::BeginPopupContextItem("colour menu")) {
+                if (ImGui::MenuItem("Remove colour", nullptr, false, palette.colours.size() > 1)) {
+                    remove_colour = static_cast<int>(c);
+                }
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+        }
+        if (remove_colour >= 0) {
+            palette.colours.erase(palette.colours.begin() + remove_colour);
+            changed = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+")) {
+            palette.colours.push_back(palette.colours.back());
+            changed = true;
+        }
+        ImGui::SetItemTooltip("Add a colour. Right-click a colour to remove it.");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(palettes.size() < 2);
+        if (ImGui::SmallButton("x")) {
+            remove = static_cast<int>(p);
+        }
+        ImGui::EndDisabled();
+        ImGui::SetItemTooltip("Delete this palette (scenes using it move to the first).");
+        ImGui::PopID();
+    }
+    if (remove >= 0) {
+        palettes.erase(palettes.begin() + remove);
+        for (Scene &scene : project.scenes) {
+            if (scene.palette == remove) {
+                scene.palette = 0;
+            } else if (scene.palette > remove) {
+                --scene.palette;
+            }
+        }
+        changed = true;
+    }
+    if (ImGui::Button("Add palette")) {
+        palettes.push_back({"Palette " + std::to_string(palettes.size() + 1),
+                            {{0.5f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.6f}}});
+        changed = true;
+    }
+    ImGui::TextDisabled("Keep white out: it is for kicks and drops (SPEC 7.5).");
+    if (changed) {
+        project_.changed();
+    }
+    ImGui::TreePop();
 }
 
 void PreviewView::draw_routes(Scene &scene) {

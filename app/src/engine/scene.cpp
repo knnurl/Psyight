@@ -286,7 +286,20 @@ Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &input
         }
         l.effect->render(context, layer);
         const bool rotate = std::abs(hue_deg) > 1e-9;
+        std::vector<char> strip_in_group; // Per strip, when the layer has a group mask.
+        if (!l.group.empty()) {
+            for (const StripSpec &strip : rig.strips) {
+                strip_in_group.push_back(std::find(strip.groups.begin(), strip.groups.end(),
+                                                   l.group) != strip.groups.end());
+            }
+        }
         for (size_t i = 0; i < frame.size(); ++i) {
+            if (!l.group.empty()) {
+                const auto strip = static_cast<size_t>(rig.pixels[i].strip);
+                if (strip >= strip_in_group.size() || !strip_in_group[strip]) {
+                    continue; // Masked out.
+                }
+            }
             const Rgb c = rotate ? rotate_hue(layer[i], hue_deg) : layer[i];
             frame[i] = blend(frame[i], c, l.blend, static_cast<float>(opacity));
         }

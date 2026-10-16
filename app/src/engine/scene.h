@@ -123,6 +123,7 @@ struct Layer {
     float opacity = 1.0f;
     bool enabled = true;
     EffectSpec spec;
+    std::string group; // Group mask (SPEC 7.3): only strips with this tag; empty for all.
 };
 
 struct Scene {

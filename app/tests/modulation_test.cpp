@@ -1,5 +1,6 @@
 // Modulation matrix: sources, curves, hue rotation and routes applied by the scene renderer.
 
+#include "engine/effect_spec.h"
 #include "engine/limiters.h"
 #include "engine/modulation.h"
 #include "engine/rig.h"
@@ -105,6 +106,34 @@ TEST_CASE("modulation: removing and swapping layers keeps routes on their layers
     CHECK(scene.routes[0].layer == 2); // The conveyor moved down one.
     CHECK(scene.layers[2].spec.type() == EffectType::conveyor);
     CHECK(scene.routes[1].target == ModTarget::brightness); // Not tied to a layer.
+}
+
+TEST_CASE("scene: a group mask limits a layer to the strips with that tag") {
+    const Rig rig =
+        default_rig(); // Strips bottom, right, top, left; each tagged frame and its side.
+    const std::vector<Palette> palettes = default_palettes();
+    Scene scene;
+    scene.layers.push_back(make_layer({PlasmaParams{}}, BlendMode::add));
+    EngineInputs in;
+    in.t_s = 3.0;
+    in.section = "breakdown";
+    const Frame all = render_scene(scene, rig, in, palettes, 1);
+    scene.layers[0].group = "top";
+    const Frame top = render_scene(scene, rig, in, palettes, 1);
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        CAPTURE(i);
+        if (rig.pixels[i].strip == 2) {
+            CHECK(top[i] == all[i]);
+        } else {
+            CHECK(luminance(top[i]) == 0.0);
+        }
+    }
+    scene.layers[0].group = "frame";
+    CHECK(render_scene(scene, rig, in, palettes, 1) == all);
+    scene.layers[0].group = "nowhere";
+    for (const Rgb &c : render_scene(scene, rig, in, palettes, 1)) {
+        CHECK(luminance(c) == 0.0);
+    }
 }
 
 TEST_CASE("modulation: routes change opacity, hue and brightness, and rendering stays pure") {

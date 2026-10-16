@@ -118,6 +118,7 @@ Scene parse_scene(const json &item) {
         Layer layer = make_layer(spec, from_id_or_throw(blend_mode_from_id(blend), "blend", blend),
                                  static_cast<float>(number(l, "opacity", 1.0, 0.0, 1.0)));
         layer.enabled = optional(l, "enabled", true);
+        layer.group = optional<std::string>(l, "group", "");
         s.layers.push_back(std::move(layer));
     }
     if (const auto routes = item.find("routes"); routes != item.end()) {
@@ -150,6 +151,7 @@ json scene_json(const Scene &s) {
                           {"blend", blend_mode_id(l.blend)},
                           {"opacity", finite(l.opacity, "opacity")},
                           {"enabled", l.enabled},
+                          {"group", l.group},
                           {"params", params}});
     }
     json routes = json::array();

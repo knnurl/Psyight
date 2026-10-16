@@ -81,6 +81,7 @@ TEST_CASE("project: scenes and palettes round-trip and render as before") {
     set_effect_param(conveyor, 0, 8.0); // segment_pixels.
     p.scenes[0].layers[1].effect = make_effect(conveyor);
     p.scenes[0].layers[3].enabled = false;
+    p.scenes[0].layers[2].group = "booth";
     p.scenes[0].routes.push_back(
         {ModSource::kick, ModCurve::exponential, true, ModTarget::opacity, 0, -0.5});
     p.palettes.push_back({"Mono", {{0.2f, 0.0f, 0.6f}}});
@@ -94,6 +95,7 @@ TEST_CASE("project: scenes and palettes round-trip and render as before") {
     CHECK(q.palettes.back().name == "Mono");
     CHECK(std::get<ConveyorParams>(q.scenes[0].layers[1].spec.params).segment_pixels == 8);
     CHECK_FALSE(q.scenes[0].layers[3].enabled);
+    CHECK(q.scenes[0].layers[2].group == "booth");
     REQUIRE(q.scenes[0].routes.size() == 1);
     CHECK(q.scenes[0].routes[0].source == ModSource::kick);
     CHECK(q.scenes[0].routes[0].invert);
