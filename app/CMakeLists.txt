@@ -65,7 +65,8 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/analysis/bass_aggregates.cpp src/engine/rig.cpp
                                src/engine/colour.cpp src/engine/inputs.cpp
                                src/engine/scene.cpp src/engine/limiters.cpp
-                               src/engine/automation.cpp
+                               src/engine/automation.cpp src/io/text_file.cpp
+                               src/io/project.cpp
                                src/output/patch.cpp src/output/packets.cpp
                                src/output/sender.cpp src/output/virtual_node.cpp
                                src/output/show.cpp src/output/udp_socket_win32.cpp
@@ -104,7 +105,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/align_test.cpp tests/residual_test.cpp
                              tests/engine_test.cpp tests/limiters_test.cpp
                              tests/output_test.cpp tests/show_test.cpp
-                             tests/automation_test.cpp)
+                             tests/automation_test.cpp tests/project_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)

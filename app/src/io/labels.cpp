@@ -1,13 +1,11 @@
 #include "io/labels.h"
 
 #include "core/paths.h"
+#include "io/text_file.h"
 
 #include <nlohmann/json.hpp>
 
 #include <cmath>
-#include <fstream>
-#include <sstream>
-#include <system_error>
 
 namespace psyight {
 
@@ -166,13 +164,11 @@ std::filesystem::path labels_path_for(const std::filesystem::path &audio_path) {
 }
 
 Result<Labels> load_labels(const std::filesystem::path &path) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        return Error{"cannot open " + path_to_utf8(path)};
+    const Result<std::string> contents = read_text_file(path);
+    if (!contents) {
+        return contents.error();
     }
-    std::ostringstream contents;
-    contents << file.rdbuf();
-    Result<Labels> labels = parse_labels_json(contents.str());
+    Result<Labels> labels = parse_labels_json(contents.value());
     if (!labels) {
         return Error{path_to_utf8(path) + ": " + labels.error().message};
     }
@@ -180,34 +176,12 @@ Result<Labels> load_labels(const std::filesystem::path &path) {
 }
 
 Result<void> save_labels(const std::filesystem::path &path, const Labels &labels) {
-    // Write to a temporary file, then rename over the target, so a failed write never truncates
-    // existing hand-made labels.
+    // Atomic, so a failed write never truncates existing hand-made labels.
     const Result<std::string> json_text = to_labels_json(labels);
     if (!json_text) {
         return json_text.error();
     }
-    std::filesystem::path temp_path = path;
-    temp_path += ".tmp";
-    std::error_code error;
-    {
-        std::ofstream file(temp_path, std::ios::binary | std::ios::trunc);
-        if (!file) {
-            return Error{"cannot write " + path_to_utf8(temp_path)};
-        }
-        file << json_text.value();
-        file.close();
-        if (!file) {
-            std::filesystem::remove(temp_path, error);
-            return Error{"failed writing " + path_to_utf8(temp_path)};
-        }
-    }
-    std::filesystem::rename(temp_path, path, error);
-    if (error) {
-        const std::string reason = error.message();
-        std::filesystem::remove(temp_path, error);
-        return Error{"cannot replace " + path_to_utf8(path) + ": " + reason};
-    }
-    return {};
+    return write_text_file_atomic(path, json_text.value());
 }
 
 } // namespace psyight
