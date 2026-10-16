@@ -29,6 +29,9 @@ constexpr ImU32 kNoteBorder = IM_COL32(150, 240, 225, 255);
 constexpr ImU32 kSelectedBorder = IM_COL32(255, 230, 120, 255);
 constexpr ImU32 kSlideLine = IM_COL32(150, 240, 225, 200);
 constexpr ImU32 kBlackKeyRow = IM_COL32(255, 255, 255, 10);
+constexpr ImU32 kDetectionBorder = IM_COL32(255, 196, 110, 170);
+constexpr ImU32 kSelectedDetectionBorder = IM_COL32(255, 255, 255, 255);
+constexpr ImU32 kKickLine = IM_COL32(255, 120, 80, 70);
 constexpr ImU32 kBoxFill = IM_COL32(255, 230, 120, 30);
 constexpr ImU32 kBoxBorder = IM_COL32(255, 230, 120, 180);
 constexpr ImU32 kCompleteRegion = IM_COL32(80, 200, 120, 28);
@@ -122,9 +125,20 @@ void BassRollView::draw_roll() {
     ImGui::Checkbox("Snap to 1/16 (hold Alt for free)", &snap_);
     ImGui::SameLine();
     ImGui::TextDisabled("Double-click: new note. Drag: move, resize or box select (Shift adds). "
-                        "Right-click: delete. Ctrl+C, V, D: copy, paste, duplicate. "
-                        "Middle-drag: pan. Middle double-click: fit. Ctrl+click: seek.");
+                        "Click a detection: inspect. Right-click: delete. Ctrl+C, V, D: copy, "
+                        "paste, duplicate. Middle-drag: pan. Middle double-click: fit. "
+                        "Ctrl+click: seek.");
     ImGui::Checkbox("Pitch background", &show_pitch_);
+    ImGui::SameLine();
+    if (const std::vector<BassNote> *found = detections(); found != nullptr) {
+        char label[96];
+        std::snprintf(label, sizeof(label), "Detected notes (%zu, from the %s)###detections",
+                      found->size(),
+                      track.track_analysis->source == AnalysisSource::stems ? "stems" : "mix");
+        ImGui::Checkbox(label, &show_detections_);
+    } else {
+        ImGui::TextDisabled("No detections (no tempo found)");
+    }
     if (show_pitch_) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(12.0f * ImGui::GetFontSize());
@@ -195,6 +209,9 @@ void BassRollView::draw_roll() {
         ImPlot::PopPlotClipRect();
         draw_grid_lines(session_.grid(), limits.X.Min, limits.X.Max);
         ImPlot::PushPlotClipRect();
+        if (show_detections_) {
+            draw_detections();
+        }
         draw_notes();
         ImPlot::PopPlotClipRect();
         draw_playhead(session_.playhead_s());
@@ -215,6 +232,58 @@ void BassRollView::draw_regions() const {
         draw->AddRectFilled(ImPlot::PlotToPixels(region.start_s, kHighestMidi + 1),
                             ImPlot::PlotToPixels(region.end_s, kLowestMidi),
                             region.complete ? kCompleteRegion : kIncompleteRegion);
+    }
+}
+
+const std::vector<BassNote> *BassRollView::detections() const {
+    if (!session_.has_track() || session_.track().track_analysis == nullptr) {
+        return nullptr;
+    }
+    return &session_.track().track_analysis->bass.notes;
+}
+
+int BassRollView::detection_under_mouse() const {
+    const std::vector<BassNote> *found = detections();
+    if (found == nullptr || !show_detections_) {
+        return -1;
+    }
+    const ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+    for (int i = static_cast<int>(found->size()) - 1; i >= 0; --i) {
+        const BassNote &note = (*found)[i];
+        if (mouse.x >= note.onset_s && mouse.x <= note.offset_s && mouse.y >= note.pitch_midi &&
+            mouse.y < note.pitch_midi + 1) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void BassRollView::draw_detections() const {
+    const std::vector<BassNote> *found = detections();
+    if (found == nullptr) {
+        return;
+    }
+    ImDrawList *draw = ImPlot::GetPlotDrawList();
+    const ImPlotRect limits = ImPlot::GetPlotLimits();
+    for (const double t_s : session_.track().track_analysis->bass.kick_times_s) {
+        if (t_s >= limits.X.Min && t_s <= limits.X.Max) {
+            draw->AddLine(ImPlot::PlotToPixels(t_s, kHighestMidi + 1),
+                          ImPlot::PlotToPixels(t_s, kLowestMidi), kKickLine);
+        }
+    }
+    for (int i = 0; i < static_cast<int>(found->size()); ++i) {
+        const BassNote &note = (*found)[i];
+        if (note.offset_s < limits.X.Min || note.onset_s > limits.X.Max) {
+            continue;
+        }
+        const ImVec2 top_left = ImPlot::PlotToPixels(note.onset_s, note.pitch_midi + 1);
+        const ImVec2 bottom_right = ImPlot::PlotToPixels(note.offset_s, note.pitch_midi);
+        const auto alpha = static_cast<int>(40.0 + 170.0 * std::clamp(note.confidence, 0.0, 1.0));
+        draw->AddRectFilled(top_left, bottom_right, IM_COL32(235, 160, 50, alpha), 2.0f);
+        const bool selected = i == selected_detection_;
+        draw->AddRect(top_left, bottom_right,
+                      selected ? kSelectedDetectionBorder : kDetectionBorder, 2.0f, 0,
+                      selected ? 2.0f : 1.0f);
     }
 }
 
@@ -244,6 +313,7 @@ void BassRollView::sync_selection() {
         selection_track_ = track;
         selection_undo_redo_count_ = labels.undo_redo_count();
         selection_.clear();
+        selected_detection_ = -1;
         if (drag_ != Drag::none) {
             labels.end_gesture();
             drag_ = Drag::none;
@@ -336,6 +406,14 @@ void BassRollView::handle_mouse(const LoadedTrack &track) {
                 "%s  onset %.3f s  %.1f ms  gate %.2f%s", midi_to_note_name(note.midi).c_str(),
                 note.onset_s, 1000.0 * (note.offset_s - note.onset_s),
                 (note.offset_s - note.onset_s) / slot_s, note.slide_in ? "  slide in" : "");
+        } else if (const int detected = detection_under_mouse(); detected >= 0) {
+            const BassNote &note = (*detections())[detected];
+            ImGui::SetTooltip("Detected %s%+.0f c  onset %.3f s  %.1f ms  gate %.2f  confidence "
+                              "%.2f%s%s%s\nClick to inspect.",
+                              midi_to_note_name(note.pitch_midi).c_str(), note.cents, note.onset_s,
+                              note.duration_ms, note.gate_ratio, note.confidence,
+                              note.slide_in ? "  slide in" : "",
+                              note.slide_out ? "  slide out" : "", note.is_long ? "  long" : "");
         }
     }
 
@@ -374,6 +452,8 @@ void BassRollView::handle_mouse(const LoadedTrack &track) {
             // following view between the two clicks of a double-click and put the new note
             // somewhere else.
             boxing_ = true;
+            box_dragged_ = false;
+            press_detection_ = detection_under_mouse();
             box_start_s_ = mouse.x;
             box_start_row_ = mouse.y;
             box_base_ = io.KeyShift ? selection_ : std::vector<int>{};
@@ -431,11 +511,15 @@ void BassRollView::handle_mouse(const LoadedTrack &track) {
 void BassRollView::handle_box_select(double mouse_s, double mouse_row) {
     if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         boxing_ = false;
+        if (!box_dragged_) {
+            selected_detection_ = press_detection_; // A plain click: the detection, or none.
+        }
         return;
     }
     if (!ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
         return;
     }
+    box_dragged_ = true;
     const double from_s = std::min(box_start_s_, mouse_s);
     const double to_s = std::max(box_start_s_, mouse_s);
     const double low_row = std::min(box_start_row_, mouse_row);
@@ -534,6 +618,10 @@ void BassRollView::draw_inspector() {
         ImGui::SeparatorText("Selected note");
         draw_inspector_note();
     }
+    if (selected_detection_ >= 0) {
+        ImGui::SeparatorText("Detected note");
+        draw_inspector_detection();
+    }
     ImGui::SeparatorText("Labelled regions");
     draw_inspector_regions(track);
     ImGui::End();
@@ -589,6 +677,31 @@ void BassRollView::draw_inspector_note() {
     if (changed) {
         set_selection({labels.set_note(selected, note)});
     }
+}
+
+void BassRollView::draw_inspector_detection() {
+    const std::vector<BassNote> *found = detections();
+    if (found == nullptr || selected_detection_ >= static_cast<int>(found->size())) {
+        selected_detection_ = -1;
+        return;
+    }
+    const BassNote &n = (*found)[selected_detection_];
+    ImGui::Text("Pitch %s (MIDI %d, %+.0f cents, octave %d)",
+                midi_to_note_name(n.pitch_midi).c_str(), n.pitch_midi, n.cents, n.octave);
+    ImGui::Text("Onset %.4f s, offset %.4f s", n.onset_s, n.offset_s);
+    ImGui::Text("Duration %.1f ms, gate ratio %.3f (slot %.2f ms, slot %d of the bar)",
+                n.duration_ms, n.gate_ratio, n.slot_len_ms, n.slot_index);
+    ImGui::Text("Decay time constant %s",
+                n.decay_tau_ms > 0.0 ? (std::to_string(std::lround(n.decay_tau_ms)) + " ms").c_str()
+                                     : "not measured");
+    ImGui::Text("Velocity %.2f, confidence %.2f", n.velocity, n.confidence);
+    ImGui::Text("%s%s%s", n.slide_in ? "Slides in. " : "", n.slide_out ? "Slides out. " : "",
+                n.is_long ? "Long note." : "");
+    if (ImGui::Button("Copy to labels")) {
+        set_selection({session_.labels().add_note(
+            {n.onset_s, n.offset_s, n.pitch_midi, n.cents, n.slide_in, n.slide_out, n.velocity})});
+    }
+    ImGui::SetItemTooltip("Adds this detection as a labelled note (one undo step).");
 }
 
 void BassRollView::draw_inspector_selection() {

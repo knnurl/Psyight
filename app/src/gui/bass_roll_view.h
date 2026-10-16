@@ -12,7 +12,9 @@
 // after itself (see io/note_pattern.h for the rules). Undo, redo and save shortcuts are global
 // (see main.cpp).
 // Behind the notes, the pitch background shows how strongly each semitone sounds over time, so the
-// bassline appears as bright segments on its rows.
+// bassline appears as bright segments on its rows. Under the labels, the bass tracker's detected
+// notes (amber, more opaque when more confident) and kicks (faint lines); hovering one shows its
+// fields, a plain click on one selects it for the inspector, which can copy it to the labels.
 #pragma once
 
 #include "gui/session.h"
@@ -42,6 +44,10 @@ class BassRollView {
     double snapped(double t_s) const;
     int hovered_note(bool &near_start, bool &near_end) const;
     void draw_notes() const;
+    void draw_detections() const;
+    const std::vector<BassNote> *detections() const; // Null before an analysis exists.
+    int detection_under_mouse() const;               // Index into detections(), or -1.
+    void draw_inspector_detection();
     void draw_regions() const;
     void draw_inspector_note();
     void draw_inspector_selection();
@@ -67,6 +73,10 @@ class BassRollView {
     int grabbed_ = -1;        // The note a drag started on.
     bool drag_moved_ = false; // A click on a selected note that never moved selects only it.
     bool boxing_ = false;
+    bool box_dragged_ = false;
+    int press_detection_ = -1; // Detection under a press on empty space: a plain click selects it.
+    int selected_detection_ = -1;
+    bool show_detections_ = true;
     double box_start_s_ = 0.0;
     double box_start_row_ = 0.0;         // Plot y: MIDI row, fractional.
     std::vector<int> box_base_;          // The selection a Shift box adds to.

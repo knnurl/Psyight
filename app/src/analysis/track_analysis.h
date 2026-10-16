@@ -39,6 +39,7 @@ struct TrackAnalysisOptions {
 };
 
 struct TrackAnalysis {
+    AnalysisSource source = AnalysisSource::mix;
     int sample_rate_hz = 0;
     double duration_s = 0.0;
     FrontEndResult mix_features;

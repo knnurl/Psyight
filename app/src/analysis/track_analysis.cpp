@@ -52,6 +52,7 @@ Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_
                                     const std::filesystem::path &audio_path,
                                     const TrackAnalysisOptions &options) {
     TrackAnalysis analysis;
+    analysis.source = options.source;
     analysis.sample_rate_hz = sample_rate_hz;
     const int sr = analysis.sample_rate_hz;
     analysis.duration_s = static_cast<double>(mix.size()) / sr;
