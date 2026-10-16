@@ -178,8 +178,20 @@ void Tracker::detect_kicks() {
                          frames(p_.kick_min_gap_ms));
         }
     }
-    for (const Peak &kick : kicks) {
-        result_.kick_times_s.push_back(time_of(kick.frame) - p_.kick_bias_ms * 1e-3);
+    // Kicks come in runs on consecutive beats; a bright bass attack that lands on a beat in a
+    // breakdown usually stands alone. Keep a candidate when another lies one beat away.
+    const double beat_frames =
+        frames(4.0 * 1e3 * grid_.slot_length_samples() / grid_.sample_rate_hz);
+    const double tolerance_frames = frames(std::max(p_.kick_grid_tolerance_ms, 1e3 * frame_s_));
+    for (size_t k = 0; k < kicks.size(); ++k) {
+        bool in_run = p_.kick_min_run_beats <= 1.0;
+        for (size_t j = k > 0 ? k - 1 : 0; j < std::min(kicks.size(), k + 2) && !in_run; ++j) {
+            in_run = j != k && std::abs(std::abs(kicks[j].frame - kicks[k].frame) - beat_frames) <=
+                                   tolerance_frames;
+        }
+        if (in_run) {
+            result_.kick_times_s.push_back(time_of(kicks[k].frame) - p_.kick_bias_ms * 1e-3);
+        }
     }
 }
 
@@ -514,6 +526,7 @@ const ParamEntry kParamTable[] = {
     {&BassTrackerParams::kick_min_click_ratio, "bass.kick_min_click_ratio", "Kick click ratio", "", 0.0, 10.0, ParamTier::engineer, "Click-band flux over low-mid flux needed for a kick: a kick's click is broadband, a bass attack's is not."},
     {&BassTrackerParams::kick_min_gap_ms, "bass.kick_min_gap_ms", "Kick minimum gap", "ms", 50.0, 1000.0, ParamTier::engineer, "Of two kicks closer than this, the stronger is kept."},
     {&BassTrackerParams::kick_grid_tolerance_ms, "bass.kick_grid_tolerance_ms", "Kick grid tolerance", "ms", 0.0, 200.0, ParamTier::tune, "A kick must lie this close to a beat of the grid; 0 accepts kicks anywhere."},
+    {&BassTrackerParams::kick_min_run_beats, "bass.kick_min_run_beats", "Kick run", "beats", 1.0, 2.0, ParamTier::engineer, "2: a kick needs another kick candidate one beat away (kicks come in runs); 1: any candidate."},
     {&BassTrackerParams::kick_bias_ms, "bass.kick_bias_ms", "Kick time bias", "ms", -20.0, 20.0, ParamTier::engineer, "Subtracted from detected kick times."},
     {&BassTrackerParams::kick_mask_pre_ms, "bass.kick_mask_pre_ms", "Kick mask lead", "ms", 0.0, 30.0, ParamTier::engineer, "Margin by which the kick mask starts before the onset function can first see the kick."},
     {&BassTrackerParams::kick_mask_ms, "bass.kick_mask_ms", "Kick mask", "ms", 0.0, 150.0, ParamTier::tune, "After a kick, bass onsets are down-weighted and energy drops do not end notes."},

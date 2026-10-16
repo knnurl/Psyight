@@ -4,8 +4,8 @@
 // Steps:
 // 1. Kicks: peaks of the click-band flux that come with a rise of the low-band (sub plus bass)
 //    energy and a click that is broadband (strong against the low-mid flux), near a beat of the
-//    grid. Each kick opens a mask in which bass onsets are
-//    down-weighted and energy drops do not end notes (sidechain ducking).
+//    grid, with another candidate one beat away (kicks come in runs). Each kick opens a mask in
+//    which bass onsets are down-weighted and energy drops do not end notes (sidechain ducking).
 // 2. Onsets: adaptive-threshold peak picking on spectral flux of the bass region (its own STFT,
 //    40 Hz to 2 kHz by default, so the per-note filter opening shows), normalised to the track.
 //    A peak must also have bass activity above a floor relative to the track's bass level.
@@ -42,16 +42,21 @@ namespace psyight {
 
 struct BassTrackerParams {
     // Kicks.
-    double kick_threshold = 0.4;       // Click flux peak, as a fraction of the track's p99.
-    double kick_min_low_rise_db = 6.0; // Sub plus bass energy rise across the kick.
+    double kick_threshold = 0.4; // Click flux peak, as a fraction of the track's p99.
+    // Sub plus bass level rise across the kick. Sidechained mixes keep the low band nearly level
+    // (Phase Change: 2.3 dB median at beats), so this only rejects flat-or-falling candidates; hats
+    // fail the grid test and bass attacks the click ratio.
+    double kick_min_low_rise_db = 1.0;
     // Click-band flux over low-mid flux at the peak: a kick's click is broadband, a bass attack's
-    // brightness falls off above its filter. Tuned on synthetic audio only [Verify] on real kicks.
-    double kick_min_click_ratio = 0.2;
+    // brightness falls off above its filter (synthetic: 0.03 to 0.07). Real kicks vary: median
+    // 0.63 at the beats of OculusDrift, 0.19 at those of Hall of Purity (distorted kicks).
+    double kick_min_click_ratio = 0.1;
     double kick_min_gap_ms = 200.0;
     // M1 uses the manual grid as a beat prior: a synth's attack click can pass the click and rise
     // tests, but not off the beat. 0 disables. M2 replaces the grid with beat tracking.
     double kick_grid_tolerance_ms = 35.0;
-    double kick_bias_ms = 0.0; // Subtracted from detected kick times.
+    double kick_min_run_beats = 2.0; // 2: another kick candidate must lie one beat away.
+    double kick_bias_ms = 0.0;       // Subtracted from detected kick times.
     // The mask also starts this long before the kick, on top of the reach of the onset function
     // (half its STFT window plus half the envelope window): its flux sees the kick early.
     double kick_mask_pre_ms = 15.0;
