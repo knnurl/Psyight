@@ -30,6 +30,8 @@ class AnalysisView {
     float max_db_ = -10.0f;
     bool colours_changed_ = false;
     bool dragging_downbeat_ = false;
+    AnalysisSource source_ = AnalysisSource::mix; // For the next re-analysis.
+    bool source_chosen_ = false;                  // Until chosen, it follows the loaded analysis.
     // Which of the spectrogram, band energy, flux and residual plots are unfolded.
     std::array<bool, 4> open_{true, true, true, false}; // The residual starts folded.
 };

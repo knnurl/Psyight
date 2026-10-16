@@ -52,7 +52,12 @@ class Session {
     ~Session(); // Saves unsaved labels.
 
     void open_file(const std::filesystem::path &path);
-    void update(); // Call once per GUI frame, before the panels.
+    // Re-runs the track analysis in the background on the labels' current grid (for example
+    // after the grid was set by ear), from the mix or the stems.
+    void reanalyse(AnalysisSource source);
+    bool reanalysing() const { return reanalysis_.valid(); }
+    bool stems_available() const; // For the loaded track.
+    void update();                // Call once per GUI frame, before the panels.
     // Call after the panels: a pan by the user stops following the playhead; a zoom while following
     // sets the window length.
     void end_frame();
@@ -88,6 +93,8 @@ class Session {
     Transport transport_;
     std::shared_ptr<const LoadedTrack> track_;
     std::future<LoadResult> loading_;
+    std::future<Result<TrackAnalysis>> reanalysis_;
+    const LoadedTrack *reanalysis_track_ = nullptr; // The track a re-analysis was started for.
     std::string loading_name_;
     std::string status_;
     LabelEditor labels_;

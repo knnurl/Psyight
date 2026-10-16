@@ -168,7 +168,49 @@ void Session::end_frame() {
     }
 }
 
+bool Session::stems_available() const {
+    return has_track() && analysis_stems_exist(stem_paths_for(track_->path));
+}
+
+void Session::reanalyse(AnalysisSource source) {
+    if (!has_track() || reanalysis_.valid() || loading_.valid()) {
+        return;
+    }
+    TrackAnalysisOptions options;
+    options.source = source;
+    const LabelGrid &grid = labels_.labels().grid;
+    options.grid = Grid{grid.bpm, seconds_to_samples(grid.first_downbeat_s, track_->sample_rate_hz),
+                        track_->sample_rate_hz};
+    reanalysis_track_ = track_.get();
+    status_ = "Re-analysing " + track_->name + "...";
+    reanalysis_ = std::async(std::launch::async, [path = track_->path, options] {
+        return analyse_track(path, options);
+    });
+}
+
 void Session::update() {
+    if (reanalysis_.valid() &&
+        reanalysis_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        Result<TrackAnalysis> analysis = reanalysis_.get();
+        if (!has_track() || track_.get() != reanalysis_track_) {
+            // The track changed meanwhile: drop the result.
+        } else if (analysis) {
+            const auto shared = std::make_shared<const TrackAnalysis>(std::move(analysis.value()));
+            auto updated = std::make_shared<LoadedTrack>(*track_);
+            updated->track_analysis = shared;
+            updated->analysis =
+                std::shared_ptr<const FrontEndResult>(shared, &shared->mix_features);
+            track_ = std::move(updated);
+            status_.clear();
+            spdlog::info("Re-analysed {} from the {}: {} bass notes, {} kicks, {} sections",
+                         track_->name, shared->source == AnalysisSource::stems ? "stems" : "mix",
+                         shared->bass.notes.size(), shared->bass.kick_times_s.size(),
+                         shared->sections.size());
+        } else {
+            status_ = "Re-analysis failed: " + analysis.error().message;
+            spdlog::error("{}", status_);
+        }
+    }
     if (view.follow_playhead) {
         view.min_s = playhead_s() - kPlayheadLead * view.window_s;
         view.max_s = view.min_s + view.window_s;

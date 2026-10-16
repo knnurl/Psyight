@@ -275,6 +275,39 @@ void AnalysisView::draw_toolbar(const LoadedTrack &track) {
         grid.first_downbeat_s = session_.playhead_s();
         labels.set_grid(grid);
     }
+    // Analysis source and re-analysis on the current grid.
+    ImGui::SameLine();
+    const bool stems = session_.stems_available();
+    if (!stems) {
+        source_ = AnalysisSource::mix;
+    } else if (track.track_analysis != nullptr && !source_chosen_) {
+        source_ = track.track_analysis->source;
+    }
+    ImGui::SetNextItemWidth(6.0f * em);
+    if (ImGui::BeginCombo("##source", source_ == AnalysisSource::stems ? "Stems" : "Mix")) {
+        if (ImGui::Selectable("Mix", source_ == AnalysisSource::mix)) {
+            source_ = AnalysisSource::mix;
+            source_chosen_ = true;
+        }
+        ImGui::BeginDisabled(!stems);
+        if (ImGui::Selectable("Stems", source_ == AnalysisSource::stems)) {
+            source_ = AnalysisSource::stems;
+            source_chosen_ = true;
+        }
+        ImGui::EndDisabled();
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip(stems ? "Analyse the mix, or the Demucs stems (kicks from drums, notes "
+                                  "from bass)."
+                                : "No stems for this track: run tools/python/separate.py.");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(session_.reanalysing());
+    if (ImGui::Button(session_.reanalysing() ? "Analysing..." : "Re-analyse")) {
+        session_.reanalyse(source_);
+    }
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Runs beats, kicks, bass notes and sections again on the current grid "
+                          "(gate ratios and the kick prior depend on it).");
     if (track.track_analysis != nullptr && track.track_analysis->beats.bpm > 0.0) {
         const BeatTrackResult &beats = track.track_analysis->beats;
         const double downbeat_s =
