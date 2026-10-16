@@ -69,7 +69,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/engine/automation.cpp src/engine/modulation.cpp
                                src/engine/effect_spec.cpp
                                src/io/text_file.cpp src/io/session_record.cpp
-                               src/output/recorder.cpp
+                               src/output/recorder.cpp src/analysis/student_data.cpp
                                src/io/project.cpp
                                src/output/patch.cpp src/output/packets.cpp
                                src/output/sender.cpp src/output/virtual_node.cpp
@@ -104,6 +104,10 @@ target_link_libraries(psyight_analyse PRIVATE psyight_options psyight_lib)
 add_executable(psyight_show_check src/show_check_main.cpp)
 target_link_libraries(psyight_show_check PRIVATE psyight_options psyight_lib)
 
+# Exports one track's M4 training data (student features, teacher targets) or its fingerprint.
+add_executable(psyight_teacher src/teacher_main.cpp)
+target_link_libraries(psyight_teacher PRIVATE psyight_options psyight_lib nlohmann_json::nlohmann_json)
+
 # Replays a recorded session and checks it reproduces byte for byte.
 add_executable(psyight_replay src/replay_main.cpp)
 target_link_libraries(psyight_replay PRIVATE psyight_options psyight_lib)
@@ -122,7 +126,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/output_test.cpp tests/show_test.cpp
                              tests/automation_test.cpp tests/project_test.cpp
                              tests/preflight_test.cpp tests/modulation_test.cpp
-                             tests/recorder_test.cpp)
+                             tests/recorder_test.cpp tests/student_data_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)
