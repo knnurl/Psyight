@@ -1,0 +1,149 @@
+﻿// Section detection on a synthetic arrangement with known sections.
+
+#include "analysis/beat_tracker.h"
+#include "analysis/front_end.h"
+#include "analysis/sections.h"
+#include "synth_generator.h"
+
+#include <doctest/doctest.h>
+
+#include <cmath>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+using namespace psyight;
+
+namespace {
+
+constexpr int kSampleRateHz = 48000;
+
+struct Expected {
+    int start_bar;
+    const char *label;
+};
+
+// 40 bars of rolling bass. Kicks in bars 4 to 11 and 24 to 35; a noise riser in bars 20 to 23.
+// Expected: intro 0, groove 4, breakdown 12, build 20, drop 24 (8 bars), groove 32, outro 36.
+std::vector<float> arrangement(double bpm, double &downbeat_s) {
+    synth::SynthParams params;
+    params.bpm = bpm;
+    params.bars = 40;
+    synth::SynthParams bass_params = params;
+    bass_params.kick = false;
+    synth::SynthOutput mix =
+        synth::render(bass_params, synth::make_pattern(synth::Pattern::rolling, 40, 29, 0.7));
+    synth::SynthParams kick_params = params;
+    kick_params.bass_level = 0.0;
+    const synth::SynthOutput kicks = synth::render(kick_params, {});
+    downbeat_s = mix.labels.downbeats.front().t_s;
+    const double bar_s = 4.0 * 60.0 / bpm;
+    std::uint32_t noise = 12345;
+    for (size_t i = 0; i < mix.samples.size(); ++i) {
+        const double bar = (static_cast<double>(i) / kSampleRateHz - downbeat_s) / bar_s;
+        if ((bar >= 4.0 && bar < 12.0) || (bar >= 24.0 && bar < 36.0)) {
+            mix.samples[i] += kicks.samples[i];
+        }
+        if (bar >= 20.0 && bar < 24.0) {
+            noise = noise * 1664525u + 1013904223u; // Deterministic white noise.
+            const double white = static_cast<double>(noise) / 4294967296.0 * 2.0 - 1.0;
+            const double gain_db = -60.0 + 45.0 * (bar - 20.0) / 4.0; // -60 to -15 dB.
+            mix.samples[i] += static_cast<float>(white * std::pow(10.0, gain_db / 20.0));
+        }
+    }
+    return mix.samples;
+}
+
+} // namespace
+
+TEST_CASE("sections: intro, groove, breakdown, build, drop and outro of a synthetic track") {
+    const Expected expected[] = {{0, "intro"}, {4, "groove"},  {12, "breakdown"}, {20, "build"},
+                                 {24, "drop"}, {32, "groove"}, {36, "outro"}};
+    for (const double bpm : {150.0, 160.0}) {
+        CAPTURE(bpm);
+        double downbeat_s = 0.0;
+        const std::vector<float> audio = arrangement(bpm, downbeat_s);
+        const Result<FrontEndResult> features = analyse_front_end(audio, kSampleRateHz, {});
+        REQUIRE(features.ok());
+        const Result<BeatTrackResult> beats = track_beats(features.value(), {});
+        REQUIRE(beats.ok());
+        const Result<std::vector<DetectedSection>> sections =
+            detect_sections(features.value(), beats.value(), {});
+        REQUIRE(sections.ok());
+        const std::vector<DetectedSection> &found = sections.value();
+        const double bar_s = 4.0 * 60.0 / bpm;
+        {
+            const std::vector<float> &odf = beats.value().onset_function;
+            const auto at = [&](double t) {
+                const int c = static_cast<int>(std::lround(t * kSampleRateHz / 256.0));
+                float m = 0.0f;
+                for (int i = c - 2; i <= c + 2; ++i) {
+                    m = std::max(m, odf[i]);
+                }
+                return m;
+            };
+            double kick_sum = 0.0, bass_sum = 0.0;
+            int kick_n = 0, bass_n = 0;
+            for (int bar = 4; bar < 12; ++bar) {
+                for (int beat = 0; beat < 4; ++beat) {
+                    const double t = downbeat_s + bar * bar_s + beat * bar_s / 4.0;
+                    kick_sum += at(t);
+                    ++kick_n;
+                    bass_sum += at(t + bar_s / 16.0);
+                    ++bass_n;
+                }
+            }
+            double free_sum = 0.0;
+            int free_n = 0;
+            for (int bar = 12; bar < 20; ++bar) {
+                for (int beat = 0; beat < 4; ++beat) {
+                    free_sum += at(downbeat_s + bar * bar_s + beat * bar_s / 4.0 + bar_s / 16.0);
+                    ++free_n;
+                }
+            }
+            MESSAGE("slot-1 bass without kicks " << free_sum / free_n);
+            MESSAGE("odf at kicks "
+                    << kick_sum / kick_n << ", at slot-1 bass " << bass_sum / bass_n
+                    << ", grid first downbeat "
+                    << (samples_to_seconds(beats.value().grid.first_downbeat, kSampleRateHz) -
+                        downbeat_s) /
+                           bar_s);
+        }
+        std::string summary;
+        for (const DetectedSection &s : found) {
+            summary += s.label + "@" + std::to_string((s.start_s - downbeat_s) / bar_s) + " ";
+        }
+        CAPTURE(summary);
+        REQUIRE(found.size() == std::size(expected));
+        for (size_t i = 0; i < found.size(); ++i) {
+            CAPTURE(i);
+            CHECK(found[i].label == expected[i].label);
+            if (i > 0) { // The first section starts at 0 s, before the first downbeat.
+                CHECK(found[i].start_s ==
+                      doctest::Approx(downbeat_s + expected[i].start_bar * bar_s).epsilon(0.001));
+            }
+            CHECK(found[i].confidence > 0.9);
+        }
+        CHECK(found.front().start_s == 0.0);
+    }
+}
+
+TEST_CASE("sections: no grid gives no sections; a missing band is an error") {
+    const std::vector<float> silence(kSampleRateHz * 10, 0.0f);
+    const Result<FrontEndResult> features = analyse_front_end(silence, kSampleRateHz, {});
+    const Result<std::vector<DetectedSection>> none =
+        detect_sections(features.value(), BeatTrackResult{}, {});
+    REQUIRE(none.ok());
+    CHECK(none.value().empty());
+    FrontEndResult no_hats = features.value();
+    no_hats.bands.pop_back();
+    CHECK_FALSE(detect_sections(no_hats, BeatTrackResult{}, {}).ok());
+}
+
+TEST_CASE("sections: parameters round trip through the registry") {
+    ParamRegistry registry;
+    REQUIRE(declare_section_params(registry).ok());
+    REQUIRE(registry.set("section.drop_bars", 16.0).ok());
+    CHECK(section_params_from(registry.values()).drop_bars == 16.0);
+    CHECK(section_params_from(registry.values()).min_breakdown_bars == 2.0);
+}
