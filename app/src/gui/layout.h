@@ -1,4 +1,5 @@
-// Default docked layout: transport across the top, analysis below. Applied on first run (no saved
+// Default docked layout: transport across the top, analysis and bass roll below, the note
+// inspector and the preview on the right. Applied on first run (no saved
 // layout for the main dock space) and from View > Reset layout.
 #pragma once
 
