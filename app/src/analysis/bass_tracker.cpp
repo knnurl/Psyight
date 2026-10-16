@@ -1,5 +1,6 @@
 #include "analysis/bass_tracker.h"
 
+#include "analysis/series.h"
 #include "analysis/stft.h"
 
 #include <algorithm>
@@ -26,24 +27,6 @@ int band_index(const FrontEndResult &features, std::string_view name) {
     return -1;
 }
 
-// Linear interpolation between order statistics; 0 for an empty input.
-double quantile(std::vector<float> values, double q) {
-    if (values.empty()) {
-        return 0.0;
-    }
-    const double position = q * static_cast<double>(values.size() - 1);
-    const auto lower = static_cast<size_t>(position);
-    std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(lower),
-                     values.end());
-    const double low = values[lower];
-    if (lower + 1 >= values.size()) {
-        return low;
-    }
-    const double high =
-        *std::min_element(values.begin() + static_cast<std::ptrdiff_t>(lower) + 1, values.end());
-    return low + (position - static_cast<double>(lower)) * (high - low);
-}
-
 // Per-hop powers in dB averaged over 2 * half + 1 frames: a centred moving mean square.
 std::vector<float> smoothed_db(const std::vector<float> &db, int half) {
     std::vector<double> prefix(db.size() + 1, 0.0);
@@ -61,33 +44,8 @@ std::vector<float> smoothed_db(const std::vector<float> &db, int half) {
     return result;
 }
 
-// Centred mean over 2 * half + 1 values, shortened at the ends.
-std::vector<float> box_mean(const std::vector<float> &x, int half) {
-    std::vector<double> prefix(x.size() + 1, 0.0);
-    for (size_t i = 0; i < x.size(); ++i) {
-        prefix[i + 1] = prefix[i] + x[i];
-    }
-    std::vector<float> result(x.size());
-    const auto h = static_cast<size_t>(std::max(0, half));
-    for (size_t i = 0; i < x.size(); ++i) {
-        const size_t begin = i >= h ? i - h : 0;
-        const size_t end = std::min(x.size(), i + h + 1);
-        result[i] = static_cast<float>((prefix[end] - prefix[begin]) / (end - begin));
-    }
-    return result;
-}
-
 double db_sum(double a_db, double b_db) {
     return 10.0 * std::log10(std::pow(10.0, a_db / 10.0) + std::pow(10.0, b_db / 10.0));
-}
-
-// Vertex offset of a parabola through three equally spaced points, in [-0.5, 0.5].
-double parabolic_offset(double left, double centre, double right) {
-    const double curvature = left - 2.0 * centre + right;
-    if (curvature >= 0.0) {
-        return 0.0;
-    }
-    return std::clamp(0.5 * (left - right) / curvature, -0.5, 0.5);
 }
 
 bool is_peak(const std::vector<float> &x, int f) {
