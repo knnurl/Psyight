@@ -44,6 +44,12 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &featu
                                                      const BeatTrackResult &beats,
                                                      const SectionParams &params);
 
+// Phrase starts (SPEC 6.5): every bars_per_phrase bars from the phrase offset (bars after the
+// grid's first downbeat), restarting the count at every section start after the first. Times in
+// seconds, ascending, within [0, duration_s).
+std::vector<double> phrase_starts(const Grid &grid, const std::vector<DetectedSection> &sections,
+                                  int bars_per_phrase, int phrase_bar_offset, double duration_s);
+
 Result<void> declare_section_params(ParamRegistry &registry);
 SectionParams section_params_from(const ParamValues &values);
 

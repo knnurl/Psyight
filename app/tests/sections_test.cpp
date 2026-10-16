@@ -72,43 +72,6 @@ TEST_CASE("sections: intro, groove, breakdown, build, drop and outro of a synthe
         REQUIRE(sections.ok());
         const std::vector<DetectedSection> &found = sections.value();
         const double bar_s = 4.0 * 60.0 / bpm;
-        {
-            const std::vector<float> &odf = beats.value().onset_function;
-            const auto at = [&](double t) {
-                const int c = static_cast<int>(std::lround(t * kSampleRateHz / 256.0));
-                float m = 0.0f;
-                for (int i = c - 2; i <= c + 2; ++i) {
-                    m = std::max(m, odf[i]);
-                }
-                return m;
-            };
-            double kick_sum = 0.0, bass_sum = 0.0;
-            int kick_n = 0, bass_n = 0;
-            for (int bar = 4; bar < 12; ++bar) {
-                for (int beat = 0; beat < 4; ++beat) {
-                    const double t = downbeat_s + bar * bar_s + beat * bar_s / 4.0;
-                    kick_sum += at(t);
-                    ++kick_n;
-                    bass_sum += at(t + bar_s / 16.0);
-                    ++bass_n;
-                }
-            }
-            double free_sum = 0.0;
-            int free_n = 0;
-            for (int bar = 12; bar < 20; ++bar) {
-                for (int beat = 0; beat < 4; ++beat) {
-                    free_sum += at(downbeat_s + bar * bar_s + beat * bar_s / 4.0 + bar_s / 16.0);
-                    ++free_n;
-                }
-            }
-            MESSAGE("slot-1 bass without kicks " << free_sum / free_n);
-            MESSAGE("odf at kicks "
-                    << kick_sum / kick_n << ", at slot-1 bass " << bass_sum / bass_n
-                    << ", grid first downbeat "
-                    << (samples_to_seconds(beats.value().grid.first_downbeat, kSampleRateHz) -
-                        downbeat_s) /
-                           bar_s);
-        }
         std::string summary;
         for (const DetectedSection &s : found) {
             summary += s.label + "@" + std::to_string((s.start_s - downbeat_s) / bar_s) + " ";
@@ -126,6 +89,30 @@ TEST_CASE("sections: intro, groove, breakdown, build, drop and outro of a synthe
         }
         CHECK(found.front().start_s == 0.0);
     }
+}
+
+TEST_CASE("sections: phrases restart at section changes") {
+    // 150 BPM: a bar is 1.6 s. Sections start at bars 0, 4, 12 and 13 of a 40-bar track.
+    const Grid grid{150.0, seconds_to_samples(0.5, kSampleRateHz), kSampleRateHz};
+    const double bar_s = 1.6;
+    const auto at_bar = [&](double bar) { return 0.5 + bar * bar_s; };
+    const std::vector<DetectedSection> sections = {{0.0, at_bar(4), "intro", 1.0},
+                                                   {at_bar(4), at_bar(12), "groove", 1.0},
+                                                   {at_bar(12), at_bar(13), "breakdown", 1.0},
+                                                   {at_bar(13), 66.5, "groove", 1.0}};
+    const std::vector<double> starts = phrase_starts(grid, sections, 8, 0, 66.5);
+    const std::vector<double> expected = {at_bar(0),  at_bar(4),  at_bar(12), at_bar(13),
+                                          at_bar(21), at_bar(29), at_bar(37)};
+    REQUIRE(starts.size() == expected.size());
+    for (size_t i = 0; i < starts.size(); ++i) {
+        CAPTURE(i);
+        CHECK(starts[i] == doctest::Approx(expected[i]));
+    }
+    // With no sections and an offset of 3 bars: phrases at bars 3 and 11 of a 20 s track.
+    const std::vector<double> offset = phrase_starts(grid, {}, 8, 3, 20.0);
+    REQUIRE(offset.size() == 2);
+    CHECK(offset[0] == doctest::Approx(at_bar(3)));
+    CHECK(offset[1] == doctest::Approx(at_bar(11)));
 }
 
 TEST_CASE("sections: no grid gives no sections; a missing band is an error") {

@@ -47,9 +47,10 @@ struct TrackAnalysis {
     Grid grid; // The grid the bass tracker used.
     BassTrackResult bass;
     std::vector<DetectedSection> sections;
-    ResidualFeatures residual; // Hats and the non-bass features.
-    BassAggregates aggregates; // Per bar and phrase of `grid`.
-    double stems_lag_s = 0.0;  // Stems against the mix before alignment; negative: ahead.
+    std::vector<double> phrase_starts_s; // Restarting at section changes (SPEC 6.5).
+    ResidualFeatures residual;           // Hats and the non-bass features.
+    BassAggregates aggregates;           // Per bar and phrase of `grid`.
+    double stems_lag_s = 0.0;            // Stems against the mix before alignment; negative: ahead.
 };
 
 // Fails when the audio (or, for stems, the drums or bass stem) cannot be decoded, or when the

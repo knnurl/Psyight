@@ -159,6 +159,10 @@ Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_
         return sections.error();
     }
     analysis.sections = std::move(sections.value());
+    analysis.phrase_starts_s =
+        phrase_starts(analysis.grid, analysis.sections,
+                      static_cast<int>(std::lround(options.beats.bars_per_phrase)),
+                      analysis.beats.phrase_bar_offset, analysis.duration_s);
 
     // Hats from the beat source (mix or drums); the residual from the mix unless the "other" stem
     // gave it above.

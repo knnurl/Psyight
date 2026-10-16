@@ -20,6 +20,7 @@ const ImVec4 kLoopShade(0.95f, 0.75f, 0.2f, 0.05f); // Faint on purpose: the edg
 const ImVec4 kLoopEdge(0.95f, 0.75f, 0.2f, 1.0f);   // As in the transport overview.
 constexpr ImU32 kSectionBoundary = IM_COL32(0, 0, 0, 170);
 constexpr ImU32 kSectionText = IM_COL32(255, 255, 255, 235);
+constexpr ImU32 kPhraseTick = IM_COL32(255, 255, 255, 220);
 
 ImU32 section_colour(const std::string &label) {
     if (label == "groove") {
@@ -80,7 +81,8 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s) {
     plot_lines("##bars", bars, 0.60f, 1.5f);
 }
 
-void draw_sections(const std::vector<DetectedSection> &sections, double from_s, double to_s) {
+void draw_sections(const std::vector<DetectedSection> &sections,
+                   const std::vector<double> &phrase_starts_s, double from_s, double to_s) {
     ImDrawList *draw = ImPlot::GetPlotDrawList();
     const ImVec2 origin = ImPlot::GetPlotPos();
     const float height = ImGui::GetTextLineHeight() + 2.0f;
@@ -98,6 +100,12 @@ void draw_sections(const std::vector<DetectedSection> &sections, double from_s, 
         const float text_left = std::max(left, origin.x) + 3.0f;
         if (right - text_left > ImGui::CalcTextSize(section.label.c_str()).x + 3.0f) {
             draw->AddText(ImVec2(text_left, origin.y + 1.0f), kSectionText, section.label.c_str());
+        }
+    }
+    for (const double t_s : phrase_starts_s) {
+        if (t_s >= from_s && t_s <= to_s) {
+            const float x = ImPlot::PlotToPixels(t_s, 0.0).x;
+            draw->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + height), kPhraseTick, 3.0f);
         }
     }
     ImPlot::PopPlotClipRect();

@@ -158,6 +158,37 @@ detect_sections(const FrontEndResult &f, const BeatTrackResult &beats, const Sec
     return sections;
 }
 
+std::vector<double> phrase_starts(const Grid &grid, const std::vector<DetectedSection> &sections,
+                                  int bars_per_phrase, int phrase_bar_offset, double duration_s) {
+    std::vector<double> starts;
+    const double bar_s = kSlotsPerBar * grid.slot_length_samples() / grid.sample_rate_hz;
+    if (bar_s <= 0.0 || bars_per_phrase < 1) {
+        return starts;
+    }
+    const double first_s = samples_to_seconds(grid.first_downbeat, grid.sample_rate_hz);
+    // Count origins: the phrase offset, then each section start after the first.
+    std::vector<double> origins{first_s + phrase_bar_offset * bar_s};
+    for (size_t i = 1; i < sections.size(); ++i) {
+        origins.push_back(sections[i].start_s);
+    }
+    const double phrase_s = bars_per_phrase * bar_s;
+    for (size_t i = 0; i < origins.size(); ++i) {
+        const double until_s = i + 1 < origins.size() ? origins[i + 1] : duration_s;
+        double t = origins[i];
+        if (i == 0) {
+            while (t - phrase_s >= 0.0) {
+                t -= phrase_s; // Phrases before the offset, back to the start.
+            }
+        }
+        for (; t < until_s - 0.5 * bar_s && t < duration_s; t += phrase_s) {
+            if (t >= 0.0) {
+                starts.push_back(t);
+            }
+        }
+    }
+    return starts;
+}
+
 namespace {
 
 struct ParamEntry {
