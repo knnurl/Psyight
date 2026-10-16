@@ -17,8 +17,9 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s);
 
 void draw_playhead(double playhead_s);
 
-// Shades the loop region when it is enabled. With editable, its edges are draggable (ImPlot drag
-// tool ids first_drag_id and first_drag_id + 1). Returns the edge times, for seek_on_click.
+// Shades the loop region when it is enabled and draws its edges: draggable with editable (ImPlot
+// drag tool ids first_drag_id and first_drag_id + 1), plain lines otherwise. Returns the edge
+// times, for seek_on_click.
 std::vector<double> draw_loop(Session &session, bool editable, int first_drag_id);
 
 // Seeks to the clicked time on a click that did not drag (a drag pans), unless the click was

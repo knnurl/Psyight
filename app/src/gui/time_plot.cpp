@@ -14,7 +14,7 @@ namespace {
 constexpr size_t kMaxGridLines = 400;    // Finer levels are dropped beyond this.
 constexpr float kClickSlopPixels = 3.0f; // Mouse travel below this is a click, not a pan.
 constexpr float kHandleGrabPixels = 6.0f;
-const ImVec4 kLoopShade(0.95f, 0.75f, 0.2f, 0.12f);
+const ImVec4 kLoopShade(0.95f, 0.75f, 0.2f, 0.10f);
 const ImVec4 kLoopEdge(0.95f, 0.75f, 0.2f, 1.0f); // As in the transport overview.
 
 } // namespace
@@ -58,13 +58,18 @@ std::vector<double> draw_loop(Session &session, bool editable, int first_drag_id
         return {};
     }
     const ImPlotRect limits = ImPlot::GetPlotLimits();
-    double bottom = limits.Y.Min;
-    double top = limits.Y.Max;
-    double start_s = std::min(loop.start_s, loop.end_s);
-    double end_s = std::max(loop.start_s, loop.end_s);
-    ImPlot::DragRect(first_drag_id + 2, &start_s, &bottom, &end_s, &top, kLoopShade,
-                     ImPlotDragToolFlags_NoInputs);
-    if (editable) {
+    const double start_s = std::min(loop.start_s, loop.end_s);
+    const double end_s = std::max(loop.start_s, loop.end_s);
+    ImPlot::PushPlotClipRect();
+    ImPlot::GetPlotDrawList()->AddRectFilled(ImPlot::PlotToPixels(start_s, limits.Y.Max),
+                                             ImPlot::PlotToPixels(end_s, limits.Y.Min),
+                                             ImGui::ColorConvertFloat4ToU32(kLoopShade));
+    ImPlot::PopPlotClipRect();
+    if (!editable) {
+        const double edges_s[] = {start_s, end_s};
+        ImPlot::SetNextLineStyle(kLoopEdge, 2.0f);
+        ImPlot::PlotInfLines("##loop edges", edges_s, 2);
+    } else {
         const bool moved = ImPlot::DragLineX(first_drag_id, &loop.start_s, kLoopEdge, 2.0f) |
                            ImPlot::DragLineX(first_drag_id + 1, &loop.end_s, kLoopEdge, 2.0f);
         if (moved) {
