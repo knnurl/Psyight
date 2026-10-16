@@ -37,4 +37,9 @@ Patch build_patch(const Rig &rig, int first_universe = 1, int pixels_per_univers
 // rgb_bytes: three bytes per rig pixel in R, G, B order (engine/limiters.h to_bytes).
 std::vector<UniverseData> patch_frame(const Patch &patch, std::span<const std::uint8_t> rgb_bytes);
 
+// The inverse, as a node sees it: RGB bytes per rig pixel from received universes (indexed like
+// Patch::universes). Pixels whose universe is missing or short stay black.
+std::vector<std::uint8_t> unpatch_frame(const Patch &patch,
+                                        std::span<const std::vector<std::uint8_t>> universes);
+
 } // namespace psyight

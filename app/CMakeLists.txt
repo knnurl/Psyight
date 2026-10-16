@@ -65,10 +65,14 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/analysis/bass_aggregates.cpp src/engine/rig.cpp
                                src/engine/colour.cpp src/engine/inputs.cpp
                                src/engine/scene.cpp src/engine/limiters.cpp
-                               src/output/patch.cpp src/output/packets.cpp)
+                               src/output/patch.cpp src/output/packets.cpp
+                               src/output/sender.cpp src/output/virtual_node.cpp
+                               src/output/show.cpp src/output/udp_socket_win32.cpp
+                               src/output/precise_sleep_win32.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
-                                          psyight_miniaudio pffft::pffft signalsmith_stretch)
+                                          psyight_miniaudio pffft::pffft signalsmith_stretch
+                                          ws2_32)
 
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
                        src/gui/session.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
@@ -98,7 +102,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/beat_tracker_test.cpp tests/sections_test.cpp
                              tests/align_test.cpp tests/residual_test.cpp
                              tests/engine_test.cpp tests/limiters_test.cpp
-                             tests/output_test.cpp)
+                             tests/output_test.cpp tests/show_test.cpp)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 add_test(NAME psyight_tests COMMAND psyight_tests)

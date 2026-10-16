@@ -68,4 +68,22 @@ std::vector<UniverseData> patch_frame(const Patch &patch, std::span<const std::u
     return out;
 }
 
+std::vector<std::uint8_t> unpatch_frame(const Patch &patch,
+                                        std::span<const std::vector<std::uint8_t>> universes) {
+    std::vector<std::uint8_t> rgb(3 * patch.pixels.size(), 0);
+    for (size_t i = 0; i < patch.pixels.size(); ++i) {
+        const PatchedPixel &p = patch.pixels[i];
+        const auto slot = static_cast<size_t>(p.universe_slot);
+        if (slot >= universes.size() ||
+            universes[slot].size() < static_cast<size_t>(p.channel + kChannelsPerPixel)) {
+            continue;
+        }
+        const std::array<int, 3> at = positions(p.order);
+        for (int c = 0; c < 3; ++c) {
+            rgb[3 * i + c] = universes[slot][static_cast<size_t>(p.channel + at[c])];
+        }
+    }
+    return rgb;
+}
+
 } // namespace psyight

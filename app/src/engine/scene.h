@@ -75,8 +75,9 @@ std::unique_ptr<Effect> make_conveyor(const ConveyorParams &params = {});
 std::unique_ptr<Effect> make_sparkle(const SparkleParams &params = {});
 std::unique_ptr<Effect> make_shimmer(const ShimmerParams &params = {});
 
+// Effects are immutable once made, so copies of a scene (for the show thread) share them.
 struct Layer {
-    std::unique_ptr<Effect> effect;
+    std::shared_ptr<const Effect> effect;
     BlendMode blend = BlendMode::add;
     float opacity = 1.0f;
     bool enabled = true;
