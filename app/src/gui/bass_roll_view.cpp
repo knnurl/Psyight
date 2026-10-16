@@ -817,7 +817,8 @@ void BassRollView::draw_inspector_regions(const LoadedTrack &track) {
         if (changed) {
             labels.set_region(i, region);
         }
-        ImGui::SameLine();
+        // The actions go on their own line: with them the row overflowed the panel.
+        ImGui::Indent();
         if (ImGui::SmallButton("Loop")) {
             session_.set_loop({true, region.start_s, region.end_s});
         }
@@ -840,9 +841,11 @@ void BassRollView::draw_inspector_regions(const LoadedTrack &track) {
         ImGui::SameLine();
         if (ImGui::SmallButton("Delete")) {
             labels.delete_region(i);
+            ImGui::Unindent();
             ImGui::PopID();
             break;
         }
+        ImGui::Unindent();
         ImGui::PopID();
     }
 }
