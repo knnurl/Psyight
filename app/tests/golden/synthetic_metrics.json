@@ -1,0 +1,145 @@
+{
+  "ghost note, gate 0.8": {
+    "beat_phase_error_ms": 2.2083333333333677,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.14731160364881185,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 12.494245264047077,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 1.0,
+    "tempo_error_bpm": 0.002292233819815692
+  },
+  "melodic, gate 0.7": {
+    "beat_phase_error_ms": 2.083333333333326,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.1551803100844071,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 8.944001975947913,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.9895833333333334,
+    "tempo_error_bpm": 0.00047489693290003743
+  },
+  "octave jump, gate 0.6": {
+    "beat_phase_error_ms": 2.1041666666666847,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.07208895098559025,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 2.8017272829752304,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.9583333333333334,
+    "tempo_error_bpm": 0.001800099506681363
+  },
+  "offbeat double, gate 0.5": {
+    "beat_phase_error_ms": 2.0208333333333606,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.04005043550042615,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 4.7962353280111,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.953125,
+    "tempo_error_bpm": 0.0016205415071510743
+  },
+  "offbeat, gate 0.3": {
+    "beat_phase_error_ms": 2.3333333333332984,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.0773546666987183,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 3.8847247892119796,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.125,
+    "tempo_error_bpm": 0.001705018650142165
+  },
+  "rolling E1 150 BPM, gate 1.0, sidechain 0.5": {
+    "beat_phase_error_ms": 2.375000000000016,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.0416067991297109,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 3.0206937962957703,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 1.0,
+    "tempo_error_bpm": 0.0013843493252636563
+  },
+  "rolling, gate 0.6": {
+    "beat_phase_error_ms": 2.0208333333333606,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.0765911628286842,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 3.7549492441764087,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.9583333333333334,
+    "tempo_error_bpm": 0.0012822669768581818
+  },
+  "rolling, gate 0.6, hats and noise": {
+    "beat_phase_error_ms": 1.6458333333333464,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.07682784723662077,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 3.7972079394252845,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.9583333333333334,
+    "tempo_error_bpm": 0.0017774419830516308
+  },
+  "rolling, gate 0.8, decay 60 ms": {
+    "beat_phase_error_ms": 2.229166666666671,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.16456444406808812,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 15.866267837310932,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.9791666666666666,
+    "tempo_error_bpm": 0.0005206817800456065
+  },
+  "rolling, gate 0.9, sidechain 0.8": {
+    "beat_phase_error_ms": 2.1041666666666847,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.10949468837841343,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 7.807371069750602,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 1.0,
+    "tempo_error_bpm": 0.002180111136993901
+  },
+  "rolling, gate 1.0": {
+    "beat_phase_error_ms": 2.16666666666665,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.046084434479852686,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 2.6685298551758496,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 1.0,
+    "tempo_error_bpm": 0.000669532458005051
+  },
+  "slides and long notes": {
+    "beat_phase_error_ms": 2.083333333333326,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.26551322456295023,
+    "note_octave_errors": 2,
+    "note_offset_abs_median_ms": 8.947910055961128,
+    "note_offset_hit_rate": 0.828125,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 0.90625,
+    "tempo_error_bpm": 0.0015839232388827895
+  },
+  "triplet gallop, gate 0.7": {
+    "beat_phase_error_ms": 2.083333333333326,
+    "kick_f": 1.0,
+    "note_gate_ratio_mae": 0.029153551009822566,
+    "note_octave_errors": 0,
+    "note_offset_abs_median_ms": 3.7680347217867727,
+    "note_offset_hit_rate": 1.0,
+    "note_onset_f": 1.0,
+    "note_pitch_accuracy": 1.0,
+    "tempo_error_bpm": 0.0026703283728579663
+  }
+}
