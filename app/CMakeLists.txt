@@ -122,6 +122,10 @@ target_link_libraries(psyight_label_draft PRIVATE psyight_options psyight_lib)
 add_executable(psyight_live_check src/live_check_main.cpp)
 target_link_libraries(psyight_live_check PRIVATE psyight_options psyight_lib)
 
+# Runs the live show for hours on a looping file and logs timing and memory (M6 soak test).
+add_executable(psyight_soak src/soak_main.cpp)
+target_link_libraries(psyight_soak PRIVATE psyight_options psyight_lib psapi)
+
 # Replays a recorded session and checks it reproduces byte for byte.
 add_executable(psyight_replay src/replay_main.cpp)
 target_link_libraries(psyight_replay PRIVATE psyight_options psyight_lib)
