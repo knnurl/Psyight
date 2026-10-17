@@ -124,6 +124,7 @@ M3 progress (2026-10-16):
 - firmware/node-f767 (a19dd18, a792417): stages F1 (strips), F2 (network), F3 (the node) build warning-free with STM32CubeIDE's GCC 13.3 (F3: 56 KB flash, 176 KB RAM). ST HAL, CMSIS, lwIP 2.2.1 and LAN8742 pinned by commit (fetch_deps.ps1, gitignored).
 - The hardware-free core (protocol, node core, config protocol) is tested on the PC against the app's own sender: 7 test cases in psyight_tests.
 - Checked without hardware: the DMA2 request map for TIM1 and the Nucleo's RMII, LED and VCP pins against CubeMX 6.15's database and board file.
+- Gotcha: `pathlib.Path("student.weights").with_suffix(".json")` is `student.json`. m4_export.py's first run overwrote data/m4/student.json (restored from data/m4/runs/baseline/, identical run). Append names instead.
 - Waiting on the owner (bench, README "Bring-up"): F1 waveform on a scope (T0H, T1H, period, the first bit, the latch gap, also under Ethernet load); F2 packets from the app; F3 sync, loss policy, config save across a power cycle; that the 8 MHz HSE comes from the ST-LINK MCO.
 
 ## M4 plan (owner, 2026-10-17: training data in Desktop\launch and Music\Musify\Download\Hall*Purity*; stream the stems; exclude all four reference tracks; Python first, then the app)
@@ -147,6 +148,7 @@ Checked at the pinned vcpkg baseline b1b19307 (2025-08-30): the only runtime por
 2. Microsoft's prebuilt release (CPU zip, or the Microsoft.ML.OnnxRuntime.DirectML NuGet package) through a vcpkg overlay port in the repo: MIT, a few DLLs next to psyight.exe, CPU and DirectML. DirectML.dll's redistribution terms [Verify].
 3. Build ONNX Runtime from source in an overlay port: full control, static possible, long builds and upkeep.
 4. No runtime: the student is a small causal TCN (359k parameters), so hand-written streaming inference in C++ (each dilated layer keeps its past activations, one new frame per hop) costs about 0.7 MFLOP a hop, well under 0.1 ms on one core [Verify by measuring]. No dependency, bit-identical runs (the determinism rule), naturally causal for live mode; tied to this architecture, checked against onnxruntime's outputs in a test. ONNX stays the training export.
+Done 2026-10-17: app/src/ml/student.* (see docs/results/M4.md "In the app"): matches onnxruntime within 2e-5, streaming and whole-track bit-identical, OculusDrift F 0.981 exactly as the Python path, 37 us a frame. GUI A/B in the bass roll (DSP or M4 student), scored by the Scoring tab. `psyight_eval <audio> --student`.
 Decision: 4, with 2 (CPU) as the fallback if the model family changes. The weights stay in data/m4 (trained on private music, never committed); the parity test uses a randomly initialised student of the same shape, exported to ONNX with reference outputs from onnxruntime, which can be committed.
 
 ## Known issues

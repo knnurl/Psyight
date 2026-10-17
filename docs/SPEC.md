@@ -271,7 +271,7 @@ Every detector outputs confidence. When confidence drops below a threshold for a
    - pitch shift of ±2 semitones, with labels transformed to match
    - MP3 re-encoding
    - mild room or PA colouration
-5. **Export.** ONNX, run through ONNX Runtime with DirectML on Windows and a CPU fallback. **[Guessing]** Expect a few ms per frame on a laptop GPU [Verify] by measuring.
+5. **Export.** ONNX for checks in Python; the app runs its own C++ inference of the exported weights (`app/src/ml/student.h`, decision log 2026-10-17), streaming one frame at a time in live mode and the whole track at once in file mode, bit-identical between the two. Measured: 37 µs median (p99 105 µs) per frame, and 1.1 s for a 7-minute track, on this laptop's CPU (`psyight_tests -tc="student: inference cost" --no-skip`). ONNX Runtime (CPU, prebuilt) is the fallback if the model family changes.
 6. **Evaluation.** Use the same scoring panel and labels as DSP. The GUI A/Bs DSP against ML on identical audio.
 7. **Data hygiene.** Audio, stems and weights trained on private music never enter the repo.
 
