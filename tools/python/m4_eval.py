@@ -4,9 +4,8 @@ Usage, from the repository root (after m4_train.py):
     tools/python/.venv/Scripts/python tools/python/m4_eval.py data/OculusDrift.mp3
 
 Computes the track's student features with psyight_teacher (from the mix, as live mode would
-hear it), runs data/m4/student.onnx over them, decodes bass notes (onset peaks above a
-threshold; a note ends when the gate falls or the next onset starts; pitch is the most common
-class over the note), writes them as a labels-format file, and scores them against the track's
+hear it), runs data/m4/student.onnx over them, decodes bass notes with m4_decode.py and the
+settings m4_tune.py chose on the validation tracks, writes them as a labels-format file, and scores them against the track's
 labels with psyight_eval --notes, the same scoring as the DSP tracker. Then times one inference
 over the model's receptive field (what a live, per-hop call costs) with onnxruntime on the CPU
 and on DirectML.
@@ -23,6 +22,8 @@ import time
 import numpy as np
 import onnxruntime as ort
 
+import m4_decode
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 M4 = ROOT / "data" / "m4"
 RELEASE = ROOT / "app" / "build" / "windows-msvc" / "release"
@@ -37,26 +38,13 @@ def read(base: pathlib.Path, name: str) -> tuple[np.ndarray, dict]:
     return out, meta
 
 
-def decode(binary: np.ndarray, pitch: np.ndarray, info: dict, frame_s: float,
-           threshold: float) -> list[dict]:
-    lookahead = info["lookahead"]
-    onset = 1.0 / (1.0 + np.exp(-binary[2]))
-    gate = 1.0 / (1.0 + np.exp(-binary[3]))
-    classes = pitch.argmax(axis=0)
-    peaks = np.where((onset[1:-1] >= threshold) & (onset[1:-1] >= onset[:-2]) &
-                     (onset[1:-1] > onset[2:]))[0] + 1
-    notes = []
-    for n, k in enumerate(peaks):
-        stop = peaks[n + 1] if n + 1 < len(peaks) else len(gate)
-        end = k + 1
-        while end < stop and gate[end] >= 0.5:
-            end += 1
-        midi = int(np.bincount(classes[k:end]).argmax()) + info["first_midi"]
-        # Output frame k describes input frame k - lookahead.
-        notes.append({"onset_s": (k - lookahead) * frame_s, "offset_s": (end - lookahead) * frame_s,
-                      "midi": midi, "cents": 0.0, "slide_in": False, "slide_out": False,
-                      "velocity": 1.0})
-    return notes
+def decoded_notes(binary: np.ndarray, pitch: np.ndarray, info: dict,
+                  frame_s: float) -> list[dict]:
+    notes = m4_decode.notes(binary, pitch, info["lookahead"], info["first_midi"],
+                            info.get("decoder"))
+    return [{"onset_s": k * frame_s, "offset_s": end * frame_s, "midi": midi, "cents": 0.0,
+             "slide_in": False, "slide_out": False, "velocity": 1.0}
+            for k, end, midi in notes]
 
 
 def latency_ms(model: pathlib.Path, dims: int, frames: int,
@@ -78,7 +66,6 @@ def latency_ms(model: pathlib.Path, dims: int, frames: int,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("audio", type=pathlib.Path)
-    parser.add_argument("--threshold", type=float, default=0.5)
     args = parser.parse_args()
     info = json.loads((M4 / "student.json").read_text(encoding="utf-8"))
     model = M4 / "student.onnx"
@@ -91,15 +78,15 @@ def main() -> int:
         session = ort.InferenceSession(str(model), providers=["CPUExecutionProvider"])
         binary, pitch = session.run(None, {"features": x})
         frame_s = meta["hop_samples"] / meta["sample_rate_hz"]
-        notes = decode(binary[0], pitch[0], info, frame_s, args.threshold)
+        notes = decoded_notes(binary[0], pitch[0], info, frame_s)
         labels_path = args.audio.with_name(args.audio.name + ".labels.json")
         labels = json.loads(labels_path.read_text(encoding="utf-8"))
         estimates = {"schema": 1, "audio": labels["audio"], "sample_rate": labels["sample_rate"],
                      "grid": labels["grid"], "bass_notes": notes}
         out = pathlib.Path(tmp) / "student.labels.json"
         out.write_text(json.dumps(estimates), encoding="utf-8")
-        print(f"student (lookahead {info['lookahead']} frames, threshold {args.threshold}), "
-              f"validation during training: {info['validation']}")
+        print(f"student (lookahead {info['lookahead']} frames), decoder "
+              f"{info.get('decoder', m4_decode.DEFAULTS)}")
         result = subprocess.run([str(RELEASE / "psyight_eval.exe"), str(args.audio),
                                  "--notes", str(out)], capture_output=True, text=True)
         print(result.stdout + result.stderr, end="")
