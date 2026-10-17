@@ -146,7 +146,8 @@ Done (docs/results/M5.md):
 Waiting on the owner (needs audio out loud): a DJ set through loopback or the mixer for the M5 exit; the tap test; end-to-end latency to the LEDs (node plus light sensor or camera).
 Owner check: Hagios's drafted grid (189.128 BPM, constant) against its per-minute tempo of 186.6 to 189.4 (mix estimate 187.65, owner about 187): a constant grid drifts on this track, so its labelled region's slot positions and the live check's beat numbers there are unreliable.
 Owner check: Phase Change's drafted grid downbeat. Live mode (from a kick break) and the file-mode mix analysis both put it 3 beats from the draft (taken from the stems analysis); listen and fix the first downbeat if so.
-Next (no owner needed): bar-level novelty is used only until the first break (it overrode correct break downbeats on OculusDrift); check Hagios's tempo per minute (live 186.2, file grid 189.1, owner about 187); MIDI learn (RtMidi, in the stack); then M6 software (soak test, crash recovery, operator guide).
+- MIDI learn and mapping (91f6d1e): RtMidi 6.0.0 (MIT, vcpkg); Preview panel MIDI section; bindings for blackout, hold, automation, each scene, brightness cap, latency offset and the tap test; saved with the port in psyight.psyproj. This laptop has no MIDI input, so a real controller is the owner's test.
+Next (no owner needed): bar-level novelty is used only until the first break (it overrode correct break downbeats on OculusDrift); then M6 software (soak test, crash recovery, operator guide).
 
 ## Owner decisions waiting on real LED tests (owner, 2026-10-17: "decide after real LED testing")
 - Kick flash budget: the kick ring is one flash per kick, about 2.5 of the 3 flashes a second at 150 BPM (docs/results/M3.md).
