@@ -110,6 +110,12 @@ struct LiveState {
     LiveSection section = LiveSection::intro;
     double section_start_s = 0.0;
     int section_count = 0;
+    // For the scene rotation (engine/automation.h): starts of each kind so far, the current one
+    // included, and the section before the current one.
+    std::array<int, 5> section_occurrences{};
+    bool has_previous = false;
+    LiveSection previous_section = LiveSection::intro;
+    int previous_occurrence = 0;
 };
 
 // The beat, downbeat, phrase and section half of the live analysis, driven by kick times: the

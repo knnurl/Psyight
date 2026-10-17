@@ -33,12 +33,7 @@ void mix_into(Frame &frame, const Frame &other, double other_weight) {
 
 } // namespace
 
-int scene_for_section(const std::vector<Scene> &scenes,
-                      const std::vector<DetectedSection> &sections, size_t index) {
-    if (scenes.empty() || index >= sections.size()) {
-        return 0;
-    }
-    const std::string &label = sections[index].label;
+int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence) {
     std::vector<int> candidates = tagged(scenes, label);
     if (candidates.empty() && label == "drop") {
         candidates = tagged(scenes, "groove");
@@ -46,11 +41,20 @@ int scene_for_section(const std::vector<Scene> &scenes,
     if (candidates.empty()) {
         return 0;
     }
+    return candidates[occurrence % candidates.size()];
+}
+
+int scene_for_section(const std::vector<Scene> &scenes,
+                      const std::vector<DetectedSection> &sections, size_t index) {
+    if (scenes.empty() || index >= sections.size()) {
+        return 0;
+    }
+    const std::string &label = sections[index].label;
     size_t occurrence = 0;
     for (size_t j = 0; j < index; ++j) {
         occurrence += sections[j].label == label;
     }
-    return candidates[occurrence % candidates.size()];
+    return scene_for_label(scenes, label, occurrence);
 }
 
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
@@ -89,6 +93,51 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         return mix;
     }
     const int previous = scene_for_section(scenes, analysis.sections, index - 1);
+    const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
+    if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
+        mix.from = previous;
+        mix.to_weight = inputs.since_section_s / fade_s;
+    }
+    return mix;
+}
+
+SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
+                       const EngineInputs &inputs, const AutomationParams &params,
+                       int manual_scene) {
+    SceneMix mix;
+    const double beat_s = state.tempo_known ? state.period_s : 0.5;
+    if (params.palette_every_phrases > 0 && inputs.phrase_index >= 0) {
+        const int n = params.palette_every_phrases;
+        mix.palette_shift = inputs.phrase_index / n;
+        mix.palette_shift_from = mix.palette_shift;
+        const double since_s = inputs.phrase_phase * 4.0 * state.phrase_bars * beat_s;
+        const double slew_s = params.palette_slew_beats * beat_s;
+        if (inputs.phrase_index % n == 0 && inputs.phrase_index > 0 && since_s < slew_s) {
+            mix.palette_shift_from = mix.palette_shift - 1;
+            mix.palette_weight = since_s / slew_s;
+        }
+    }
+    if (scenes.empty()) {
+        return mix;
+    }
+    if (manual_scene >= 0 && manual_scene < static_cast<int>(scenes.size())) {
+        mix.to = manual_scene;
+        return mix;
+    }
+    if (state.section_count == 0) {
+        mix.to = 0;
+        return mix;
+    }
+    const auto occurrence = [&](LiveSection s) {
+        return static_cast<size_t>(
+            std::max(0, state.section_occurrences[static_cast<size_t>(s)] - 1));
+    };
+    mix.to = scene_for_label(scenes, inputs.section, occurrence(state.section));
+    if (!state.has_previous || cuts_into(inputs.section)) {
+        return mix;
+    }
+    const int previous = scene_for_label(scenes, live_section_name(state.previous_section),
+                                         static_cast<size_t>(state.previous_occurrence));
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
     if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
         mix.from = previous;

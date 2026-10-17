@@ -11,6 +11,7 @@
 #pragma once
 
 #include "analysis/track_analysis.h"
+#include "audio/live_input.h"
 #include "core/timebase.h"
 #include "engine/automation.h"
 #include "engine/limiters.h"
@@ -34,6 +35,9 @@ namespace psyight {
 struct ShowConfig {
     std::uint64_t version = 0; // Bump on every change, so the renderer picks it up.
     std::shared_ptr<const TrackAnalysis> analysis; // Null: frames stay black.
+    // Live mode (SPEC 4.3): when set, the engine reads the live analysis's latest state at the
+    // render time instead of `analysis`, and the position source should be the live clock.
+    std::shared_ptr<const LiveInput> live;
     Grid grid;
     int sample_rate_hz = 48000;
     double latency_offset_s = 0.0; // Render time minus playhead (SPEC 4.3).

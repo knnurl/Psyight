@@ -63,10 +63,18 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     ShowFrame out;
     if (config.hold && !config.blackout && held_.frame.size() == config.rig.pixels.size()) {
         out = held_; // The look, frozen; the limiters and automation are skipped.
-    } else if (config.analysis != nullptr) {
-        const EngineInputs inputs = inputs_at(*config.analysis, config.grid, t_s);
-        out.mix = automate(config.scenes, *config.analysis, config.grid, inputs, config.automation,
-                           config.manual_scene);
+    } else if (config.analysis != nullptr || config.live != nullptr) {
+        EngineInputs inputs;
+        if (config.live != nullptr) {
+            const LiveState state = config.live->state();
+            inputs = inputs_at(state, t_s);
+            out.mix =
+                automate_live(config.scenes, state, inputs, config.automation, config.manual_scene);
+        } else {
+            inputs = inputs_at(*config.analysis, config.grid, t_s);
+            out.mix = automate(config.scenes, *config.analysis, config.grid, inputs,
+                               config.automation, config.manual_scene);
+        }
         out.section = inputs.section;
         out.beat_in_bar = inputs.beat_in_bar;
         if (config.blackout) {

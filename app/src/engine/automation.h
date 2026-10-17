@@ -39,6 +39,10 @@ struct SceneMix {
     double palette_weight = 1.0; // 1: palette_shift alone.
 };
 
+// The scene for the occurrence-th section (from 0) with this label: the scenes tagged with the
+// label in turn (a drop with no drop scene takes the groove scenes); scene 0 when none is tagged.
+int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence);
+
 // The scene for section `index` of the analysis (rotation among tagged scenes).
 int scene_for_section(const std::vector<Scene> &scenes,
                       const std::vector<DetectedSection> &sections, size_t index);
@@ -46,6 +50,12 @@ int scene_for_section(const std::vector<Scene> &scenes,
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
                   const EngineInputs &inputs, const AutomationParams &params,
                   int manual_scene = -1);
+
+// Live mode: the same rules from the live state's section history; the phrase start for the
+// palette slew comes from the predicted beat.
+SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
+                       const EngineInputs &inputs, const AutomationParams &params,
+                       int manual_scene = -1);
 
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
