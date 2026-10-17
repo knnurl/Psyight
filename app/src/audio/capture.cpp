@@ -1,10 +1,14 @@
 #include "audio/capture.h"
 
+#include "audio/audio_file.h"
+#include "output/precise_sleep.h"
+
 #include <miniaudio.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <thread>
 
 namespace psyight {
 
@@ -23,6 +27,10 @@ struct Capture::Impl {
     ma_device device{};
     bool context_ready = false;
     bool device_ready = false;
+    // CaptureSource::file.
+    std::vector<float> file;
+    std::atomic<bool> stop{false};
+    std::thread feeder;
 };
 
 Capture::Capture() = default;
@@ -58,6 +66,41 @@ Result<void> Capture::open(const CaptureOptions &options) {
     stamp_time_ns_.store(0, std::memory_order_release);
     float discarded = 0.0f;
     while (ring_.try_pop(discarded)) {
+    }
+
+    if (options.source == CaptureSource::file) {
+        Result<AudioBuffer> decoded = decode_audio_file(options.file);
+        if (!decoded) {
+            impl_.reset();
+            return decoded.error();
+        }
+        if (decoded.value().sample_rate_hz != options.sample_rate_hz) {
+            impl_.reset();
+            return Error{"file capture: the file decodes at a different rate"};
+        }
+        impl_->file = mono_mix(decoded.value());
+        if (impl_->file.empty()) {
+            impl_.reset();
+            return Error{"file capture: the file is empty"};
+        }
+        impl_->feeder = std::thread([this] {
+            // A 10 ms period, as WASAPI's, paced by the clock (no drift: block n is due at
+            // start + n periods).
+            const int period = sample_rate_hz_ / 100;
+            const std::vector<float> &audio = impl_->file;
+            std::vector<float> block(static_cast<size_t>(period));
+            size_t at = 0;
+            const auto start = std::chrono::steady_clock::now();
+            for (long long n = 1; !impl_->stop; ++n) {
+                for (float &s : block) {
+                    s = audio[at];
+                    at = (at + 1) % audio.size();
+                }
+                sleep_until_precise(start + std::chrono::microseconds(10000 * n));
+                on_audio(block.data(), static_cast<unsigned int>(block.size()));
+            }
+        });
+        return {};
     }
 
     const ma_backend null_backend = ma_backend_null;
@@ -119,6 +162,10 @@ void Capture::close() {
     if (!impl_) {
         return;
     }
+    impl_->stop = true;
+    if (impl_->feeder.joinable()) {
+        impl_->feeder.join();
+    }
     if (impl_->device_ready) {
         ma_device_uninit(&impl_->device); // Stops the device and joins its thread.
     }
@@ -131,6 +178,9 @@ void Capture::close() {
 bool Capture::is_open() const { return impl_ != nullptr; }
 
 int Capture::device_period_frames() const {
+    if (impl_ && impl_->feeder.joinable()) {
+        return sample_rate_hz_ / 100;
+    }
     return impl_ && impl_->device_ready
                ? static_cast<int>(impl_->device.capture.internalPeriodSizeInFrames)
                : 0;

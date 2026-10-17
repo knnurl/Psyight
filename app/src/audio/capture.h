@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <string>
@@ -23,11 +24,14 @@ struct ma_device;
 
 namespace psyight {
 
-enum class CaptureSource { loopback, input };
+// file: a decoded file delivered at real-time pace in 10 ms blocks, looping, and never played
+// (rehearsing live mode, soak tests, checking live mode with music without sound).
+enum class CaptureSource { loopback, input, file };
 
 struct CaptureOptions {
     CaptureSource source = CaptureSource::loopback;
-    std::string device_name; // Input devices: empty for the default.
+    std::string device_name;    // Input devices: empty for the default.
+    std::filesystem::path file; // CaptureSource::file.
     int sample_rate_hz = 48000;
     bool null_backend = false; // Silence at real-time pace (tests).
 };

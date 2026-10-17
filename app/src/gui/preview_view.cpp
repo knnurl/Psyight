@@ -328,7 +328,9 @@ void PreviewView::draw_live() {
     }
     const float em = ImGui::GetFontSize();
     if (live == nullptr) {
-        const std::string current = live_source_ == 0
+        // Sources: 0 loopback, 1 to n input devices, -1 the loaded track as if live (silent).
+        const std::string current = live_source_ == -1 ? "The loaded track, as if live (silent)"
+                                    : live_source_ == 0
                                         ? "Loopback (what this computer plays)"
                                         : input_devices_[static_cast<size_t>(live_source_ - 1)];
         ImGui::SetNextItemWidth(18.0f * em);
@@ -342,6 +344,10 @@ void PreviewView::draw_live() {
             if (ImGui::Selectable("Loopback (what this computer plays)", live_source_ == 0)) {
                 live_source_ = 0;
             }
+            if (session_.has_track() &&
+                ImGui::Selectable("The loaded track, as if live (silent)", live_source_ == -1)) {
+                live_source_ = -1;
+            }
             for (size_t i = 0; i < input_devices_.size(); ++i) {
                 if (ImGui::Selectable(input_devices_[i].c_str(),
                                       live_source_ == static_cast<int>(i) + 1)) {
@@ -353,9 +359,13 @@ void PreviewView::draw_live() {
         ImGui::SameLine();
         if (ImGui::Button("Start")) {
             CaptureOptions options;
-            options.source = live_source_ == 0 ? CaptureSource::loopback : CaptureSource::input;
+            options.source = live_source_ == 0  ? CaptureSource::loopback
+                             : live_source_ < 0 ? CaptureSource::file
+                                                : CaptureSource::input;
             if (live_source_ > 0) {
                 options.device_name = input_devices_[static_cast<size_t>(live_source_ - 1)];
+            } else if (live_source_ < 0 && session_.has_track()) {
+                options.file = session_.track().path;
             }
             const Result<void> started = session_.start_live(options);
             live_error_ = started ? "" : started.error().message;

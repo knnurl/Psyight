@@ -165,7 +165,10 @@ Result<void> Session::start_live(const CaptureOptions &options) {
     live_owner_ = live;
     live_.store(live);
     spdlog::info("Live input started ({})",
-                 options.source == CaptureSource::loopback ? "loopback" : options.device_name);
+                 options.source == CaptureSource::loopback ? std::string("loopback")
+                 : options.source == CaptureSource::file
+                     ? "file " + path_to_utf8(options.file.filename()) + ", silent"
+                     : options.device_name);
     return {};
 }
 
