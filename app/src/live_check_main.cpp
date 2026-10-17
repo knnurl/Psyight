@@ -21,6 +21,7 @@
 #include "ml/student.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -145,6 +146,7 @@ int wmain(int argc, wchar_t **argv) {
     double tempo_at_s = -1.0, lock_at_s = -1.0;
     std::vector<double> phase_errors_ms;
     long long bar_checks = 0, bar_agree = 0;
+    std::array<long long, 4> bar_offsets{}; // Live beat in bar minus file's, mod 4.
     for (const LiveState &s : live.recorded_states()) {
         if (s.tempo_known && tempo_at_s < 0.0) {
             tempo_at_s = s.analysed_s;
@@ -174,6 +176,7 @@ int wmain(int argc, wchar_t **argv) {
                 4);
             ++bar_checks;
             bar_agree += live_in_bar == file_beat_in_bar;
+            ++bar_offsets[static_cast<size_t>(((live_in_bar - file_beat_in_bar) % 4 + 4) % 4)];
         }
     }
     const LiveState &end = live.state();
@@ -194,6 +197,10 @@ int wmain(int argc, wchar_t **argv) {
                                                           [](double e) { return e <= 20.0; })) /
                         static_cast<double>(abs_ms.size()),
                     bar_checks > 0 ? 100.0 * bar_agree / bar_checks : 0.0);
+        std::printf("  bar offset (live minus file, beats): 0: %lld, +1: %lld, +2: %lld, +3: %lld; "
+                    "final downbeat from %s\n",
+                    bar_offsets[0], bar_offsets[1], bar_offsets[2], bar_offsets[3],
+                    end.downbeat_from_novelty ? "novelty" : "a kick break or the first lock");
     }
 
     // Bass.

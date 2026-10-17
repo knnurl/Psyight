@@ -85,6 +85,14 @@ void LiveAnalyser::reset() {
     recorded_kicks_.clear();
     recorded_notes_.clear();
     recorded_states_.clear();
+    beat_now_ = std::numeric_limits<long long>::min();
+    beat_sum_ = {};
+    beat_frames_ = 0;
+    beat_means_ = {};
+    beats_summed_ = 0;
+    phase_novelty_ = {};
+    novelty_mean_ = 0.0;
+    novelty_count_ = 0;
     run_frame(); // Frame 0 describes the silence before the first sample, as in file mode.
 }
 
@@ -121,6 +129,7 @@ void LiveAnalyser::run_frame() {
                        ? static_cast<float>(std::exp(log_sum / count) / (power_sum / count))
                        : 0.0f;
 
+    add_beat_features();
     quantise_student_features(feature_frame_, model_->features_scale);
     student_->process(feature_frame_, binary_, pitch_);
     const long long j = input_frames_ - model_->lookahead;
@@ -128,6 +137,85 @@ void LiveAnalyser::run_frame() {
     if (j >= 0) {
         decode_frame(j);
     }
+}
+
+void LiveAnalyser::add_beat_features() {
+    if (!state_.tempo_known) {
+        return;
+    }
+    const double t_s = static_cast<double>(input_frames_) * frame_s_;
+    const auto beat = static_cast<long long>(std::floor(LiveBeat::position(state_, t_s)));
+    if (beat != beat_now_) {
+        if (beat_frames_ > 0 && beat == beat_now_ + 1) {
+            std::array<double, kGroups> &mean = beat_means_[static_cast<size_t>(beat_now_ & 7)];
+            for (int g = 0; g < kGroups; ++g) {
+                mean[static_cast<size_t>(g)] = beat_sum_[static_cast<size_t>(g)] / beat_frames_;
+            }
+            ++beats_summed_;
+            if (beats_summed_ >= 8) {
+                // Novelty at k = beat_now_ - 3: beats k..k+3 against k-4..k-1.
+                const long long k = beat_now_ - 3;
+                double sum = 0.0;
+                for (int g = 0; g < kGroups; ++g) {
+                    double after = 0.0, before = 0.0;
+                    for (int i = 0; i < 4; ++i) {
+                        after +=
+                            beat_means_[static_cast<size_t>((k + i) & 7)][static_cast<size_t>(g)];
+                        before += beat_means_[static_cast<size_t>((k - 4 + i) & 7)]
+                                             [static_cast<size_t>(g)];
+                    }
+                    const double d = (after - before) / 4.0;
+                    sum += d * d;
+                }
+                const double novelty = std::sqrt(sum);
+                ++novelty_count_;
+                novelty_mean_ += (novelty - novelty_mean_) / static_cast<double>(novelty_count_);
+                const double clipped = std::min(novelty, 3.0 * novelty_mean_);
+                const double a = 1.0 / (4.0 * params_.novelty_memory_bars / 4.0 + 1.0);
+                double &phase = phase_novelty_[static_cast<size_t>(((k % 4) + 4) % 4)];
+                phase += a * 4.0 * (clipped - phase); // Each phase is updated once a bar.
+                // Only until the first kick break: on OculusDrift (labelled by ear) novelty
+                // overrode correct break downbeats (bar position 90% to 77%).
+                const bool any_break =
+                    state_.last_break_beat != std::numeric_limits<long long>::min();
+                if (!any_break && novelty_count_ >= 4LL * params_.novelty_min_bars) {
+                    const auto best = static_cast<int>(
+                        std::max_element(phase_novelty_.begin(), phase_novelty_.end()) -
+                        phase_novelty_.begin());
+                    double second = 0.0;
+                    for (int p = 0; p < 4; ++p) {
+                        if (p != best) {
+                            second = std::max(second, phase_novelty_[static_cast<size_t>(p)]);
+                        }
+                    }
+                    const double top = phase_novelty_[static_cast<size_t>(best)];
+                    if (top > 0.0 && (top - second) / top >= params_.downbeat_margin) {
+                        const long long current = ((state_.downbeat_beat % 4) + 4) % 4;
+                        if (current != best) {
+                            state_.downbeat_beat += best - current;
+                        }
+                        state_.downbeat_from_novelty = true;
+                    }
+                }
+            }
+        } else if (beat != beat_now_ + 1) {
+            beats_summed_ = 0; // A jump (a reacquisition): start the beat history again.
+        }
+        beat_now_ = beat;
+        beat_sum_ = {};
+        beat_frames_ = 0;
+    }
+    const StudentFeatureParams &fp = features_.params();
+    for (int g = 0; g < 24; ++g) { // 24 groups of 4 short bands, then of 4 long bands.
+        double short_sum = 0.0, long_sum = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            short_sum += feature_frame_[static_cast<size_t>(4 * g + i)];
+            long_sum += feature_frame_[static_cast<size_t>(fp.short_bands + 4 * g + i)];
+        }
+        beat_sum_[static_cast<size_t>(g)] += short_sum / 4.0;
+        beat_sum_[static_cast<size_t>(24 + g)] += long_sum / 4.0;
+    }
+    ++beat_frames_;
 }
 
 void LiveAnalyser::decode_frame(long long j) {
@@ -410,6 +498,8 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
         const double start_s = time_of(s, start);
         if (gap >= 4) {
             s.downbeat_beat = start; // The kick returns after a bar or more: a downbeat.
+            s.last_break_beat = start;
+            s.downbeat_from_novelty = false;
         }
         if (gap >= 4LL * params_.drop_after_bars) {
             set_section(s, LiveSection::drop, start_s);

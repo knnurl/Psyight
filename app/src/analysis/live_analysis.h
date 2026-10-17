@@ -19,10 +19,14 @@
 // (a new track in a mix) restart the acquisition. Between kicks (breakdowns) the loop runs free.
 // Kicks count for downbeats and sections only in runs (on two consecutive beats or more, as file
 // mode's kicks), so a stray hit in a breakdown does not end it. Downbeat: the first kick of a run
-// that returns after a bar or more. Sections: breakdown after
-// breakdown_bars bars without a kick, build when the residual activity rises in a breakdown, drop
-// when the kick returns after drop_after_bars bars, groove otherwise; phrases restart at section
-// starts.
+// that returns after a bar or more. Until the first such break, bar-level novelty decides (it
+// replaces the arbitrary phase of the first lock), as in file mode: per beat, the mean feature
+// frame in 24 short-window and 24 long-window band groups; the novelty at beat k is the distance
+// between the means of beats k..k+3 and k-4..k-1 (known a bar late); each bar phase keeps a slowly
+// forgetting mean of its novelty (clipped at 3 times the overall mean), and the best phase becomes
+// the downbeat when it leads the next by downbeat_margin. Sections: breakdown after breakdown_bars
+// bars without a kick, build when the residual activity rises in a breakdown, drop when the kick
+// returns after drop_after_bars bars, groove otherwise; phrases restart at section starts.
 //
 // Latency, measured from the audio a decision describes: the student's lookahead plus one frame
 // for kicks and hats, plus three for bass onsets (latency_s), plus up to one hop of buffering. The
@@ -67,6 +71,9 @@ struct LiveParams {
     double kick_threshold = 0.5;
     double hat_threshold = 0.5;
     int event_min_gap_frames = 4; // Kicks and hats, as the offline decoder's kick peaks.
+    double novelty_memory_bars = 32.0;
+    int novelty_min_bars = 8;     // Bars of novelty before it may decide.
+    double downbeat_margin = 0.1; // Of the best phase's mean.
 };
 
 inline constexpr double kLiveNever = -std::numeric_limits<double>::infinity();
@@ -90,6 +97,9 @@ struct LiveState {
     long long last_kick_beat = std::numeric_limits<long long>::min();
     int kick_streak = 0; // Consecutive beats with a kick, up to the last kick.
     long long last_run_beat = std::numeric_limits<long long>::min(); // Last kick in a run.
+    long long last_break_beat =
+        std::numeric_limits<long long>::min(); // Last downbeat from a break.
+    bool downbeat_from_novelty = false;
     // Events.
     double last_kick_s = kLiveNever;
     long long kicks = 0;
@@ -171,6 +181,7 @@ class LiveAnalyser {
     void run_frame();               // Features, student, decoding for the next input frame.
     void decode_frame(long long j); // j: the input frame the newest outputs describe.
     void scan_note(long long j);    // Gate and pitch of the sounding note up to frame j.
+    void add_beat_features();       // Bar-level novelty for the downbeat (see above).
 
     void on_kick(double t_s);
     void finish_note(double end_s);
@@ -197,6 +208,16 @@ class LiveAnalyser {
     std::array<long long, 4> recent_kick_frames_{};
     std::vector<float> short_centres_hz_; // Centre of each short band.
     std::vector<int> pitch_counts_;
+    // Downbeat novelty: the beat being summed, the last 8 beats' means, the novelty per phase.
+    static constexpr int kGroups = 48;
+    long long beat_now_ = std::numeric_limits<long long>::min();
+    std::array<double, kGroups> beat_sum_{};
+    int beat_frames_ = 0;
+    std::array<std::array<double, kGroups>, 8> beat_means_{};
+    long long beats_summed_ = 0;
+    std::array<double, 4> phase_novelty_{};
+    double novelty_mean_ = 0.0;
+    long long novelty_count_ = 0;
     LiveBeat beat_;
     LiveState state_;
     bool recording_ = false;
