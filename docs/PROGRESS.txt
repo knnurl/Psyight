@@ -146,6 +146,7 @@ Done (docs/results/M5.md):
 Waiting on the owner (needs audio out loud): a DJ set through loopback or the mixer for the M5 exit; the tap test; end-to-end latency to the LEDs (node plus light sensor or camera).
 Owner check: Hagios's drafted grid (189.128 BPM, constant) against its per-minute tempo of 186.6 to 189.4 (mix estimate 187.65, owner about 187): a constant grid drifts on this track, so its labelled region's slot positions and the live check's beat numbers there are unreliable.
 Owner check: Phase Change's drafted grid downbeat. Live mode (from a kick break) and the file-mode mix analysis both put it 3 beats from the draft (taken from the stems analysis); listen and fix the first downbeat if so.
+- Operator controls (472e724): Downbeat now (D or a MIDI pad), nudge +-10 ms, Relock (SPEC 6.5).
 - MIDI learn and mapping (91f6d1e): RtMidi 6.0.0 (MIT, vcpkg); Preview panel MIDI section; bindings for blackout, hold, automation, each scene, brightness cap, latency offset and the tap test; saved with the port in psyight.psyproj. This laptop has no MIDI input, so a real controller is the owner's test.
 Next (no owner needed): bar-level novelty is used only until the first break (it overrode correct break downbeats on OculusDrift); then M6 software (soak test, crash recovery, operator guide).
 
@@ -154,6 +155,7 @@ Next (no owner needed): bar-level novelty is used only until the first break (it
 - psyight_soak <audio> [--minutes N]: the live show for hours; logs frames, late frames, render time, delay, load, dropped samples, lock and memory each minute. 1 minute: 3600 frames at 60.00 fps, none late. A 4-hour run started 2026-10-17 alongside the M4 export (result to docs/results/M6.md).
 - Crash recovery: logs/psyight.log (rotating), minidumps in logs/ on a crash (not exercised yet), psyight.running marker (an unclean exit is reported at the next start; checked with a forced kill), project autosave within a minute.
 - docs/OPERATOR_GUIDE.md.
+In progress (2026-10-17, background): the M4 export of the added folders (data/m4/export2.log), then retrain, re-tune the decoder (m4_tune.py), re-export the weights (m4_export.py weights) and re-score (psyight_eval --student, psyight_live_check); the 4-hour soak (scratchpad log, to docs/results/M6.md).
 Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure, a venue dry run (M6 exit).
 
 ## Owner decisions waiting on real LED tests (owner, 2026-10-17: "decide after real LED testing")
