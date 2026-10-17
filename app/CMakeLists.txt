@@ -75,7 +75,8 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/output/sender.cpp src/output/virtual_node.cpp
                                src/output/show.cpp src/output/udp_socket_win32.cpp
                                src/output/precise_sleep_win32.cpp src/output/art_poll.cpp
-                               src/output/discovery.cpp src/output/preflight.cpp)
+                               src/output/discovery.cpp src/output/preflight.cpp
+                               src/ml/student.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch
@@ -133,7 +134,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/preflight_test.cpp tests/modulation_test.cpp
                              tests/recorder_test.cpp tests/student_data_test.cpp
                              tests/node_firmware_test.cpp tests/playhead_clock_test.cpp
-                             tests/golden_test.cpp
+                             tests/golden_test.cpp tests/student_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)

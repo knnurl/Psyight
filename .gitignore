@@ -9,6 +9,9 @@ imgui.ini
 
 # Private data: never commit audio, stems, labels for private tracks, or trained weights
 data/
+# Test fixtures with random weights and inputs (nothing from music): committed.
+!app/tests/data/
+student.weights.*
 *.wav
 *.flac
 *.mp3

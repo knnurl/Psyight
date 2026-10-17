@@ -25,6 +25,15 @@ Each track's stems go to `data/stems/htdemucs/<track name>/<stem>.wav` at 44.1 k
 
 Licence (SPEC 18 A6): the Demucs code is MIT. The upstream repository was archived on 1 January 2025, with a maintained fork at github.com/adefossez/demucs that takes only important bug fixes. The licence of the pretrained weights is not stated, so stems are for analysis only and the weights are never shipped.
 
+## Student weights for the app (`m4_export.py`)
+
+```
+tools/python/.venv/Scripts/python tools/python/m4_export.py weights
+tools/python/.venv/Scripts/python tools/python/m4_export.py fixture
+```
+
+`weights` writes `data/m4/student.weights.{json,bin}` (batch norm folded, the decoder settings from `student.json`), which the app and `psyight_eval --student` load from the working directory. Run it after `m4_train.py` and `m4_tune.py`. `fixture` rewrites `app/tests/data/student_fixture.*`: a small student with random weights, its onnxruntime outputs and decoded notes, which the C++ tests check against. Nothing in the fixture comes from music, so it is committed.
+
 ## Scoring cross-check (`eval_mir.py`)
 
 Recomputes the bass note metrics with mir_eval and compares them with `psyight_eval --notes` (needs a Release build of the app). Estimates come from `psyight_eval <audio> --save-notes <file>` or from `m4_eval.py`.
