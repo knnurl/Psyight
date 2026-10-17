@@ -120,6 +120,12 @@ Selection select_notes(const std::vector<BassNoteLabel> &notes,
     return selection;
 }
 
+// Offset tolerance of a reference note, as mir_eval's.
+double offset_tolerance_s(const BassNoteLabel &ref, const ScoringParams &params) {
+    return std::max(params.offset_ratio * (ref.offset_s - ref.onset_s),
+                    params.offset_min_tolerance_s);
+}
+
 // Fills every statistic from a matching. The counts are the recall and precision denominators.
 NoteScore score_matches(const std::vector<BassNoteLabel> &references,
                         const std::vector<BassNoteLabel> &estimates,
@@ -156,9 +162,7 @@ NoteScore score_matches(const std::vector<BassNoteLabel> &references,
         score.offset_errors_s.push_back(offset_error_s);
         abs_offset_errors_s.push_back(std::abs(offset_error_s));
         const double ref_duration_s = ref.offset_s - ref.onset_s;
-        const double offset_tolerance_s =
-            std::max(params.offset_ratio * ref_duration_s, params.offset_min_tolerance_s);
-        if (rounded_distance_s(est.offset_s, ref.offset_s) <= offset_tolerance_s) {
+        if (rounded_distance_s(est.offset_s, ref.offset_s) <= offset_tolerance_s(ref, params)) {
             ++offset_hits;
         }
 
@@ -187,37 +191,57 @@ NoteScore score_matches(const std::vector<BassNoteLabel> &references,
     return score;
 }
 
-// Scores the references inside the regions. Matching sees every reference and estimate within one
-// tolerance of a region, so detections at an edge pair with the right note: an estimate matched
-// to a reference outside the regions is neither a hit nor a false positive here.
+// The matching inside the regions. It sees every reference and estimate within one tolerance of a
+// region, so detections at an edge pair with the right note: an estimate matched to a reference
+// outside the regions is neither a hit nor a false positive here. Indices are into refs and ests.
+struct RegionMatching {
+    Selection refs;
+    Selection ests;
+    std::vector<NoteMatch> matches;   // Pairs whose reference is inside.
+    std::vector<int> missed;          // Inside references with no match.
+    std::vector<int> false_positives; // Inside estimates with no match.
+};
+
+RegionMatching match_in_regions(const std::vector<BassNoteLabel> &reference_notes,
+                                const std::vector<BassNoteLabel> &estimates,
+                                const std::vector<LabelRegion> &regions,
+                                const ScoringParams &params) {
+    const double margin_s = params.onset_tolerance_s;
+    RegionMatching m;
+    m.refs = select_notes(reference_notes, regions, margin_s);
+    m.ests = select_notes(estimates, regions, margin_s);
+    std::vector<bool> ref_matched(m.refs.notes.size(), false);
+    std::vector<bool> est_matched(m.ests.notes.size(), false);
+    for (const NoteMatch &match :
+         match_note_onsets(m.refs.notes, m.ests.notes, params.onset_tolerance_s)) {
+        ref_matched[match.reference_index] = true;
+        est_matched[match.estimate_index] = true;
+        if (m.refs.inside[match.reference_index]) {
+            m.matches.push_back(match);
+        }
+    }
+    for (size_t i = 0; i < m.refs.notes.size(); ++i) {
+        if (!ref_matched[i] && m.refs.inside[i]) {
+            m.missed.push_back(static_cast<int>(i));
+        }
+    }
+    for (size_t i = 0; i < m.ests.notes.size(); ++i) {
+        if (!est_matched[i] && m.ests.inside[i]) {
+            m.false_positives.push_back(static_cast<int>(i));
+        }
+    }
+    return m;
+}
+
 NoteScore score_in_regions(const std::vector<BassNoteLabel> &reference_notes,
                            const std::vector<BassNoteLabel> &estimates,
                            const std::vector<LabelRegion> &regions, double slot_len_s,
                            const ScoringParams &params) {
-    const double margin_s = params.onset_tolerance_s;
-    const Selection refs = select_notes(reference_notes, regions, margin_s);
-    const Selection ests = select_notes(estimates, regions, margin_s);
-    const std::vector<NoteMatch> all_matches =
-        match_note_onsets(refs.notes, ests.notes, params.onset_tolerance_s);
-
-    std::vector<NoteMatch> matches; // Pairs whose reference is inside.
-    std::vector<bool> est_matched(ests.notes.size(), false);
-    for (const NoteMatch &match : all_matches) {
-        est_matched[match.estimate_index] = true;
-        if (refs.inside[match.reference_index]) {
-            matches.push_back(match);
-        }
-    }
-    int reference_count = 0;
-    for (const bool inside : refs.inside) {
-        reference_count += inside ? 1 : 0;
-    }
-    int estimate_count = static_cast<int>(matches.size());
-    for (size_t i = 0; i < ests.notes.size(); ++i) {
-        estimate_count += (!est_matched[i] && ests.inside[i]) ? 1 : 0; // False positives.
-    }
-    return score_matches(refs.notes, ests.notes, matches, reference_count, estimate_count,
-                         slot_len_s, params);
+    const RegionMatching m = match_in_regions(reference_notes, estimates, regions, params);
+    const auto matched = static_cast<int>(m.matches.size());
+    return score_matches(m.refs.notes, m.ests.notes, m.matches,
+                         matched + static_cast<int>(m.missed.size()),
+                         matched + static_cast<int>(m.false_positives.size()), slot_len_s, params);
 }
 
 } // namespace
@@ -303,6 +327,53 @@ TrackScore score_track(const Labels &reference, const std::vector<BassNoteLabel>
     track.total =
         score_in_regions(reference.bass_notes, estimates, complete_regions, slot_len_s, params);
     return track;
+}
+
+std::vector<NoteError> list_note_errors(const Labels &reference,
+                                        const std::vector<BassNoteLabel> &estimates,
+                                        const ScoringParams &params) {
+    std::vector<LabelRegion> complete_regions;
+    for (const LabelRegion &region : reference.regions) {
+        if (region.complete) {
+            complete_regions.push_back(region);
+        }
+    }
+    const RegionMatching m =
+        match_in_regions(reference.bass_notes, estimates, complete_regions, params);
+    std::vector<NoteError> errors;
+    for (const int i : m.missed) {
+        errors.push_back({NoteErrorKind::missed, m.refs.notes[i].onset_s, m.refs.notes[i], {}});
+    }
+    for (const int i : m.false_positives) {
+        errors.push_back(
+            {NoteErrorKind::false_positive, m.ests.notes[i].onset_s, {}, m.ests.notes[i]});
+    }
+    for (const NoteMatch &match : m.matches) {
+        const BassNoteLabel &ref = m.refs.notes[match.reference_index];
+        const BassNoteLabel &est = m.ests.notes[match.estimate_index];
+        const double cents = pitch_cents(est) - pitch_cents(ref);
+        if (std::abs(cents) > params.pitch_tolerance_cents) {
+            const double octaves = std::round(cents / kCentsPerOctave);
+            const bool octave = octaves != 0.0 && std::abs(cents - octaves * kCentsPerOctave) <=
+                                                      params.pitch_tolerance_cents;
+            errors.push_back({octave ? NoteErrorKind::octave : NoteErrorKind::pitch, ref.onset_s,
+                              ref, est, cents});
+        }
+        if (rounded_distance_s(est.offset_s, ref.offset_s) > offset_tolerance_s(ref, params)) {
+            errors.push_back(
+                {NoteErrorKind::offset, ref.onset_s, ref, est, est.offset_s - ref.offset_s});
+        }
+    }
+    std::stable_sort(errors.begin(), errors.end(), [](const NoteError &a, const NoteError &b) {
+        if (a.kind != b.kind) {
+            return a.kind < b.kind;
+        }
+        if (std::abs(a.error) != std::abs(b.error)) {
+            return std::abs(a.error) > std::abs(b.error);
+        }
+        return a.time_s < b.time_s;
+    });
+    return errors;
 }
 
 double percentile(std::vector<double> values, double q) {

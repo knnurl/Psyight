@@ -86,6 +86,25 @@ NoteScore score_notes(const std::vector<BassNoteLabel> &references,
 TrackScore score_track(const Labels &reference, const std::vector<BassNoteLabel> &estimates,
                        const ScoringParams &params);
 
+// One scoring error, for finding and listening to what went wrong.
+enum class NoteErrorKind { missed, false_positive, octave, pitch, offset };
+
+struct NoteError {
+    NoteErrorKind kind = NoteErrorKind::missed;
+    double time_s = 0.0;     // The reference's onset; the estimate's for a false positive.
+    BassNoteLabel reference; // Default for a false positive.
+    BassNoteLabel estimate;  // Default for a missed note.
+    double error = 0.0;      // Pitch kinds: est - ref in cents. Offset: est - ref in s. Else 0.
+};
+
+// Every error in the complete regions, with score_track's matching: missed notes and false
+// positives (by time), then octave and other pitch errors, then offsets outside the offset
+// tolerance (each largest first). A matched note can appear twice: once for pitch, once for its
+// offset.
+std::vector<NoteError> list_note_errors(const Labels &reference,
+                                        const std::vector<BassNoteLabel> &estimates,
+                                        const ScoringParams &params);
+
 // Linear-interpolation percentile (numpy's default), q in [0, 1]. NaN for an empty input.
 double percentile(std::vector<double> values, double q);
 

@@ -31,9 +31,11 @@ void apply_default_layout(ImGuiID dockspace_id) {
     ImGuiID bass_roll = 0;
     ImGui::DockBuilderSplitNode(views, ImGuiDir_Up, kAnalysisHeightFraction, &analysis, &bass_roll);
     ImGui::DockBuilderDockWindow("Transport", top);
+    ImGui::DockBuilderDockWindow("Scoring", inspector); // Tabbed behind the inspector.
     ImGui::DockBuilderDockWindow("Note inspector", inspector);
     ImGui::DockBuilderDockWindow("Rig", preview); // Tabbed behind the preview.
     ImGui::DockBuilderDockWindow("Preflight", preview);
+    ImGui::DockBuilderDockWindow("Log", preview);
     ImGui::DockBuilderDockWindow("Preview", preview);
     ImGui::DockBuilderDockWindow("Analysis", analysis);
     ImGui::DockBuilderDockWindow("Bass roll", bass_roll);

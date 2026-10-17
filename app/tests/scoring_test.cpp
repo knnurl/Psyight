@@ -257,3 +257,46 @@ TEST_CASE("scoring: an unmatched estimate just outside a region is not its false
     CHECK(inside.total.estimate_count == 2);
     CHECK(inside.total.onset_precision == 0.5);
 }
+TEST_CASE("scoring: the error list holds every miss, false positive, pitch and offset error") {
+    Labels reference;
+    reference.grid.bpm = 160.0;
+    reference.regions = {{0.0, 10.0, true}, {10.0, 20.0, false}};
+    reference.bass_notes = {note(1.0, 1.05),     note(2.0, 2.05),     note(3.0, 3.05),
+                            note(4.0, 4.05, 29), note(5.0, 5.05, 29), note(6.0, 6.05),
+                            note(7.0, 7.05, 29)};
+    const std::vector<BassNoteLabel> estimates{
+        note(1.0, 1.05),     // Right.
+        note(3.005, 3.05),   // Right; 2.0 is missed.
+        note(4.0, 4.05, 41), // An octave up.
+        note(5.0, 5.05, 31), // Two semitones up.
+        note(6.0, 6.25),     // 200 ms late offset (tolerance 50 ms).
+        note(7.0, 7.12, 30), // A semitone up and 70 ms late: listed twice.
+        note(8.0, 8.05),     // False positive.
+        note(15.0, 15.05)};  // In the incomplete region: ignored.
+    const std::vector<NoteError> errors = list_note_errors(reference, estimates, {});
+    REQUIRE(errors.size() == 7);
+    CHECK(errors[0].kind == NoteErrorKind::missed);
+    CHECK(errors[0].time_s == 2.0);
+    CHECK(errors[0].reference.onset_s == 2.0);
+    CHECK(errors[1].kind == NoteErrorKind::false_positive);
+    CHECK(errors[1].time_s == 8.0);
+    CHECK(errors[1].estimate.onset_s == 8.0);
+    CHECK(errors[2].kind == NoteErrorKind::octave);
+    CHECK(errors[2].error == doctest::Approx(1200.0));
+    CHECK(errors[3].kind == NoteErrorKind::pitch); // Largest first: 200 cents, then 100.
+    CHECK(errors[3].time_s == 5.0);
+    CHECK(errors[4].kind == NoteErrorKind::pitch);
+    CHECK(errors[4].time_s == 7.0);
+    CHECK(errors[5].kind == NoteErrorKind::offset);
+    CHECK(errors[5].error == doctest::Approx(0.2));
+    CHECK(errors[6].kind == NoteErrorKind::offset);
+    CHECK(errors[6].time_s == 7.0);
+
+    // The list agrees with the score's counts.
+    const TrackScore score = score_track(reference, estimates, {});
+    CHECK(score.total.reference_count - score.total.matched_count == 1);
+    CHECK(score.total.estimate_count - score.total.matched_count == 1);
+    CHECK(score.total.octave_error_count == 1);
+    CHECK(score.total.matched_count - score.total.pitch_correct_count == 3);
+    CHECK(score.total.offset_hit_rate == doctest::Approx(4.0 / 6.0));
+}

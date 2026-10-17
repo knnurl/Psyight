@@ -6,10 +6,12 @@
 #include "gui/command_line.h"
 #include "gui/frame_pacing.h"
 #include "gui/layout.h"
+#include "gui/log_view.h"
 #include "gui/preflight_view.h"
 #include "gui/preview_view.h"
 #include "gui/project_state.h"
 #include "gui/rig_view.h"
+#include "gui/scoring_view.h"
 #include "gui/session.h"
 #include "gui/transport_panel.h"
 
@@ -117,10 +119,12 @@ int main() {
     ImGui_ImplOpenGL3_Init(kGlslVersion);
 
     { // App objects own GL textures, so they must go before the GL context does.
+        psyight::LogView log_view; // First, so it keeps every message after start-up.
         psyight::Session session;
         psyight::TransportPanel transport_panel(session);
         psyight::AnalysisView analysis_view(session);
         psyight::BassRollView bass_roll_view(session);
+        psyight::ScoringView scoring_view(session);
         psyight::ProjectState project;
         psyight::PreviewView preview_view(session, project);
         psyight::RigView rig_view(project);
@@ -158,7 +162,7 @@ int main() {
                 ImGui::EndMainMenuBar();
             }
             // Bump the version when panels are added, so saved layouts get the new default once.
-            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v5");
+            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v6");
             if (reset_layout || ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
                 psyight::apply_default_layout(dockspace_id); // First run, or View > Reset layout.
                 reset_layout = false;
@@ -170,6 +174,8 @@ int main() {
             analysis_view.draw();
             bass_roll_view.draw_roll();
             bass_roll_view.draw_inspector();
+            scoring_view.draw();
+            log_view.draw();
             preview_view.draw();
             rig_view.draw();
             preflight_view.draw();
