@@ -92,11 +92,12 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/spectrogram_image.cpp src/gui/preview_view.cpp
                        src/gui/project_state.cpp src/gui/rig_view.cpp
                        src/gui/preflight_view.cpp src/gui/tier.cpp
-                       src/gui/scoring_view.cpp src/gui/log_view.cpp src/io/midi_input.cpp)
+                       src/gui/scoring_view.cpp src/gui/log_view.cpp src/io/midi_input.cpp
+                       src/gui/crash_guard_win32.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32
-                                      RtMidi::rtmidi)
+                                      RtMidi::rtmidi dbghelp)
 
 # Scores the bass tracker against a labels file (local reference tracks; never run in CI).
 add_executable(psyight_eval src/eval_main.cpp)

@@ -4,6 +4,7 @@
 #include "gui/analysis_view.h"
 #include "gui/bass_roll_view.h"
 #include "gui/command_line.h"
+#include "gui/crash_guard.h"
 #include "gui/frame_pacing.h"
 #include "gui/layout.h"
 #include "gui/log_view.h"
@@ -119,7 +120,8 @@ int main() {
     ImGui_ImplOpenGL3_Init(kGlslVersion);
 
     { // App objects own GL textures, so they must go before the GL context does.
-        psyight::LogView log_view; // First, so it keeps every message after start-up.
+        psyight::LogView log_view;       // First, so it keeps every message after start-up.
+        psyight::CrashGuard crash_guard; // Log file, crash dumps, unclean-exit marker.
         psyight::Session session;
         psyight::TransportPanel transport_panel(session);
         psyight::AnalysisView analysis_view(session);
@@ -184,6 +186,7 @@ int main() {
                 focus_preview = false;
             }
             handle_shortcuts(session);
+            project.autosave();
             session.end_frame();
             if (show_imgui_demo) {
                 ImGui::ShowDemoWindow(&show_imgui_demo);

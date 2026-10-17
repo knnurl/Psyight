@@ -24,6 +24,10 @@ student.weights.*
 sessions/
 recordings/
 
+# Logs and crash dumps (logs/), and the running marker (gui/crash_guard.h)
+logs/
+psyight.running
+
 # Python
 __pycache__/
 .venv/

@@ -2,8 +2,8 @@
 // built from it. Panels change it through edit() and then call changed(), which rebuilds the rig
 // and patch and bumps the version; the preview republishes its show config when the version
 // changes. Loaded from psyight.psyproj in the working directory
-// at start when that exists, and saved there on exit when changed, unless the file could not be
-// read (a damaged file is never overwritten).
+// at start when that exists, and saved there on exit when changed and at most a minute after a
+// change (autosave), unless the file could not be read (a damaged file is never overwritten).
 #pragma once
 
 #include "core/result.h"
@@ -11,6 +11,7 @@
 #include "io/project.h"
 #include "output/patch.h"
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -35,6 +36,7 @@ class ProjectState {
     std::filesystem::path &path() { return path_; }
     Result<void> load();
     Result<void> save();
+    void autosave(); // Once a frame: saves a change after a minute (crash recovery, M6).
     void reset_to_default();
     const std::string &status() const { return status_; }
 
@@ -49,6 +51,7 @@ class ProjectState {
     bool file_unreadable_ = false;
     std::filesystem::path path_ = "psyight.psyproj";
     std::string status_;
+    std::chrono::steady_clock::time_point last_save_ = std::chrono::steady_clock::now();
 };
 
 } // namespace psyight

@@ -63,6 +63,17 @@ Result<void> ProjectState::save() {
     return {};
 }
 
+void ProjectState::autosave() {
+    const auto now = std::chrono::steady_clock::now();
+    if (!dirty_ || file_unreadable_ || now - last_save_ < std::chrono::minutes(1)) {
+        return;
+    }
+    last_save_ = now;
+    if (const Result<void> saved = save(); !saved) {
+        spdlog::error("{}", saved.error().message);
+    }
+}
+
 void ProjectState::reset_to_default() {
     project_ = default_project();
     rebuild();
