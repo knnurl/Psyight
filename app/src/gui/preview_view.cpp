@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 
 namespace psyight {
 
@@ -135,6 +136,7 @@ void PreviewView::record_params() {
 }
 
 void PreviewView::draw_top_bar() {
+    poll_midi();
     struct Step {
         Ladder step;
         const char *name;
@@ -278,6 +280,7 @@ void PreviewView::draw() {
     ImGui::Begin("Preview");
     const std::shared_ptr<const ShowFrame> frame = show_.latest();
     draw_live();
+    draw_midi();
     const bool live = config_.live != nullptr;
     if (!live &&
         (!session_.has_track() || session_.track().track_analysis == nullptr || frame == nullptr)) {
@@ -390,11 +393,7 @@ void PreviewView::draw_live() {
     if (ImGui::Button("Tap (T)") ||
         (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
          ImGui::IsKeyPressed(ImGuiKey_T, false))) {
-        if (s.tempo_known) {
-            const double now_s = static_cast<double>(live->now()) / live->sample_rate_hz();
-            const double beats = LiveBeat::position(s, now_s);
-            tap_errors_s_.push_back(std::remainder(beats, 1.0) * s.period_s);
-        }
+        tap();
     }
     ImGui::SetItemTooltip("Tap on the beat you hear, at least 8 times. Measures when you hear the "
                           "beat against the capture clock (speaker distance, the sound system). "
@@ -427,6 +426,154 @@ void PreviewView::draw_live() {
         ImGui::SetItemTooltip("Sets the latency offset so the lights land when the beat is heard. "
                               "The LED path (network, node) adds its own delay: check by eye.");
     }
+}
+
+void PreviewView::tap() {
+    const std::shared_ptr<const LiveInput> live = session_.live_input();
+    if (live == nullptr) {
+        return;
+    }
+    const LiveState s = live->state();
+    if (s.tempo_known) {
+        const double now_s = static_cast<double>(live->now()) / live->sample_rate_hz();
+        tap_errors_s_.push_back(std::remainder(LiveBeat::position(s, now_s), 1.0) * s.period_s);
+    }
+}
+
+void PreviewView::poll_midi() {
+    if (!midi_started_) {
+        midi_started_ = true;
+        midi_map_.bindings = project_.project().midi;
+        if (const std::string &port = project_.project().midi_port; !port.empty()) {
+            if (const Result<void> opened = midi_in_.open(port); !opened) {
+                midi_error_ = opened.error().message;
+            }
+        }
+    }
+    if (!midi_in_.is_open()) {
+        return;
+    }
+    midi_messages_.clear();
+    midi_in_.drain(midi_messages_);
+    for (const MidiMessage &m : midi_messages_) {
+        const bool was_learning = !midi_map_.learning().empty();
+        for (const MidiAction &action : midi_map_.handle(m)) {
+            apply_midi(action);
+        }
+        if (was_learning && midi_map_.learning().empty()) {
+            project_.edit().midi = midi_map_.bindings;
+            project_.changed();
+        }
+    }
+}
+
+void PreviewView::apply_midi(const MidiAction &a) {
+    if (a.target == "blackout") {
+        config_.blackout = !config_.blackout;
+        dirty_ = true;
+    } else if (a.target == "hold") {
+        config_.hold = !config_.hold;
+        dirty_ = true;
+    } else if (a.target == "auto") {
+        config_.manual_scene = -1;
+        dirty_ = true;
+    } else if (a.target.rfind("scene:", 0) == 0) {
+        const int scene = std::atoi(a.target.c_str() + 6);
+        if (scene >= 0 && scene < static_cast<int>(config_.scenes.size())) {
+            config_.manual_scene = scene;
+            dirty_ = true;
+        }
+    } else if (a.target == "brightness") {
+        project_.edit().limiter.brightness_cap = std::clamp(a.value, 0.0, 1.0);
+        project_.changed();
+    } else if (a.target == "latency") {
+        project_.edit().latency_offset_ms = -200.0 + 400.0 * std::clamp(a.value, 0.0, 1.0);
+        project_.changed();
+    } else if (a.target == "tap") {
+        tap();
+    }
+}
+
+void PreviewView::draw_midi() {
+    if (!ImGui::CollapsingHeader(midi_in_.is_open() ? "MIDI (on)###midi" : "MIDI###midi")) {
+        return;
+    }
+    const float em = ImGui::GetFontSize();
+    ImGui::SetNextItemWidth(16.0f * em);
+    const char *shown = midi_in_.is_open() ? midi_in_.port().c_str() : "(none)";
+    if (ImGui::BeginCombo("Controller", shown)) {
+        if (ImGui::IsWindowAppearing()) {
+            if (Result<std::vector<std::string>> ports = MidiInput::ports(); ports) {
+                midi_ports_ = std::move(ports.value());
+            } else {
+                midi_error_ = ports.error().message;
+            }
+        }
+        if (ImGui::Selectable("(none)", !midi_in_.is_open())) {
+            midi_in_.close();
+            project_.edit().midi_port.clear();
+            project_.changed();
+        }
+        for (const std::string &port : midi_ports_) {
+            if (ImGui::Selectable(port.c_str(), midi_in_.port() == port)) {
+                const Result<void> opened = midi_in_.open(port);
+                midi_error_ = opened ? "" : opened.error().message;
+                if (opened) {
+                    project_.edit().midi_port = port;
+                    project_.changed();
+                }
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (!midi_error_.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "%s", midi_error_.c_str());
+    }
+    std::vector<std::pair<std::string, std::string>> targets = {
+        {"blackout", "Blackout"},        {"hold", "Hold"},
+        {"auto", "Automation (scenes)"}, {"brightness", "Brightness cap"},
+        {"latency", "Latency offset"},   {"tap", "Tap test"}};
+    for (size_t i = 0; i < config_.scenes.size(); ++i) {
+        targets.emplace_back("scene:" + std::to_string(i), "Scene: " + config_.scenes[i].name);
+    }
+    if (!ImGui::BeginTable("##midi", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+        return;
+    }
+    for (const auto &[target, label] : targets) {
+        ImGui::PushID(target.c_str());
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(label.c_str());
+        ImGui::TableNextColumn();
+        const MidiBinding *b = midi_map_.binding_of(target);
+        if (midi_map_.learning() == target) {
+            ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.2f, 1.0f), "move a control...");
+        } else if (b != nullptr) {
+            ImGui::TextUnformatted(describe(*b).c_str());
+        } else {
+            ImGui::TextDisabled("none");
+        }
+        ImGui::TableNextColumn();
+        ImGui::BeginDisabled(!midi_in_.is_open());
+        if (ImGui::SmallButton(midi_map_.learning() == target ? "Cancel" : "Learn")) {
+            if (midi_map_.learning() == target) {
+                midi_map_.cancel_learn();
+            } else {
+                midi_map_.learn(target);
+            }
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(b == nullptr);
+        if (ImGui::SmallButton("Clear")) {
+            midi_map_.clear(target);
+            project_.edit().midi = midi_map_.bindings;
+            project_.changed();
+        }
+        ImGui::EndDisabled();
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
 }
 
 void PreviewView::draw_controls(const ShowFrame &frame) {

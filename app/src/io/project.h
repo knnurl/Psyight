@@ -12,6 +12,7 @@
 #include "engine/colour.h"
 #include "engine/limiters.h"
 #include "engine/rig.h"
+#include "io/midi_map.h"
 #include "output/patch.h"
 #include "output/sender.h"
 
@@ -42,6 +43,8 @@ struct Project {
     AutomationParams automation;
     std::vector<Scene> scenes = default_scenes();
     std::vector<Palette> palettes = default_palettes();
+    std::vector<MidiBinding> midi; // MIDI learn (io/midi_map.h).
+    std::string midi_port;         // Reopened at start when present.
 };
 
 // The default frame rig (engine/rig.h default_rig) with default settings.

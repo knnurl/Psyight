@@ -193,3 +193,22 @@ TEST_CASE("project: save and load through a file") {
     std::filesystem::remove(path);
     CHECK_FALSE(load_project(path).ok());
 }
+
+TEST_CASE("project: MIDI bindings and port round-trip; older files load with none") {
+    Project p = default_project();
+    p.midi_port = "nanoKONTROL2 1";
+    p.midi = {{"blackout", MidiKind::cc, 0, 20}, {"scene:2", MidiKind::note, 9, 36}};
+    const Result<std::string> json = to_project_json(p);
+    REQUIRE(json.ok());
+    const Result<Project> back = parse_project_json(json.value());
+    REQUIRE(back.ok());
+    CHECK(back.value().midi == p.midi);
+    CHECK(back.value().midi_port == p.midi_port);
+    const Result<Project> plain = parse_project_json(R"({"schema": 1})");
+    REQUIRE(plain.ok());
+    CHECK(plain.value().midi.empty());
+    CHECK(plain.value().midi_port.empty());
+    CHECK_FALSE(parse_project_json(
+                    R"({"schema": 1, "midi": {"bindings": [{"target": "hold", "kind": "pitch"}]}})")
+                    .ok());
+}

@@ -12,6 +12,7 @@
     "miniaudio",
     "nlohmann-json",
     "pffft",
+    "rtmidi",
     "spdlog"
   ]
 }

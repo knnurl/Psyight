@@ -28,6 +28,7 @@ find_package(implot CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(pffft CONFIG REQUIRED)
+find_package(rtmidi CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIR miniaudio.h REQUIRED)
 
@@ -77,7 +78,8 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/output/precise_sleep_win32.cpp src/output/art_poll.cpp
                                src/output/discovery.cpp src/output/preflight.cpp
                                src/ml/student.cpp src/analysis/live_analysis.cpp
-                               src/audio/capture.cpp src/audio/live_input.cpp)
+                               src/audio/capture.cpp src/audio/live_input.cpp
+                               src/io/midi_map.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch
@@ -90,10 +92,11 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/spectrogram_image.cpp src/gui/preview_view.cpp
                        src/gui/project_state.cpp src/gui/rig_view.cpp
                        src/gui/preflight_view.cpp src/gui/tier.cpp
-                       src/gui/scoring_view.cpp src/gui/log_view.cpp)
+                       src/gui/scoring_view.cpp src/gui/log_view.cpp src/io/midi_input.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
-                                      glfw OpenGL::GL spdlog::spdlog dwmapi shell32)
+                                      glfw OpenGL::GL spdlog::spdlog dwmapi shell32
+                                      RtMidi::rtmidi)
 
 # Scores the bass tracker against a labels file (local reference tracks; never run in CI).
 add_executable(psyight_eval src/eval_main.cpp)
@@ -140,6 +143,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/recorder_test.cpp tests/student_data_test.cpp
                              tests/node_firmware_test.cpp tests/playhead_clock_test.cpp
                              tests/golden_test.cpp tests/student_test.cpp tests/live_test.cpp
+                             tests/midi_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)

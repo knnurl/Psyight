@@ -356,6 +356,22 @@ Result<Project> parse_project_json(std::string_view json_text) {
         }
 
         p.latency_offset_ms = number(root, "latency_offset_ms", 0.0, -1000.0, 1000.0);
+        if (const auto it = root.find("midi"); it != root.end()) {
+            const json &midi = *it;
+            p.midi_port = midi.value("port", std::string());
+            if (const auto b = midi.find("bindings"); b != midi.end()) {
+                for (const json &m : b->get_ref<const json::array_t &>()) {
+                    const std::string kind = m.at("kind").get<std::string>();
+                    if (kind != "cc" && kind != "note") {
+                        throw FieldError{"midi kind must be cc or note"};
+                    }
+                    p.midi.push_back({m.at("target").get<std::string>(),
+                                      kind == "cc" ? MidiKind::cc : MidiKind::note,
+                                      integer(m, "channel", 0, 0, 15),
+                                      integer(m, "number", 0, 0, 127)});
+                }
+            }
+        }
 
         const json &aut = section(root, "automation");
         AutomationParams &a = p.automation;
@@ -424,6 +440,13 @@ Result<std::string> to_project_json(const Project &p) {
         for (const GroupCap &c : p.group_caps) {
             group_caps.push_back({{"group", c.group}, {"cap", finite(c.cap, "cap")}});
         }
+        json midi_bindings = json::array();
+        for (const MidiBinding &b : p.midi) {
+            midi_bindings.push_back({{"target", b.target},
+                                     {"kind", b.kind == MidiKind::cc ? "cc" : "note"},
+                                     {"channel", b.channel},
+                                     {"number", b.number}});
+        }
         json scenes = json::array();
         for (const Scene &s : p.scenes) {
             scenes.push_back(scene_json(s));
@@ -467,6 +490,7 @@ Result<std::string> to_project_json(const Project &p) {
               {"palette_slew_beats", finite(a.palette_slew_beats, "palette_slew_beats")}}},
             {"scenes", scenes},
             {"palettes", palettes},
+            {"midi", {{"port", p.midi_port}, {"bindings", midi_bindings}}},
         };
         return root.dump(2) + "\n";
     } catch (const json::exception &e) {
