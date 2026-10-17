@@ -68,13 +68,19 @@ Watch the live status: if "Locked" turns to "Acquiring" (a new track at another 
 
 The bar position (which beat is "one") comes from kicks returning after a break. Until the first break of a set it can be a beat out. Effects that change on the downbeat may look off by a beat until then.
 
+Live controls (Live input section, once locked):
+
+- **Downbeat now (D):** press on the "one" you hear. The nearest beat becomes the downbeat, so pressing a little late is fine.
+- **-10 ms and +10 ms:** nudge the predicted beat. The loop then pulls it back towards the kicks it hears.
+- **Relock:** measure the tempo again from the next kicks, for example after a tempo change the loop has not caught.
+
 ## MIDI controller
 
 In the Preview tab, open "MIDI" and choose the controller. For each control you want, press Learn, then move the knob or press the pad. You can bind:
 
 - blackout, hold, automation (back to Show) and each scene, to buttons or pads
 - the brightness cap and the latency offset, to knobs or faders
-- the tap test
+- the tap test, and "downbeat now" (a pad for the "one")
 
 Bindings are saved with the project, and the controller reconnects on the next start.
 
