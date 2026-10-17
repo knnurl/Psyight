@@ -56,9 +56,13 @@ int wmain(int argc, wchar_t **argv) {
     std::filesystem::path audio_path;
     std::filesystem::path weights = "data/m4/student.weights";
     int block = 480;
+    double trace_from_s = -1.0, trace_to_s = -1.0;
     for (int i = 1; i < argc; ++i) {
         if (std::wcscmp(argv[i], L"--block") == 0 && i + 1 < argc) {
             block = std::max(1, _wtoi(argv[++i]));
+        } else if (std::wcscmp(argv[i], L"--trace") == 0 && i + 2 < argc) {
+            trace_from_s = _wtof(argv[++i]);
+            trace_to_s = _wtof(argv[++i]);
         } else if (std::wcscmp(argv[i], L"--student") == 0 && i + 1 < argc) {
             weights = argv[++i];
         } else {
@@ -132,6 +136,21 @@ int wmain(int argc, wchar_t **argv) {
                 "hop)\n",
                 1e3 * (live.state().latency_s - 2.0 * live.frame_s()), 1e3 * live.state().latency_s,
                 1e3 * live.frame_s());
+
+    // --trace a b: the beat state at every kick between a and b seconds.
+    long long kicks_seen = 0;
+    for (const LiveState &s : live.recorded_states()) {
+        if (s.kicks != kicks_seen) {
+            kicks_seen = s.kicks;
+            if (s.last_kick_s >= trace_from_s && s.last_kick_s <= trace_to_s) {
+                std::printf("  kick %.3f s: beat %lld, streak %d, last run beat %lld, error %+.1f "
+                            "ms, %s, %s\n",
+                            s.last_kick_s, s.last_kick_beat, s.kick_streak, s.last_run_beat,
+                            s.last_error_ms, s.locked ? "locked" : "not locked",
+                            live_section_name(s.section));
+            }
+        }
+    }
 
     // Kicks.
     const NoteScore kicks =

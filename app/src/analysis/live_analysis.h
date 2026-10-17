@@ -17,8 +17,9 @@
 // by pll_phase_gain and the period by pll_period_gain of the error; lock is declared after
 // lock_kicks kicks within lock_beats. Kicks far from every predicted beat several times in a row
 // (a new track in a mix) restart the acquisition. Between kicks (breakdowns) the loop runs free.
-// Kicks count for downbeats and sections only in runs (on two consecutive beats or more, as file
-// mode's kicks), so a stray hit in a breakdown does not end it. Downbeat: the first kick of a run
+// Kicks count for downbeats and sections only in runs of run_kicks consecutive beats (a bar), so
+// stray hits in a breakdown do not end it; a section that a run starts is known when the run is
+// (a bar late) but begins at its first kick. Downbeat: the first kick of a run
 // that returns after a bar or more. Until the first such break, bar-level novelty decides (it
 // replaces the arbitrary phase of the first lock), as in file mode: per beat, the mean feature
 // frame in 24 short-window and 24 long-window band groups; the novelty at beat k is the distance
@@ -52,7 +53,7 @@ const char *live_section_name(LiveSection section); // As file mode's labels.
 
 struct LiveParams {
     double min_bpm = 120.0;
-    double max_bpm = 190.0;
+    double max_bpm = 200.0;        // 190 clamped Hagios (186.6 to 189.4 BPM by the minute).
     int acquire_kicks = 8;         // Kicks used to measure the tempo before the loop starts.
     double acquire_spread = 0.04;  // Folded intervals must agree within this fraction.
     double pll_phase_gain = 0.25;  // Of each kick's phase error, applied to the phase.
@@ -71,6 +72,7 @@ struct LiveParams {
     double kick_threshold = 0.5;
     double hat_threshold = 0.5;
     int event_min_gap_frames = 4; // Kicks and hats, as the offline decoder's kick peaks.
+    int run_kicks = 4; // Kicks on consecutive beats that make a run (sections, downbeats).
     double novelty_memory_bars = 32.0;
     int novelty_min_bars = 8;     // Bars of novelty before it may decide.
     double downbeat_margin = 0.1; // Of the best phase's mean.

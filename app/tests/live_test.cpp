@@ -217,12 +217,12 @@ TEST_CASE("live beat: breakdowns, drops, downbeats and the run rule") {
     CHECK(rig.state.section == LiveSection::breakdown);
     for (int b = 100; b < 140; ++b) {
         rig.kick(beat_s(b));
-        if (b == 101) {
+        if (b == 103) { // The run of 4 that returns on beat 100 is complete.
             CHECK(rig.state.section == LiveSection::drop);
             CHECK(rig.state.section_start_s == doctest::Approx(beat_s(100)).epsilon(1e-3));
-            in = inputs_at(rig.state, beat_s(101) + 0.01);
+            in = inputs_at(rig.state, beat_s(103) + 0.01);
             CHECK(in.bar_index == 0);
-            CHECK(in.beat_in_bar == 1);
+            CHECK(in.beat_in_bar == 3);
             CHECK(in.phrase_index == 0);
             CHECK(in.section == "drop");
         }
@@ -302,4 +302,36 @@ TEST_CASE("live beat: the operator sets the downbeat and nudges the beat") {
     rig.beat.relock(rig.state);
     CHECK_FALSE(rig.state.locked);
     CHECK(rig.state.tempo_known); // The beat keeps running while it measures again.
+}
+
+TEST_CASE("live beat: a double trigger on one beat does not break a run") {
+    BeatRig rig;
+    for (int b = 0; b < 40; ++b) {
+        rig.kick(1.0 + b * 0.4);
+        if (b > 12) {
+            rig.kick(1.0 + b * 0.4 + 0.03); // A second detection 30 ms later, same beat.
+        }
+    }
+    CHECK(rig.state.locked);
+    CHECK(rig.state.kick_streak >= 20);
+    CHECK(rig.state.section == LiveSection::groove);
+    CHECK(60.0 / rig.state.period_s == doctest::Approx(150.0).epsilon(0.002));
+}
+
+TEST_CASE("live beat: a run returning soon after a declared breakdown ends it") {
+    BeatRig rig;
+    const auto beat_s = [](int b) { return 1.0 + b * 0.4; };
+    for (int b = 0; b < 24; ++b) {
+        rig.kick(beat_s(b));
+    }
+    // No kick on beats 24 to 31, so a breakdown is declared 2 bars after beat 23; the run that
+    // completes on beat 35 started on beat 32, 8 beats after the last run (not more).
+    for (int b = 32; b < 40; ++b) {
+        rig.kick(beat_s(b));
+        if (b == 31 + 1) {
+            CHECK(rig.state.section == LiveSection::breakdown);
+        }
+    }
+    CHECK(rig.state.section == LiveSection::groove);
+    CHECK(rig.state.section_start_s == doctest::Approx(beat_s(32)).epsilon(1e-3));
 }

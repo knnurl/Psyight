@@ -515,6 +515,10 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
     }
     off_grid_kicks_ = 0;
     const long long beat = s.anchor_beat + n;
+    if (beat == s.last_kick_beat) {
+        return; // A second detection on the same beat (a double trigger): it neither steers the
+                // loop again nor breaks the run.
+    }
     const long long beats_since = std::max(1LL, beat - s.last_kick_beat);
     s.anchor_s = predicted + params_.pll_phase_gain * error_s;
     s.anchor_beat = beat;
@@ -529,8 +533,8 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
 
     s.kick_streak = beat - s.last_kick_beat == 1 ? s.kick_streak + 1 : 1;
     s.last_kick_beat = beat;
-    if (s.kick_streak == 2) { // A run starts on the previous beat.
-        const long long start = beat - 1;
+    if (s.kick_streak == params_.run_kicks) { // A run started run_kicks - 1 beats ago.
+        const long long start = beat - (params_.run_kicks - 1);
         const long long gap = start - s.last_run_beat;
         const double start_s = time_of(s, start);
         if (gap >= 4) {
@@ -541,11 +545,15 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
         if (gap >= 4LL * params_.drop_after_bars) {
             set_section(s, LiveSection::drop, start_s);
             drop_end_beat_ = start + 4LL * params_.drop_bars;
-        } else if (gap >= 4LL * params_.breakdown_bars || s.section == LiveSection::intro) {
+        } else if (gap >= 4LL * params_.breakdown_bars || s.section == LiveSection::intro ||
+                   s.section == LiveSection::breakdown || s.section == LiveSection::build) {
+            // A run ends a breakdown or build whatever the gap: the run's start is backdated
+            // up to run_kicks - 1 beats, so it can sit nearer the last run than the 2 bars that
+            // declared the breakdown.
             set_section(s, LiveSection::groove, start_s);
         }
     }
-    if (s.kick_streak >= 2) {
+    if (s.kick_streak >= params_.run_kicks) {
         s.last_run_beat = beat;
     }
 }
