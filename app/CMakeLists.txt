@@ -108,6 +108,10 @@ target_link_libraries(psyight_show_check PRIVATE psyight_options psyight_lib)
 add_executable(psyight_teacher src/teacher_main.cpp)
 target_link_libraries(psyight_teacher PRIVATE psyight_options psyight_lib nlohmann_json::nlohmann_json)
 
+# Drafts a labels file from the analysis, for a person to check (the region starts incomplete).
+add_executable(psyight_label_draft src/label_draft_main.cpp)
+target_link_libraries(psyight_label_draft PRIVATE psyight_options psyight_lib)
+
 # Replays a recorded session and checks it reproduces byte for byte.
 add_executable(psyight_replay src/replay_main.cpp)
 target_link_libraries(psyight_replay PRIVATE psyight_options psyight_lib)
