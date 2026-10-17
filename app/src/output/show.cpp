@@ -40,6 +40,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     const auto started = std::chrono::steady_clock::now();
     if (config.version != config_version_) {
         limiters_.set_params(config.limiter);
+        limiters_.set_pixel_caps(config.pixel_caps);
         node_.set_patch(config.patch);
         config_version_ = config.version;
     }

@@ -165,3 +165,24 @@ TEST_CASE("limiters: brightness cap and gamma to bytes") {
     CHECK(bytes[4] == 0);
     CHECK(bytes[5] == 12); // 255 * 0.25^2.2 = 12.0.
 }
+
+TEST_CASE("limiters: group caps dim the strips with that tag, the lowest cap winning") {
+    const Rig rig = default_rig(); // Strips bottom, right, top, left; all tagged "frame".
+    const std::vector<float> caps =
+        group_caps_per_pixel(rig, {{"top", 0.5}, {"frame", 0.8}, {"nowhere", 0.1}});
+    REQUIRE(caps.size() == rig.pixels.size());
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        CHECK(caps[i] == doctest::Approx(rig.pixels[i].strip == 2 ? 0.5f : 0.8f));
+    }
+    LimiterParams p;
+    p.flash_limiter = false;
+    p.budget_a = 0.0;
+    Limiters limiters(p);
+    limiters.set_pixel_caps(caps);
+    Frame frame(rig.pixels.size(), Rgb{1.0f, 1.0f, 1.0f});
+    limiters.process(frame, 0.0);
+    for (size_t i = 0; i < frame.size(); ++i) {
+        CHECK(frame[i].g == doctest::Approx(caps[i]));
+    }
+    CHECK(group_caps_per_pixel(rig, {}) == std::vector<float>(rig.pixels.size(), 1.0f));
+}

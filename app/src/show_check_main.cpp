@@ -87,6 +87,7 @@ int check(const std::filesystem::path &audio_path, const Project &project,
     config.patch = patch_of(project);
     config.output = project.output;
     config.limiter = project.limiter;
+    config.pixel_caps = group_caps_per_pixel(config.rig, project.group_caps);
     config.automation = project.automation;
     config.scenes = project.scenes;
     config.palettes = project.palettes;

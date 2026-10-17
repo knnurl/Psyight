@@ -43,6 +43,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.latency_offset_ms = 42.5;
     p.automation.crossfade_beats = 8.0;
     p.automation.palette_every_phrases = 4;
+    p.group_caps = {{"booth", 0.4}, {"canopy", 0.75}};
     const Result<Project> back = parse_project_json(to_project_json(p).value());
     REQUIRE(back.ok());
     const Project &q = back.value();
@@ -70,6 +71,9 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.latency_offset_ms == 42.5);
     CHECK(q.automation.crossfade_beats == 8.0);
     CHECK(q.automation.palette_every_phrases == 4);
+    REQUIRE(q.group_caps.size() == 2);
+    CHECK(q.group_caps[1].group == "canopy");
+    CHECK(q.group_caps[1].cap == 0.75);
     // 444 + 45 pixels at 128 per universe: universes 10 to 13.
     CHECK(patch_of(q).universes == std::vector<int>{10, 11, 12, 13});
 }

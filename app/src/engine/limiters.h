@@ -1,6 +1,7 @@
 // Restraint and safety limiters (SPEC section 7.7), applied to every frame after the scene and
-// before output, in this order: brightness cap, power budget, flash limiter (last, so it judges
-// the frame as shown; it only dims, so the budget still holds). Then gamma to 8 bits.
+// before output, in this order: brightness caps (global, then per pixel from the group caps),
+// power budget, flash limiter (last, so it judges the frame as shown; it only dims, so the budget
+// still holds). Then gamma to 8 bits.
 //
 // Flash limiter (on by default). Flashes are tracked per pixel as pairs of opposing changes
 // (Ofcom-style, [Verify] the exact guideline wording): a pixel rises when its luminance gets
@@ -19,9 +20,11 @@
 #pragma once
 
 #include "engine/colour.h"
+#include "engine/rig.h"
 
 #include <cstdint>
 #include <deque>
+#include <string>
 #include <vector>
 
 namespace psyight {
@@ -36,6 +39,15 @@ struct LimiterParams {
     double budget_a = 10.0; // 0 disables the power budget.
     double gamma = 2.2;
 };
+
+// A brightness cap for the strips tagged with a group (SPEC 7.7: "global, and per group").
+struct GroupCap {
+    std::string group;
+    double cap = 1.0; // 0 to 1.
+};
+
+// One cap per rig pixel: the lowest cap among its strip's groups, 1 when none applies.
+std::vector<float> group_caps_per_pixel(const Rig &rig, const std::vector<GroupCap> &caps);
 
 // Rec. 709 luminance of linear RGB.
 double luminance(const Rgb &c);
@@ -91,6 +103,8 @@ class Limiters {
         p_ = params;
         flashes_.set_params(params);
     }
+    // Per-pixel caps (group_caps_per_pixel); empty for none.
+    void set_pixel_caps(std::vector<float> caps) { pixel_caps_ = std::move(caps); }
 
     // Limits the frame in place for render time t_s (ascending between calls).
     LimiterReport process(Frame &frame, double t_s);
@@ -98,6 +112,7 @@ class Limiters {
   private:
     LimiterParams p_;
     FlashTracker flashes_;
+    std::vector<float> pixel_caps_;
 };
 
 // Counts flashes as the flash limiter defines them, and the most in any 1 s window, for checks

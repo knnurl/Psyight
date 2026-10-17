@@ -348,6 +348,12 @@ Result<Project> parse_project_json(std::string_view json_text) {
             number(lim, "current_per_channel_ma", l.current_per_channel_ma, 0.0, 1000.0);
         l.budget_a = number(lim, "budget_a", l.budget_a, 0.0, 10000.0);
         l.gamma = number(lim, "gamma", l.gamma, 1.0, 4.0);
+        if (const auto caps = lim.find("group_caps"); caps != lim.end()) {
+            for (const json &c : caps->get_ref<const json::array_t &>()) {
+                p.group_caps.push_back(
+                    {c.at("group").get<std::string>(), number(c, "cap", 1.0, 0.0, 1.0)});
+            }
+        }
 
         p.latency_offset_ms = number(root, "latency_offset_ms", 0.0, -1000.0, 1000.0);
 
@@ -414,6 +420,10 @@ Result<std::string> to_project_json(const Project &p) {
         }
         const LimiterParams &l = p.limiter;
         const AutomationParams &a = p.automation;
+        json group_caps = json::array();
+        for (const GroupCap &c : p.group_caps) {
+            group_caps.push_back({{"group", c.group}, {"cap", finite(c.cap, "cap")}});
+        }
         json scenes = json::array();
         for (const Scene &s : p.scenes) {
             scenes.push_back(scene_json(s));
@@ -448,7 +458,8 @@ Result<std::string> to_project_json(const Project &p) {
               {"flash_area", finite(l.flash_area, "flash_area")},
               {"current_per_channel_ma", finite(l.current_per_channel_ma, "current")},
               {"budget_a", finite(l.budget_a, "budget_a")},
-              {"gamma", finite(l.gamma, "gamma")}}},
+              {"gamma", finite(l.gamma, "gamma")},
+              {"group_caps", group_caps}}},
             {"latency_offset_ms", finite(p.latency_offset_ms, "latency_offset_ms")},
             {"automation",
              {{"crossfade_beats", finite(a.crossfade_beats, "crossfade_beats")},

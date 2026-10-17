@@ -19,6 +19,26 @@ void expire(std::deque<double> &starts_s, double t_s) {
 
 } // namespace
 
+std::vector<float> group_caps_per_pixel(const Rig &rig, const std::vector<GroupCap> &caps) {
+    std::vector<float> per_strip(rig.strips.size(), 1.0f);
+    for (size_t s = 0; s < rig.strips.size(); ++s) {
+        for (const GroupCap &c : caps) {
+            const std::vector<std::string> &groups = rig.strips[s].groups;
+            if (std::find(groups.begin(), groups.end(), c.group) != groups.end()) {
+                per_strip[s] =
+                    std::min(per_strip[s], static_cast<float>(std::clamp(c.cap, 0.0, 1.0)));
+            }
+        }
+    }
+    std::vector<float> out;
+    out.reserve(rig.pixels.size());
+    for (const Pixel &p : rig.pixels) {
+        const auto s = static_cast<size_t>(p.strip);
+        out.push_back(s < per_strip.size() ? per_strip[s] : 1.0f);
+    }
+    return out;
+}
+
 double luminance(const Rgb &c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b; }
 
 double estimated_current_a(const Frame &frame, double current_per_channel_ma) {
@@ -120,6 +140,13 @@ LimiterReport Limiters::process(Frame &frame, double t_s) {
     if (p_.brightness_cap < 1.0) {
         for (Rgb &c : frame) {
             c = scaled(c, std::max(0.0, p_.brightness_cap));
+        }
+    }
+    if (pixel_caps_.size() == frame.size()) {
+        for (size_t i = 0; i < frame.size(); ++i) {
+            if (pixel_caps_[i] < 1.0f) {
+                frame[i] = scaled(frame[i], std::max(0.0f, pixel_caps_[i]));
+            }
         }
     }
     // Power budget.

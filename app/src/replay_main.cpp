@@ -68,6 +68,7 @@ int replay(const std::filesystem::path &folder) {
         c->patch = patch_of(e.project);
         c->output = e.project.output;
         c->limiter = e.project.limiter;
+        c->pixel_caps = group_caps_per_pixel(c->rig, e.project.group_caps);
         c->automation = e.project.automation;
         c->scenes = e.project.scenes;
         c->palettes = e.project.palettes;

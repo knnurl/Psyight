@@ -238,6 +238,7 @@ void PreviewView::sync_config() {
     config_.patch = project_.patch();
     config_.output = p.output;
     config_.limiter = p.limiter;
+    config_.pixel_caps = group_caps_per_pixel(config_.rig, p.group_caps);
     config_.latency_offset_s = 1e-3 * p.latency_offset_ms;
     config_.automation = p.automation;
     config_.scenes = p.scenes;
@@ -318,6 +319,9 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         if (ImGui::SliderFloat("Brightness cap", &cap, 0.0f, 1.0f, "%.2f")) {
             p.brightness_cap = cap;
             changed = true;
+        }
+        if (tier_at_least(Tier::tune)) {
+            draw_group_caps();
         }
         if (tier_at_least(Tier::tune)) {
             float budget = static_cast<float>(p.budget_a);
@@ -524,6 +528,37 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
         scene_edited_ = true;
     }
     ImGui::EndDisabled();
+}
+
+void PreviewView::draw_group_caps() {
+    // One cap per group tag in the rig (SPEC 7.7: global, and per group).
+    std::vector<std::string> groups;
+    for (const ProjectStrip &strip : project_.project().strips) {
+        for (const std::string &g : strip.spec.groups) {
+            if (std::find(groups.begin(), groups.end(), g) == groups.end()) {
+                groups.push_back(g);
+            }
+        }
+    }
+    if (groups.empty()) {
+        return;
+    }
+    ImGui::TextDisabled("Caps by group (the lowest wins):");
+    for (const std::string &g : groups) {
+        std::vector<GroupCap> &caps = project_.edit().group_caps;
+        auto it = std::find_if(caps.begin(), caps.end(),
+                               [&g](const GroupCap &c) { return c.group == g; });
+        float cap = it == caps.end() ? 1.0f : static_cast<float>(it->cap);
+        ImGui::SetNextItemWidth(8.0f * ImGui::GetFontSize());
+        if (ImGui::SliderFloat(g.c_str(), &cap, 0.0f, 1.0f, "%.2f")) {
+            if (it == caps.end()) {
+                caps.push_back({g, cap});
+            } else {
+                it->cap = cap;
+            }
+            project_.changed();
+        }
+    }
 }
 
 void PreviewView::draw_palettes() {

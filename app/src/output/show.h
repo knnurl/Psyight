@@ -43,6 +43,7 @@ struct ShowConfig {
     int manual_scene = -1; // Overrides the section automation while >= 0.
     std::vector<Palette> palettes = default_palettes();
     LimiterParams limiter;
+    std::vector<float> pixel_caps; // Per rig pixel, from the group caps; empty for none.
     Patch patch = build_patch(default_rig());
     OutputSettings output;
     bool send_to_network = false;

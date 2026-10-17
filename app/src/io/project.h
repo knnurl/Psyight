@@ -37,6 +37,7 @@ struct Project {
     OutputSettings output;               // cid is derived from source_name.
     std::string source_name = "Psyight"; // sACN source name and CID seed.
     LimiterParams limiter;
+    std::vector<GroupCap> group_caps;
     double latency_offset_ms = 0.0;
     AutomationParams automation;
     std::vector<Scene> scenes = default_scenes();

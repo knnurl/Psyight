@@ -48,6 +48,7 @@ class PreviewView {
     void draw_scene_editor(std::vector<Scene> &scenes);
     void draw_routes(Scene &scene);
     void draw_palettes();
+    void draw_group_caps();
     void draw_output(const ShowFrame &frame);
     void draw_rig(const ShowFrame &frame);
 
