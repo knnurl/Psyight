@@ -11,3 +11,5 @@ soundfile==0.14.0
 numpy==2.2.6
 onnx==1.17.0                  # M4: student export (Apache-2.0).
 onnxruntime-directml==1.20.1  # M4: student inference latency, DirectML and CPU (MIT).
+mir_eval==0.8.2               # Scoring cross-check, eval_mir.py (MIT).
+scipy==1.15.3                 # eval_mir.py's assignment solver (BSD-3-Clause).

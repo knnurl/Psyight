@@ -25,6 +25,17 @@ Each track's stems go to `data/stems/htdemucs/<track name>/<stem>.wav` at 44.1 k
 
 Licence (SPEC 18 A6): the Demucs code is MIT. The upstream repository was archived on 1 January 2025, with a maintained fork at github.com/adefossez/demucs that takes only important bug fixes. The licence of the pretrained weights is not stated, so stems are for analysis only and the weights are never shipped.
 
+## Scoring cross-check (`eval_mir.py`)
+
+Recomputes the bass note metrics with mir_eval and compares them with `psyight_eval --notes` (needs a Release build of the app). Estimates come from `psyight_eval <audio> --save-notes <file>` or from `m4_eval.py`.
+
+```
+tools/python/.venv/Scripts/python tools/python/eval_mir.py data/OculusDrift.mp3.labels.json <estimates.json>
+tools/python/.venv/Scripts/python tools/python/eval_mir.py --fuzz 1000
+```
+
+The fuzz mode builds random regions around the edge cases (onsets at the tolerance, double triggers, notes at region edges, long notes for the offset ratio, octave errors). It exits 1 on any disagreement.
+
 ## M4 student (`m4_dataset.py`, `m4_train.py`)
 
 Builds the training set from a music library and trains the causal student (SPEC 6.9). Needs a Release build of the app (for `psyight_teacher.exe`).

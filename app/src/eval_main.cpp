@@ -1,6 +1,7 @@
 // psyight_eval: scores the bass tracker against a labels file, from the command line.
 //
 //   psyight_eval <audio> [labels.json] [--detail] [--stems] [--notes <estimates.json>]
+//                [--save-notes <out.json>]
 //
 // Decodes the audio, runs the file-mode analysis (analysis/track_analysis.h) with bass tracker v0
 // on the labels' grid, and prints the SPEC 6.10 metrics for each complete region and in total.
@@ -10,7 +11,9 @@
 // grid offsets: onset errors of notes matched within 50 ms, and detected kicks against the grid's
 // beats. --notes scores the bass notes of another labels-format file (for example the M4
 // student's, from tools/python/m4_eval.py) with the same scoring, instead of running the
-// analysis. For private reference tracks: run locally, never in CI.
+// analysis. --save-notes writes the analysis's bass notes and kicks as a labels-format file (for
+// tools/python/eval_mir.py, which recomputes the metrics with mir_eval). For private reference
+// tracks: run locally, never in CI.
 
 #include "analysis/bass_tracker.h"
 #include "analysis/scoring.h"
@@ -90,10 +93,13 @@ int wmain(int argc, wchar_t **argv) {
     std::vector<std::wstring> paths;
     bool detail = false;
     std::filesystem::path notes_path;
+    std::filesystem::path save_path;
     TrackAnalysisOptions options;
     for (int i = 1; i < argc; ++i) {
         if (std::wcscmp(argv[i], L"--notes") == 0 && i + 1 < argc) {
             notes_path = argv[++i];
+        } else if (std::wcscmp(argv[i], L"--save-notes") == 0 && i + 1 < argc) {
+            save_path = argv[++i];
         } else if (std::wcscmp(argv[i], L"--detail") == 0) {
             detail = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
@@ -104,7 +110,7 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (paths.empty() || paths.size() > 2) {
         std::fprintf(stderr, "usage: psyight_eval <audio> [labels.json] [--detail] [--stems] "
-                             "[--notes <estimates.json>]\n");
+                             "[--notes <estimates.json>] [--save-notes <out.json>]\n");
         return 2;
     }
     const std::filesystem::path audio_path = paths[0];
@@ -159,6 +165,22 @@ int wmain(int argc, wchar_t **argv) {
         const double lag_ms = 1e3 * analysis.value().stems_lag_s;
         std::printf("  stems ran %.1f ms %s the mix; aligned before analysis\n", std::abs(lag_ms),
                     lag_ms < 0.0 ? "ahead of" : "behind");
+    }
+    if (!save_path.empty()) {
+        Labels detected;
+        detected.audio = path_to_utf8(audio_path.filename());
+        detected.sample_rate = sample_rate_hz;
+        detected.grid = label_grid;
+        detected.bass_notes = to_labels(tracked->notes);
+        for (const double t_s : tracked->kick_times_s) {
+            detected.kicks.push_back({t_s});
+        }
+        if (const Result<void> saved = save_labels(save_path, detected); !saved) {
+            std::fprintf(stderr, "%s\n", saved.error().message.c_str());
+            return 1;
+        }
+        std::printf("Wrote %zu detected notes to %s\n", detected.bass_notes.size(),
+                    path_to_utf8(save_path).c_str());
     }
     const TrackScore score = score_track(labels.value(), to_labels(tracked->notes), {});
     if (score.regions.empty()) {
