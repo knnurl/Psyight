@@ -76,7 +76,8 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/output/show.cpp src/output/udp_socket_win32.cpp
                                src/output/precise_sleep_win32.cpp src/output/art_poll.cpp
                                src/output/discovery.cpp src/output/preflight.cpp
-                               src/ml/student.cpp src/analysis/live_analysis.cpp)
+                               src/ml/student.cpp src/analysis/live_analysis.cpp
+                               src/audio/capture.cpp src/audio/live_input.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch

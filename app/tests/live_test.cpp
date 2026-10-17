@@ -3,14 +3,17 @@
 // by exact kick times.
 
 #include "analysis/live_analysis.h"
+#include "audio/live_input.h"
 #include "engine/inputs.h"
 
 #include <doctest/doctest.h>
 
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <random>
+#include <thread>
 #include <vector>
 
 using namespace psyight;
@@ -251,4 +254,30 @@ TEST_CASE("live inputs: bass, hats and residual from the state") {
     CHECK_FALSE(in.bass_active);
     CHECK(in.since_bass_offset_s == doctest::Approx(0.04));
     CHECK(in.since_kick_s == kNever); // No kick yet.
+}
+
+TEST_CASE("live input: capture and analysis threads run at real-time pace (null backend)") {
+    const Result<StudentModel> loaded =
+        load_student(std::filesystem::path(PSYIGHT_TESTS_DIR) / "data" / "student_fixture");
+    REQUIRE(loaded.ok());
+    LiveInput live(std::make_shared<const StudentModel>(loaded.value()));
+    CaptureOptions options;
+    options.null_backend = true;
+    REQUIRE(live.start(options).ok());
+    const auto start = std::chrono::steady_clock::now();
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    const double elapsed_s =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    const double clock_s = static_cast<double>(live.now()) / live.sample_rate_hz();
+    const LiveState state = live.state();
+    MESSAGE("live clock " << clock_s << " s after " << elapsed_s << " s; analysed to "
+                          << state.analysed_s << " s; delay " << live.analysis_delay_ms()
+                          << " ms; load " << 100.0 * live.load() << "%");
+    CHECK(clock_s == doctest::Approx(elapsed_s).epsilon(0.25));
+    CHECK(state.frames > 50);
+    CHECK(clock_s - state.analysed_s < 0.1); // The analysis keeps up.
+    CHECK(live.dropped() == 0);
+    CHECK_FALSE(state.tempo_known); // Silence: no kicks.
+    live.stop();
+    CHECK_FALSE(live.running());
 }
