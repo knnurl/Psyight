@@ -2,6 +2,10 @@
 // labels (which also hold the manual grid), the loop region and the visible time range. Loading
 // (decode, overview, the whole track analysis from the mix or its stems) runs on a worker thread;
 // update() swaps the result in on the GUI thread.
+// The M4 student (ml/student.h) also runs on load when its weights exist at
+// data/m4/student.weights.{json,bin} in the working directory (never in the repository): its
+// notes can replace the DSP tracker's in the bass roll and the scoring panel, for A/B on the same
+// audio (SPEC 6.9). The show always uses the DSP analysis.
 #pragma once
 
 #include "analysis/front_end.h"
@@ -9,6 +13,7 @@
 #include "audio/transport.h"
 #include "core/timebase.h"
 #include "io/label_editor.h"
+#include "ml/student.h"
 
 #include <chrono>
 #include <filesystem>
@@ -31,7 +36,12 @@ struct LoadedTrack {
     // Beats, kicks, bass notes, sections, hats, residual and aggregates; null when the analysis
     // found no tempo (then only `analysis` exists).
     std::shared_ptr<const TrackAnalysis> track_analysis;
+    // The student's outputs and notes, on track_analysis's grid; null without weights or a tempo.
+    std::shared_ptr<const StudentResult> student;
 };
+
+// Whose bass notes the bass roll and the scoring panel show.
+enum class DetectionSource { dsp, student };
 
 struct LoopRegion {
     bool enabled = false;
@@ -77,6 +87,13 @@ class Session {
     // damaged file is never overwritten.
     Result<void> save_labels();
 
+    // The shown detections: the DSP tracker's, or the student's when chosen and available. Null
+    // before an analysis exists.
+    const std::vector<BassNote> *detected_notes() const;
+    const char *detection_name() const; // "stems", "mix" or "M4 student".
+    DetectionSource detection_source = DetectionSource::dsp;
+    bool student_available() const { return has_track() && track_->student != nullptr; }
+
     void set_loop(const LoopRegion &loop); // Also sends it to the transport.
     const LoopRegion &loop() const { return loop_; }
 
@@ -87,10 +104,12 @@ class Session {
         Result<AudioBuffer> audio = Error{"not loaded"};
         std::shared_ptr<LoadedTrack> track;
     };
-    static LoadResult load(std::filesystem::path path);
+    static LoadResult load(std::filesystem::path path, std::shared_ptr<const StudentModel> student);
     void autosave(const char *reason);
 
     Transport transport_;
+    std::shared_ptr<const StudentModel> student_model_ = load_student_model();
+    static std::shared_ptr<const StudentModel> load_student_model();
     std::shared_ptr<const LoadedTrack> track_;
     std::future<LoadResult> loading_;
     std::future<Result<TrackAnalysis>> reanalysis_;

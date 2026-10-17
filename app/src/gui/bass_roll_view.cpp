@@ -133,9 +133,21 @@ void BassRollView::draw_roll() {
     if (const std::vector<BassNote> *found = detections(); found != nullptr) {
         char label[96];
         std::snprintf(label, sizeof(label), "Detected notes (%zu, from the %s)###detections",
-                      found->size(),
-                      track.track_analysis->source == AnalysisSource::stems ? "stems" : "mix");
+                      found->size(), session_.detection_name());
         ImGui::Checkbox(label, &show_detections_);
+        if (session_.student_available()) {
+            ImGui::SameLine();
+            int source = session_.detection_source == DetectionSource::student ? 1 : 0;
+            ImGui::SetNextItemWidth(8.0f * ImGui::GetFontSize());
+            if (ImGui::Combo("##detection source", &source, "DSP\0M4 student\0")) {
+                session_.detection_source =
+                    source == 1 ? DetectionSource::student : DetectionSource::dsp;
+                selected_detection_ = -1;
+            }
+            ImGui::SetItemTooltip("Whose notes the roll and the scoring panel show: the DSP "
+                                  "tracker's, or the M4 student's (causal, from the mix). The "
+                                  "show always uses the DSP analysis.");
+        }
     } else {
         ImGui::TextDisabled("No detections (no tempo found)");
     }
@@ -235,12 +247,7 @@ void BassRollView::draw_regions() const {
     }
 }
 
-const std::vector<BassNote> *BassRollView::detections() const {
-    if (!session_.has_track() || session_.track().track_analysis == nullptr) {
-        return nullptr;
-    }
-    return &session_.track().track_analysis->bass.notes;
-}
+const std::vector<BassNote> *BassRollView::detections() const { return session_.detected_notes(); }
 
 int BassRollView::detection_under_mouse() const {
     const std::vector<BassNote> *found = detections();

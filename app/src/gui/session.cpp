@@ -28,10 +28,42 @@ void Session::open_file(const std::filesystem::path &path) {
     }
     loading_name_ = path_to_utf8(path.filename());
     status_ = "Loading and analysing " + loading_name_ + "...";
-    loading_ = std::async(std::launch::async, &Session::load, path);
+    loading_ = std::async(std::launch::async, &Session::load, path, student_model_);
 }
 
-Session::LoadResult Session::load(std::filesystem::path path) {
+std::shared_ptr<const StudentModel> Session::load_student_model() {
+    Result<StudentModel> model = load_student("data/m4/student.weights");
+    if (!model) {
+        spdlog::info("M4 student not loaded: {}", model.error().message);
+        return nullptr;
+    }
+    spdlog::info("M4 student loaded: {} channels, {} layers, lookahead {} frames",
+                 model.value().channels, model.value().dilations.size(), model.value().lookahead);
+    return std::make_shared<const StudentModel>(std::move(model.value()));
+}
+
+const std::vector<BassNote> *Session::detected_notes() const {
+    if (!has_track()) {
+        return nullptr;
+    }
+    if (detection_source == DetectionSource::student && track_->student != nullptr) {
+        return &track_->student->notes;
+    }
+    return track_->track_analysis != nullptr ? &track_->track_analysis->bass.notes : nullptr;
+}
+
+const char *Session::detection_name() const {
+    if (detection_source == DetectionSource::student && student_available()) {
+        return "M4 student";
+    }
+    return has_track() && track_->track_analysis != nullptr &&
+                   track_->track_analysis->source == AnalysisSource::stems
+               ? "stems"
+               : "mix";
+}
+
+Session::LoadResult Session::load(std::filesystem::path path,
+                                  std::shared_ptr<const StudentModel> student) {
     LoadResult result;
     result.audio = decode_audio_file(path);
     if (!result.audio) {
@@ -90,6 +122,21 @@ Session::LoadResult Session::load(std::filesystem::path path) {
                      track->name, options.source == AnalysisSource::stems ? "stems" : "mix",
                      elapsed_ms, shared->beats.bpm, shared->bass.notes.size(),
                      shared->bass.kick_times_s.size(), shared->sections.size());
+        if (student != nullptr) { // On the mix, as live mode would hear it.
+            const auto student_start = std::chrono::steady_clock::now();
+            Result<StudentResult> notes =
+                analyse_student(*student, mono, buffer.sample_rate_hz, shared->grid);
+            if (notes) {
+                track->student = std::make_shared<const StudentResult>(std::move(notes.value()));
+                spdlog::info("M4 student on {}: {} bass notes in {:.0f} ms", track->name,
+                             track->student->notes.size(),
+                             std::chrono::duration<double, std::milli>(
+                                 std::chrono::steady_clock::now() - student_start)
+                                 .count());
+            } else {
+                spdlog::warn("M4 student on {} failed: {}", track->name, notes.error().message);
+            }
+        }
     } else {
         spdlog::warn("Analysis of {} incomplete: {}", track->name, analysis.error().message);
         Result<FrontEndResult> features = analyse_front_end(mono, buffer.sample_rate_hz, {});
@@ -199,6 +246,15 @@ void Session::update() {
             const auto shared = std::make_shared<const TrackAnalysis>(std::move(analysis.value()));
             auto updated = std::make_shared<LoadedTrack>(*track_);
             updated->track_analysis = shared;
+            if (track_->student != nullptr && student_model_ != nullptr) {
+                // The same outputs on the new grid (gate ratios and slots follow the grid).
+                auto student = std::make_shared<StudentResult>(*track_->student);
+                student->notes = student_bass_notes(
+                    decode_student(student->outputs, student_model_->lookahead,
+                                   student_model_->first_midi, student_model_->decoder),
+                    student->frame_s, shared->grid);
+                updated->student = std::move(student);
+            }
             updated->analysis =
                 std::shared_ptr<const FrontEndResult>(shared, &shared->mix_features);
             track_ = std::move(updated);

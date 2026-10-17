@@ -2,7 +2,8 @@
 // against the labelled notes of every complete region and in total (analysis/scoring.h, the
 // same numbers as psyight_eval), the offset error distribution, and every error, worst first.
 // Clicking an error seeks there, so it can be heard and corrected in the bass roll. Rescores
-// whenever the labels or the analysis change.
+// whenever the labels or the shown notes change. The notes are the bass roll's choice: the DSP
+// tracker's or the M4 student's.
 #pragma once
 
 #include "analysis/scoring.h"
@@ -26,7 +27,7 @@ class ScoringView {
 
     Session &session_;
     // What the current score was computed from.
-    const TrackAnalysis *scored_analysis_ = nullptr;
+    const std::vector<BassNote> *scored_notes_ = nullptr;
     Labels scored_labels_;
     TrackScore score_;
     std::vector<NoteError> errors_;

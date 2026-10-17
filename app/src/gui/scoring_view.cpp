@@ -105,21 +105,21 @@ void score_row(const char *name, const NoteScore &s) {
 } // namespace
 
 void ScoringView::rescore_if_changed() {
-    const TrackAnalysis *analysis = session_.track().track_analysis.get();
+    const std::vector<BassNote> *notes = session_.detected_notes();
     const Labels &labels = session_.labels().labels();
-    if (analysis == scored_analysis_ && labels == scored_labels_) {
+    if (notes == scored_notes_ && labels == scored_labels_) {
         return;
     }
-    scored_analysis_ = analysis;
+    scored_notes_ = notes;
     scored_labels_ = labels;
     selected_error_ = -1;
-    if (analysis == nullptr) {
+    if (notes == nullptr) {
         score_ = {};
         errors_.clear();
         offset_errors_ms_.clear();
         return;
     }
-    const std::vector<BassNoteLabel> estimates = to_labels(analysis->bass.notes);
+    const std::vector<BassNoteLabel> estimates = to_labels(*notes);
     score_ = score_track(labels, estimates, {});
     errors_ = list_note_errors(labels, estimates, {});
     offset_errors_ms_.clear();
@@ -139,7 +139,7 @@ void ScoringView::draw() {
         return;
     }
     rescore_if_changed();
-    if (scored_analysis_ == nullptr) {
+    if (scored_notes_ == nullptr) {
         ImGui::TextWrapped("No detected notes to score: the analysis found no tempo.");
         ImGui::End();
         return;
@@ -154,10 +154,9 @@ void ScoringView::draw() {
     const ScoringParams defaults;
     ImGui::TextWrapped("The %zu detected notes (from the %s) against the labels of %zu complete "
                        "region%s. Onsets match within %.0f ms; pitch is right within %.0f cents.",
-                       scored_analysis_->bass.notes.size(),
-                       scored_analysis_->source == AnalysisSource::stems ? "stems" : "mix",
-                       score_.regions.size(), score_.regions.size() == 1 ? "" : "s",
-                       1000.0 * defaults.onset_tolerance_s, defaults.pitch_tolerance_cents);
+                       scored_notes_->size(), session_.detection_name(), score_.regions.size(),
+                       score_.regions.size() == 1 ? "" : "s", 1000.0 * defaults.onset_tolerance_s,
+                       defaults.pitch_tolerance_cents);
     draw_table();
     draw_offsets();
     draw_errors();
