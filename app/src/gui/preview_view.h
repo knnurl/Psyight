@@ -43,6 +43,7 @@ class PreviewView {
     void record_params();
     int ambient_scene() const;
     void sync_config(); // Publishes config_ when it or the track changed.
+    void draw_live();   // Live input: source, start and stop, status, tap test (M5).
     void draw_controls(const ShowFrame &frame);
     void draw_scene_cards(const ShowFrame &frame);
     void draw_scene_editor(std::vector<Scene> &scenes);
@@ -64,6 +65,10 @@ class PreviewView {
     int playing_scene_ = 0; // The automation's current scene, from the latest frame.
     std::shared_ptr<Recorder> recorder_;
     std::string record_status_;
+    int live_source_ = 0; // 0: loopback; 1 and on: input_devices_[i - 1].
+    std::vector<std::string> input_devices_;
+    std::string live_error_;
+    std::vector<double> tap_errors_s_; // Tap test: taps minus the nearest predicted beat.
     std::string address_text_ = "127.0.0.1";
     bool address_active_ = false;
     // Measured frame rate, from the frame index over about a second.

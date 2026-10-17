@@ -40,10 +40,14 @@ PreviewView::PreviewView(Session &session, ProjectState &project)
     : session_(session), project_(project), show_([&session, clock = PlayheadClock()]() mutable {
           // The show thread's playhead: the transport's position, smoothed (callbacks are
           // irregular). Files are decoded at the analysis rate, so the rate is 48 kHz times speed.
-          const Transport &t = session.transport();
+          // In live mode, the live clock (samples captured) at the capture rate.
           const double now_s =
               std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
                   .count();
+          if (const std::shared_ptr<const LiveInput> live = session.live_input(); live) {
+              return clock.update(now_s, live->now(), live->sample_rate_hz());
+          }
+          const Transport &t = session.transport();
           const double rate = t.playing() ? kAnalysisSampleRateHz * t.speed() : 0.0;
           return clock.update(now_s, t.position_now(), rate);
       }) {}
@@ -231,7 +235,11 @@ void PreviewView::sync_config() {
     std::shared_ptr<const TrackAnalysis> analysis =
         session_.has_track() ? session_.track().track_analysis : nullptr;
     const Grid grid = session_.grid();
-    const int sample_rate_hz = session_.has_track() ? session_.track().sample_rate_hz : 48000;
+    std::shared_ptr<const LiveInput> live = session_.live_input();
+    const int sample_rate_hz = live != nullptr        ? live->sample_rate_hz()
+                               : session_.has_track() ? session_.track().sample_rate_hz
+                                                      : 48000;
+    dirty_ |= live != config_.live;
     dirty_ |= analysis != config_.analysis || grid.bpm != config_.grid.bpm ||
               grid.first_downbeat != config_.grid.first_downbeat ||
               sample_rate_hz != config_.sample_rate_hz || project_.version() != project_version_;
@@ -242,6 +250,7 @@ void PreviewView::sync_config() {
         stop_recording("Stopped (the track or its analysis changed):");
     }
     config_.analysis = std::move(analysis);
+    config_.live = std::move(live);
     config_.grid = grid;
     config_.sample_rate_hz = sample_rate_hz;
     const Project &p = project_.project();
@@ -268,9 +277,16 @@ void PreviewView::draw() {
     sync_config();
     ImGui::Begin("Preview");
     const std::shared_ptr<const ShowFrame> frame = show_.latest();
-    if (!session_.has_track() || session_.track().track_analysis == nullptr || frame == nullptr) {
+    draw_live();
+    const bool live = config_.live != nullptr;
+    if (!live &&
+        (!session_.has_track() || session_.track().track_analysis == nullptr || frame == nullptr)) {
         ImGui::TextUnformatted(session_.has_track() ? "No analysis (no tempo found)."
                                                     : "No track loaded.");
+        ImGui::End();
+        return;
+    }
+    if (frame == nullptr) {
         ImGui::End();
         return;
     }
@@ -294,6 +310,123 @@ void PreviewView::draw() {
                 frame->report.power_scale < 1.0 ? " (power limited)" : "");
     draw_rig(*frame);
     ImGui::End();
+}
+
+void PreviewView::draw_live() {
+    const std::shared_ptr<const LiveInput> live = session_.live_input();
+    if (!ImGui::CollapsingHeader(live != nullptr ? "Live input (on)###live"
+                                                 : "Live input###live")) {
+        return;
+    }
+    if (!session_.live_available()) {
+        ImGui::TextWrapped("Live mode needs the M4 student's weights in data/m4/ (see "
+                           "tools/python/m4_export.py).");
+        return;
+    }
+    const float em = ImGui::GetFontSize();
+    if (live == nullptr) {
+        const std::string current = live_source_ == 0
+                                        ? "Loopback (what this computer plays)"
+                                        : input_devices_[static_cast<size_t>(live_source_ - 1)];
+        ImGui::SetNextItemWidth(18.0f * em);
+        if (ImGui::BeginCombo("Source", current.c_str())) {
+            if (ImGui::IsWindowAppearing()) {
+                if (Result<std::vector<std::string>> names = Capture::input_devices(); names) {
+                    input_devices_ = std::move(names.value());
+                }
+                live_source_ = std::min(live_source_, static_cast<int>(input_devices_.size()));
+            }
+            if (ImGui::Selectable("Loopback (what this computer plays)", live_source_ == 0)) {
+                live_source_ = 0;
+            }
+            for (size_t i = 0; i < input_devices_.size(); ++i) {
+                if (ImGui::Selectable(input_devices_[i].c_str(),
+                                      live_source_ == static_cast<int>(i) + 1)) {
+                    live_source_ = static_cast<int>(i) + 1;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Start")) {
+            CaptureOptions options;
+            options.source = live_source_ == 0 ? CaptureSource::loopback : CaptureSource::input;
+            if (live_source_ > 0) {
+                options.device_name = input_devices_[static_cast<size_t>(live_source_ - 1)];
+            }
+            const Result<void> started = session_.start_live(options);
+            live_error_ = started ? "" : started.error().message;
+            tap_errors_s_.clear();
+        }
+        ImGui::SetItemTooltip("Analyses the input causally (the M4 student and a beat loop on the "
+                              "kicks) and drives the show from it. Pauses the file.");
+        if (!live_error_.empty()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "%s", live_error_.c_str());
+        }
+        return;
+    }
+    if (ImGui::Button("Stop live input")) {
+        session_.stop_live();
+        return;
+    }
+    const LiveState s = live->state();
+    const double bpm = s.tempo_known ? 60.0 / s.period_s : 0.0;
+    if (!s.tempo_known) {
+        ImGui::TextUnformatted("Listening for a steady kick...");
+    } else {
+        const double now_s = static_cast<double>(live->now()) / live->sample_rate_hz();
+        const EngineInputs in = inputs_at(s, now_s);
+        ImGui::Text("%s %.2f BPM, beat %d of the bar, %s (last kick %+.1f ms off the beat)",
+                    s.locked ? "Locked:" : "Acquiring:", bpm, in.beat_in_bar + 1,
+                    live_section_name(s.section), s.last_error_ms);
+    }
+    const float level = live->level();
+    ImGui::Text("Analysis delay %.0f ms (decisions %.0f ms after the audio), load %.1f%%, "
+                "level %.0f dBFS, dropped %lld samples",
+                live->analysis_delay_ms(), 1e3 * s.latency_s, 100.0 * live->load(),
+                level > 0.0f ? 20.0 * std::log10(level) : -120.0, live->dropped());
+
+    // Tap test: taps against the predicted beat, on the live clock.
+    if (ImGui::Button("Tap (T)") ||
+        (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+         ImGui::IsKeyPressed(ImGuiKey_T, false))) {
+        if (s.tempo_known) {
+            const double now_s = static_cast<double>(live->now()) / live->sample_rate_hz();
+            const double beats = LiveBeat::position(s, now_s);
+            tap_errors_s_.push_back(std::remainder(beats, 1.0) * s.period_s);
+        }
+    }
+    ImGui::SetItemTooltip("Tap on the beat you hear, at least 8 times. Measures when you hear the "
+                          "beat against the capture clock (speaker distance, the sound system). "
+                          "The GUI reads taps once a frame, so allow about 5 ms of scatter.");
+    ImGui::SameLine();
+    if (ImGui::Button("Clear taps")) {
+        tap_errors_s_.clear();
+    }
+    if (tap_errors_s_.size() >= 2) {
+        double mean = 0.0;
+        for (const double e : tap_errors_s_) {
+            mean += e;
+        }
+        mean /= static_cast<double>(tap_errors_s_.size());
+        double var = 0.0;
+        for (const double e : tap_errors_s_) {
+            var += (e - mean) * (e - mean);
+        }
+        const double sd = std::sqrt(var / static_cast<double>(tap_errors_s_.size() - 1));
+        ImGui::Text("%zu taps: %+.0f ms after the predicted beat (sd %.0f ms)",
+                    tap_errors_s_.size(), 1e3 * mean, 1e3 * sd);
+        ImGui::BeginDisabled(tap_errors_s_.size() < 8);
+        if (ImGui::Button("Use as latency offset")) {
+            // Lights show beat b when the render time reaches b; it is heard at b + mean on the
+            // capture clock, so render mean later: offset = -mean.
+            project_.edit().latency_offset_ms = std::clamp(-1e3 * mean, -200.0, 200.0);
+            project_.changed();
+        }
+        ImGui::EndDisabled();
+        ImGui::SetItemTooltip("Sets the latency offset so the lights land when the beat is heard. "
+                              "The LED path (network, node) adds its own delay: check by eye.");
+    }
 }
 
 void PreviewView::draw_controls(const ShowFrame &frame) {

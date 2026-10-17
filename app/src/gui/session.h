@@ -10,11 +10,13 @@
 
 #include "analysis/front_end.h"
 #include "analysis/track_analysis.h"
+#include "audio/live_input.h"
 #include "audio/transport.h"
 #include "core/timebase.h"
 #include "io/label_editor.h"
 #include "ml/student.h"
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <future>
@@ -94,6 +96,13 @@ class Session {
     DetectionSource detection_source = DetectionSource::dsp;
     bool student_available() const { return has_track() && track_->student != nullptr; }
 
+    // Live mode (M5): capture and causal analysis, with the student. Starting pauses the file.
+    // live_input() is null while live mode is off; any thread may call it.
+    Result<void> start_live(const CaptureOptions &options);
+    void stop_live();
+    std::shared_ptr<const LiveInput> live_input() const { return live_.load(); }
+    bool live_available() const { return student_model_ != nullptr; }
+
     void set_loop(const LoopRegion &loop); // Also sends it to the transport.
     const LoopRegion &loop() const { return loop_; }
 
@@ -110,6 +119,8 @@ class Session {
     Transport transport_;
     std::shared_ptr<const StudentModel> student_model_ = load_student_model();
     static std::shared_ptr<const StudentModel> load_student_model();
+    std::shared_ptr<LiveInput> live_owner_; // GUI thread only.
+    std::atomic<std::shared_ptr<const LiveInput>> live_;
     std::shared_ptr<const LoadedTrack> track_;
     std::future<LoadResult> loading_;
     std::future<Result<TrackAnalysis>> reanalysis_;

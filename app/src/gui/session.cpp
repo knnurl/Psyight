@@ -150,7 +150,34 @@ Session::LoadResult Session::load(std::filesystem::path path,
     return result;
 }
 
-Session::~Session() { autosave("on exit"); }
+Session::~Session() {
+    stop_live();
+    autosave("on exit");
+}
+
+Result<void> Session::start_live(const CaptureOptions &options) {
+    stop_live();
+    auto live = std::make_shared<LiveInput>(student_model_);
+    if (Result<void> r = live->start(options); !r) {
+        return r;
+    }
+    transport_.pause();
+    live_owner_ = live;
+    live_.store(live);
+    spdlog::info("Live input started ({})",
+                 options.source == CaptureSource::loopback ? "loopback" : options.device_name);
+    return {};
+}
+
+void Session::stop_live() {
+    if (live_owner_ == nullptr) {
+        return;
+    }
+    live_.store(nullptr);
+    live_owner_->stop(); // Readers holding the pointer see a stopped clock until they let go.
+    live_owner_.reset();
+    spdlog::info("Live input stopped");
+}
 
 void Session::autosave(const char *reason) {
     if (!has_track() || !labels_.dirty()) {
