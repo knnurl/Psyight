@@ -1,6 +1,6 @@
 # Psyight progress and handoff
 
-Last updated: 2026-10-16. Written so another agent can pick up without the original session.
+Last updated: 2026-10-17. Written so another agent can pick up without the original session.
 
 ## Read first
 - `CLAUDE.md` (process, conventions, commands), `docs/SPEC.md` (requirements; decision log in section 16).
@@ -11,15 +11,18 @@ Last updated: 2026-10-16. Written so another agent can pick up without the origi
 - `data/OculusDrift.mp3.labels.json`: grid **150 BPM** (not 160), first downbeat 16.042 s, one region 93.242 to 154.465 s, **marked complete**: 452 notes, all E1 (MIDI 28), on the grid, gate 1.0 (rolling K-B-B-B, 100 ms slots).
 - The grid was 25 ms early against the detected kicks; with the owner's approval the grid, region and all 475 notes were shifted +25.0 ms on 2026-10-16 (now kick minus beat: median 0.0 ms). Original kept as `data/OculusDrift.mp3.labels.before-shift.json`. Do not edit the owner's labels without asking.
 
+- Drafted 2026-10-17 by `psyight_label_draft` (13674d7) from the stems analysis, for the owner to check: `Phase Change.mp3` (region 362.8 to 424.4 s, 451 notes), `Hall of Purity.wav` (345.9 to 406.6 s, 500 notes), `Hagios.mp3` (252.1 to 313.1 s, 397 notes). Regions start incomplete. The owner checked Phase Change ("labels look good", 2026-10-17); its region becomes scored once "Complete" is ticked in the app. Bias to state with every M2 exit number: notes the owner left as drafted are the stems tracker's own output, so they favour stems DSP over the mix and over the student.
+
 ## Toolchain (this machine)
 - Use the x64 **VS 2022 Build Tools** shell (MSVC 19.44, v143), inside the same PowerShell call as the build:
   `& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation`
 - VS 2026 18.0 fails: its bundled vcpkg (2025-09-03) doesn't know v145, and its 14.44 folder is a broken leftover with no `cl.exe`.
 - vcpkg manifest mode, triplet `x64-windows-static-md`, baseline pinned to `b1b19307` (the snapshot bundled with VS). CMakeLists.txt sets `VCPKG_VISUAL_STUDIO_PATH` from the shell's `VSINSTALLDIR` (trailing backslash stripped) so dependencies and app share one toolset.
 - Commands (from `app/`): `cmake --preset windows-msvc`, `cmake --build --preset windows-msvc-release`, `ctest --preset windows-msvc-release`. Run from the repo root: `app\build\windows-msvc\release\psyight.exe data\OculusDrift.mp3`.
-- Score the tracker on a labelled track (repo root): `app\build\windows-msvc\release\psyight_eval.exe data\OculusDrift.mp3 [labels.json] [--detail]`. Local only, never in CI.
-- Unlabelled analysis report: `appuild\windows-msvc
-elease\psyight_analyse.exe [--stems] [--kicks] [--tempo] <audio...>`. Stems: `tools\python\.venv\Scripts\python tools\python\separate.py <audio...>` (setup in tools/python/README.md).
+- Score the tracker on a labelled track (repo root): `app\build\windows-msvc\release\psyight_eval.exe data\OculusDrift.mp3 [labels.json] [--detail] [--stems] [--save-notes out.json]`. Local only, never in CI. The app's Scoring tab shows the same numbers for the loaded track.
+- Cross-check the scoring with mir_eval: `tools\python\.venv\Scripts\python tools\python\eval_mir.py <labels.json> <estimates.json>` (estimates from `--save-notes`) or `eval_mir.py --fuzz 1000`.
+- Golden metrics: `psyight_tests -tc="golden*"` compares the full analysis on the synthetic set with `app/tests/golden/synthetic_metrics.json`; after an intended change, rerun it with `PSYIGHT_UPDATE_GOLDEN=1` and commit the file with the change.
+- Unlabelled analysis report: `app\build\windows-msvc\release\psyight_analyse.exe [--stems] [--kicks] [--tempo] <audio...>`. Stems: `tools\python\.venv\Scripts\python tools\python\separate.py <audio...>` (setup in tools/python/README.md).
 - Tracker tuning tools (skipped by default; from `app/`): `build\windows-msvc\release\psyight_tests.exe -tc="bass tracker: table" --no-skip`; also "bass tracker: errors", "bass tracker: sweep", "bass tracker: click ratio".
 
 ## Gotchas learned the hard way
@@ -61,12 +64,14 @@ elease\psyight_analyse.exe [--stems] [--kicks] [--tempo] <audio...>`. Stems: `to
 - Optional: listen to Hagios's start and end (no clear beat for about 100 s each) and Phase Change's downbeat (mix and stems disagree by 3 beats).
 - M3 (hardware and taste, when convenient): enter the real rig in the Rig panel (strip polylines in metres, pixel counts, colour orders); try sACN or Art-Net to the F767 node on the home network: set the protocol and address in the Preview's Output section, check the Preflight tab (and Discover Art-Net nodes), then step the top bar's ladder to Ambient, React or Show (the app starts in Preview, which sends nothing; multicast was never sent from the university network); judge the scenes, automation and effects on real strips (taste calls: Augment, not Automate). Two calls the measurements raise (docs/results/M3.md): on the test frame the kick ring is one flash per kick, so kicks take about 2.5 of the 3 flashes a second at 150 BPM and anything else that flashes in that second is held back; and the Ambient scene is bright everywhere (Hagios, mostly Ambient, has 14% dark pixels against SPEC 7.7's 30 to 50%).
 
-## Parked M1 to-dos (owner, 2026-10-16: "keep as a note for later")
-- Detected notes in the bass roll (second colour, opacity is confidence; kicks as markers), the inspector showing every tracker field, and a "pre-fill labels from detections" button. Run the tracker in `Session::load` after the front end.
-- Scoring panel: per complete region and total, the psyight_eval metrics, plus jump to the worst errors.
-- Golden-metric regression test on the synthetic set (a metric that worsens fails), and a Python cross-check `tools/python/eval_mir.py` using the same closest-pairing rule.
-- Log panel (SPEC 9.4 lists it for M1).
-- A "shift all labels by N ms" action in the inspector (the OculusDrift grid fix was a script).
+## M1 finished (2026-10-17; the parked to-dos of 2026-10-16)
+- Detected notes in the bass roll, the inspector with every tracker field, "Fill from detections" (done during M2).
+- Scoring tab (behind the note inspector): psyight_eval's metrics per complete region and in total, the offset error histogram, and every error worst first (missed, false positive, octave, pitch, offset), click to seek. Checked in the app on a scratch copy of OculusDrift (mix): 452 labelled, 457 detected, 452 matched, P 0.989, F 0.994, the same as psyight_eval; the 5 false positives are A0 detections at 142.7 to 144.0 s, where the bassline drops out (the M4 student's false notes cluster there too).
+- "Shift all labels" in the inspector: notes, kicks, beats, downbeats, sections, regions and the grid, one undo step, never before 0 s (the grid wraps a bar instead). Checked in the app: +25 ms then Undo restored the file exactly.
+- Log tab (behind the preview): spdlog ring buffer, last 1000 messages, warnings amber, errors red.
+- Golden metrics on the synthetic set (full analysis): note F, pitch, octave errors, gate MAE, offset median and hit rate, kick F, tempo error, beat phase error. Mutation check: a stored value made better than reality fails the test. The downbeat is not in it: the synthetic patterns have no bar-level cue (beat_tracker_test.cpp covers downbeats).
+- tools/python/eval_mir.py: P, R and F checked against mir_eval's maximum matching, the closest pairing found independently with scipy, mir_eval's offset rule. OculusDrift: agrees on every metric; 1000 random edge-case regions: 0 disagreements; four mutants (onset, offset ratio, offset minimum, pitch tolerance) each caught.
+- M1 left to the owner: none of the checklist; FLAC loading is untested (owner: not needed now).
 
 ## M2 progress (owner-approved 2026-10-16: unlabelled tracks first, labels later)
 Done (details in docs/results/M2.md and SPEC 6.4 to 6.6, decision log 2026-10-16):
@@ -82,6 +87,7 @@ Done (details in docs/results/M2.md and SPEC 6.4 to 6.6, decision log 2026-10-16
 - Phrases restart at section changes (`phrase_starts`, SPEC 6.5).
 
 M2 status (2026-10-16): complete except what needs owner labels (the exit table, label-based tuning). Not built: build detection with spectral flatness (high-band rise only), hat verification.
+M2 status (2026-10-17): the exit table waits only for "Complete" on the three drafted regions (see the labelling state above); then `psyight_eval <track>` and `psyight_eval <track> --stems` give the DSP mix and Demucs-assisted rows.
 
 ## M3 plan (owner, 2026-10-16: "continue with M3 and if possible M4" once M2 is satisfactory without labels)
 No hardware here: the exit (a show on real strips via the F767 node) stays with the owner; everything up to a virtual node is buildable and testable.
@@ -129,7 +135,19 @@ Steps:
 3. Python training: small causal TCN (receptive field about 0.7 s, 0 to 2 frames lookahead), per-track train and validation split, ONNX export, inference latency measured with onnxruntime (CPU and DirectML).
 4. Scoring: the student's notes decoded and scored by the same code as DSP (psyight_eval reads external detections), on the labelled minute.
 5. Only if it holds up: ONNX Runtime in the app (vcpkg has onnxruntime-gpu 1.19.2, CUDA only, no DirectML: a decision for the owner then), the GUI A/B and live mode.
-M4 progress (2026-10-17): steps 1 to 4 done (docs/results/M4.md). 180 tracks exported (66 duplicates, 8 reference copies excluded); student trained (359k parameters, 1.35 s context, 10.7 ms lookahead). On OculusDrift's labelled minute, causal from the mix: onset F 0.967 (precision 0.938, recall 0.998) against DSP file mode's 0.994; offsets |median| 2.5 ms (DSP 6.8); pitch 0.998 (DSP 0.989); gate MAE 0.106 (DSP 0.037). Inference: 1.3 ms CPU, 1.4 ms DirectML per call. Next: thresholds chosen on validation tracks, the gate head, labelled regions in the other three tracks (owner), then step 5 (ONNX Runtime in the app: vcpkg has CUDA-only onnxruntime-gpu, a decision for the owner).
+M4 progress (2026-10-17): steps 1 to 4 done (docs/results/M4.md). 180 tracks exported (66 duplicates, 8 reference copies excluded); student trained (359k parameters, 1.35 s context, 10.7 ms lookahead). On OculusDrift's labelled minute, causal from the mix: onset F 0.967 (precision 0.938, recall 0.998) against DSP file mode's 0.994; offsets |median| 2.5 ms (DSP 6.8); pitch 0.998 (DSP 0.989); gate MAE 0.106 (DSP 0.037). Inference: 1.3 ms CPU, 1.4 ms DirectML per call. More data (owner, 2026-10-17): Music\Musify\Download\Psyflow-to-Pixieland, Electric, Autophagy and Journeys (psy) are being added (log: data/m4/export2.log; the bigger model overfit, so more tracks should help). Techno (SGems, Tatakai) and dubstep (Dubs) are held back until the teacher is checked on a few of them: the student copies the teacher, and the teacher is tuned and measured only on psytrance. Next: thresholds chosen on validation tracks, the gate head, labelled regions in the other three tracks (owner), then step 5 (ONNX Runtime in the app: vcpkg has CUDA-only onnxruntime-gpu, a decision for the owner).
+
+## Owner decisions waiting on real LED tests (owner, 2026-10-17: "decide after real LED testing")
+- Kick flash budget: the kick ring is one flash per kick, about 2.5 of the 3 flashes a second at 150 BPM (docs/results/M3.md).
+- Ambient darkness: the Ambient scene leaves 14% of pixels dark on Hagios against SPEC 7.7's 30 to 50%.
+
+## ONNX Runtime in the app: options (asked 2026-10-17, not decided)
+Checked at the pinned vcpkg baseline b1b19307 (2025-08-30): the only runtime port is `onnxruntime-gpu` 1.19.2, which downloads Microsoft's CUDA release zip and is `ONLY_DYNAMIC_LIBRARY` (our triplet is static: it needs a per-port dynamic override). No CPU or DirectML port.
+1. vcpkg onnxruntime-gpu: CUDA and cuDNN DLLs on every machine that runs the show; no DirectML. Poor fit.
+2. Microsoft's prebuilt release (CPU zip, or the Microsoft.ML.OnnxRuntime.DirectML NuGet package) through a vcpkg overlay port in the repo: MIT, a few DLLs next to psyight.exe, CPU and DirectML. DirectML.dll's redistribution terms [Verify].
+3. Build ONNX Runtime from source in an overlay port: full control, static possible, long builds and upkeep.
+4. No runtime: the student is a small causal TCN (359k parameters), so hand-written streaming inference in C++ (each dilated layer keeps its past activations, one new frame per hop) costs about 0.7 MFLOP a hop, well under 0.1 ms on one core [Verify by measuring]. No dependency, bit-identical runs (the determinism rule), naturally causal for live mode; tied to this architecture, checked against onnxruntime's outputs in a test. ONNX stays the training export.
+Recommendation: 4, with 2 (CPU) as the fallback if the model family changes.
 
 ## Known issues
 - Fixed (2026-10-17): render-time jitter. The transport publishes its position with a timestamp under a seqlock (position_now extrapolates between callbacks) and the show thread smooths it with a delay-locked loop (core/playhead_clock.h). At 60 fps on the null backend the frame-to-frame step went from 10 to 30 ms (sd 6.06 ms) to 15.9 to 17.7 ms (sd 0.34 ms): psyight_tests -tc="transport: render-time steps at 60 fps" --no-skip.
