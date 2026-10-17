@@ -607,6 +607,19 @@ void BassRollView::draw_inspector() {
         labels.redo();
     }
     ImGui::EndDisabled();
+    const float em = ImGui::GetFontSize();
+    ImGui::SetNextItemWidth(9.0f * em);
+    ImGui::InputDouble("ms##shift", &shift_ms_, 1.0, 10.0, "%.1f");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(shift_ms_ == 0.0);
+    if (ImGui::Button("Shift all labels")) {
+        const double moved_s = labels.shift_all(shift_ms_ / 1000.0);
+        spdlog::info("Shifted every label by {:+.1f} ms", 1000.0 * moved_s);
+    }
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Moves every labelled time by this amount, later when positive: notes, "
+                          "kicks, sections, regions and the grid (one undo step). Never before "
+                          "0 s.");
     sync_selection();
     if (!session_.status().empty()) {
         ImGui::TextWrapped("%s", session_.status().c_str());

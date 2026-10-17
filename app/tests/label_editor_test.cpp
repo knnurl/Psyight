@@ -216,3 +216,37 @@ TEST_CASE("label editor: undo_redo_count counts only calls that changed the labe
     CHECK_FALSE(editor.redo());
     CHECK(editor.undo_redo_count() == 2);
 }
+
+TEST_CASE("label editor: shift_all moves every time in one undo step and stops at zero") {
+    Labels labels;
+    labels.grid = {150.0, 0.010};
+    labels.regions = {{0.5, 10.0, true}};
+    labels.bass_notes = {note(1.0, 1.05), note(2.0, 2.1)};
+    labels.kicks = {{0.8}};
+    labels.beats = {{0.9}};
+    labels.downbeats = {{0.9}};
+    labels.sections = {{0.6, "groove"}};
+    LabelEditor editor(labels);
+    CHECK(editor.shift_all(0.025) == 0.025);
+    const Labels &shifted = editor.labels();
+    CHECK(shifted.grid.first_downbeat_s == doctest::Approx(0.035));
+    CHECK(shifted.regions[0].start_s == doctest::Approx(0.525));
+    CHECK(shifted.regions[0].end_s == doctest::Approx(10.025));
+    CHECK(shifted.bass_notes[1].onset_s == doctest::Approx(2.025));
+    CHECK(shifted.bass_notes[1].offset_s == doctest::Approx(2.125));
+    CHECK(shifted.kicks[0].t_s == doctest::Approx(0.825));
+    CHECK(shifted.beats[0].t_s == doctest::Approx(0.925));
+    CHECK(shifted.downbeats[0].t_s == doctest::Approx(0.925));
+    CHECK(shifted.sections[0].start_s == doctest::Approx(0.625));
+    CHECK(editor.dirty());
+    CHECK(editor.undo());
+    CHECK(editor.labels() == labels);
+
+    // Limited by the earliest time (the region at 0.5 s); the grid wraps a bar instead.
+    CHECK(editor.shift_all(-2.0) == doctest::Approx(-0.5));
+    CHECK(editor.labels().regions[0].start_s == 0.0);
+    CHECK(editor.labels().grid.first_downbeat_s == doctest::Approx(0.010 - 0.5 + 1.6));
+    CHECK(editor.shift_all(-1.0) == 0.0); // Nothing can move earlier: no undo step.
+    CHECK(editor.undo());
+    CHECK_FALSE(editor.can_undo());
+}

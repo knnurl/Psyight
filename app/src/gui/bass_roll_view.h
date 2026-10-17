@@ -1,6 +1,7 @@
 // Bass roll and labelling tools (SPEC section 9.4, M1): ground-truth notes on the 16th grid with
 // time on the shared view axis and one row per semitone, plus a note inspector with every field,
-// labelled regions and the labels file controls.
+// labelled regions and the labels file controls, including shifting every label by a constant
+// (for labels made against a grid or decoder with an offset).
 //
 // Mouse: double-click empty space to create a note; Ctrl+click to seek; drag on empty space to
 // select the notes in a box (Shift adds to the selection); click a note to select it, Shift+click
@@ -87,6 +88,7 @@ class BassRollView {
     double grab_offset_s_ = 0.0;              // Mouse time minus onset when a move started.
     double default_length_s_ = 0.5 * 0.09375; // The last edited length; half a slot at first.
     bool snap_ = true;
+    double shift_ms_ = 0.0; // "Shift all labels" amount.
     std::array<char, 16> pitch_text_{};
     bool editing_pitch_ = false; // While typing, the field is not refilled from the note.
     std::string pitch_error_;

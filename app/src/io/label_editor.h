@@ -48,6 +48,11 @@ class LabelEditor {
     void delete_notes(const std::vector<int> &indices);
 
     void set_grid(const LabelGrid &grid);
+    // Moves every time in the labels by delta_s in one undo step: notes, kicks, beats, downbeats,
+    // sections, regions and the grid (for labels made against audio with a constant offset). The
+    // shift is limited so no time goes below 0; a grid downbeat that would is moved a whole number
+    // of bars later instead, which leaves the grid lines where they were. Returns the shift made.
+    double shift_all(double delta_s);
     void add_region(const LabelRegion &region);
     void set_region(int index, const LabelRegion &region);
     void delete_region(int index);

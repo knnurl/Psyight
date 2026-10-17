@@ -1,6 +1,8 @@
 #include "io/label_editor.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <utility>
 
 namespace psyight {
@@ -172,6 +174,54 @@ void LabelEditor::set_grid(const LabelGrid &grid) {
     }
     before_edit();
     labels_.grid = grid;
+}
+
+double LabelEditor::shift_all(double delta_s) {
+    double earliest_s = std::numeric_limits<double>::infinity();
+    for (const BassNoteLabel &n : labels_.bass_notes) {
+        earliest_s = std::min(earliest_s, n.onset_s);
+    }
+    for (const std::vector<LabelEvent> *events :
+         {&labels_.kicks, &labels_.beats, &labels_.downbeats}) {
+        for (const LabelEvent &e : *events) {
+            earliest_s = std::min(earliest_s, e.t_s);
+        }
+    }
+    for (const SectionLabel &s : labels_.sections) {
+        earliest_s = std::min(earliest_s, s.start_s);
+    }
+    for (const LabelRegion &r : labels_.regions) {
+        earliest_s = std::min(earliest_s, r.start_s);
+    }
+    if (std::isfinite(earliest_s)) {
+        delta_s = std::max(delta_s, -earliest_s);
+    }
+    if (delta_s == 0.0 || !std::isfinite(delta_s)) {
+        return 0.0;
+    }
+    before_edit();
+    for (BassNoteLabel &n : labels_.bass_notes) {
+        n.onset_s += delta_s;
+        n.offset_s += delta_s;
+    }
+    for (std::vector<LabelEvent> *events : {&labels_.kicks, &labels_.beats, &labels_.downbeats}) {
+        for (LabelEvent &e : *events) {
+            e.t_s += delta_s;
+        }
+    }
+    for (SectionLabel &s : labels_.sections) {
+        s.start_s += delta_s;
+    }
+    for (LabelRegion &r : labels_.regions) {
+        r.start_s += delta_s;
+        r.end_s += delta_s;
+    }
+    labels_.grid.first_downbeat_s += delta_s;
+    if (labels_.grid.first_downbeat_s < 0.0 && labels_.grid.bpm > 0.0) {
+        const double bar_s = 4.0 * 60.0 / labels_.grid.bpm;
+        labels_.grid.first_downbeat_s += std::ceil(-labels_.grid.first_downbeat_s / bar_s) * bar_s;
+    }
+    return delta_s;
 }
 
 void LabelEditor::add_region(const LabelRegion &region) {
