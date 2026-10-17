@@ -399,6 +399,32 @@ void PreviewView::draw_live() {
                 live->analysis_delay_ms(), 1e3 * s.latency_s, 100.0 * live->load(),
                 level > 0.0f ? 20.0 * std::log10(level) : -120.0, live->dropped());
 
+    // Operator controls: downbeat now, nudge, relock.
+    const auto now_s = [&] { return static_cast<double>(live->now()) / live->sample_rate_hz(); };
+    const bool keys = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+                      !ImGui::GetIO().WantTextInput;
+    ImGui::BeginDisabled(!s.tempo_known);
+    if (ImGui::Button("Downbeat now (D)") || (keys && ImGui::IsKeyPressed(ImGuiKey_D, false))) {
+        live->command({LiveCommand::Kind::downbeat, now_s()});
+    }
+    ImGui::SetItemTooltip("Press on the \"one\" you hear: the nearest beat becomes the downbeat.");
+    ImGui::SameLine();
+    if (ImGui::Button("-10 ms")) {
+        live->command({LiveCommand::Kind::nudge, -0.010});
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("+10 ms")) {
+        live->command({LiveCommand::Kind::nudge, 0.010});
+    }
+    ImGui::SetItemTooltip("Nudges the predicted beat; the loop then pulls it back towards the "
+                          "kicks it hears.");
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Relock")) {
+        live->command({LiveCommand::Kind::relock});
+    }
+    ImGui::SetItemTooltip("Measures the tempo again from the next kicks.");
+
     // Tap test: taps against the predicted beat, on the live clock.
     if (ImGui::Button("Tap (T)") ||
         (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
@@ -501,6 +527,11 @@ void PreviewView::apply_midi(const MidiAction &a) {
         project_.changed();
     } else if (a.target == "tap") {
         tap();
+    } else if (a.target == "downbeat") {
+        if (const std::shared_ptr<const LiveInput> live = session_.live_input(); live) {
+            live->command({LiveCommand::Kind::downbeat,
+                           static_cast<double>(live->now()) / live->sample_rate_hz()});
+        }
     }
 }
 
@@ -540,9 +571,10 @@ void PreviewView::draw_midi() {
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "%s", midi_error_.c_str());
     }
     std::vector<std::pair<std::string, std::string>> targets = {
-        {"blackout", "Blackout"},        {"hold", "Hold"},
-        {"auto", "Automation (scenes)"}, {"brightness", "Brightness cap"},
-        {"latency", "Latency offset"},   {"tap", "Tap test"}};
+        {"blackout", "Blackout"},           {"hold", "Hold"},
+        {"auto", "Automation (scenes)"},    {"brightness", "Brightness cap"},
+        {"latency", "Latency offset"},      {"tap", "Tap test"},
+        {"downbeat", "Downbeat now (live)"}};
     for (size_t i = 0; i < config_.scenes.size(); ++i) {
         targets.emplace_back("scene:" + std::to_string(i), "Scene: " + config_.scenes[i].name);
     }

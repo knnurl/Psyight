@@ -78,6 +78,12 @@ struct LiveParams {
 
 inline constexpr double kLiveNever = -std::numeric_limits<double>::infinity();
 
+// An operator command for the analysis thread (audio/live_input.h queues them).
+struct LiveCommand {
+    enum class Kind { downbeat, nudge, relock } kind = Kind::nudge;
+    double value = 0.0; // downbeat: the time on the live clock (s); nudge: seconds.
+};
+
 // Everything the engine needs, in source seconds (the capture clock). Trivially copyable, so it
 // can be published through a seqlock.
 struct LiveState {
@@ -140,6 +146,12 @@ class LiveBeat {
     static double position(const LiveState &state, double t_s); // In beats.
     static double time_of(const LiveState &state, long long beat);
 
+    // Operator controls (SPEC 6.5: tap and nudge always available).
+    // The beat nearest t_s becomes a downbeat; it counts as a break cue, so novelty leaves it.
+    static void set_downbeat(LiveState &state, double t_s);
+    static void nudge(LiveState &state, double seconds); // Moves the predicted beats later.
+    void relock(LiveState &state);                       // Measures the tempo again.
+
   private:
     void set_section(LiveState &state, LiveSection section, double start_s);
 
@@ -160,6 +172,7 @@ class LiveAnalyser {
     void reset();
     // Mono samples in arrival order, any block size.
     void process(std::span<const float> samples);
+    void apply(const LiveCommand &command);
     const LiveState &state() const { return state_; }
     double frame_s() const { return frame_s_; }
 

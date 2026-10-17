@@ -96,6 +96,20 @@ void LiveAnalyser::reset() {
     run_frame(); // Frame 0 describes the silence before the first sample, as in file mode.
 }
 
+void LiveAnalyser::apply(const LiveCommand &c) {
+    switch (c.kind) {
+    case LiveCommand::Kind::downbeat:
+        LiveBeat::set_downbeat(state_, c.value);
+        break;
+    case LiveCommand::Kind::nudge:
+        LiveBeat::nudge(state_, c.value);
+        break;
+    case LiveCommand::Kind::relock:
+        beat_.relock(state_);
+        break;
+    }
+}
+
 void LiveAnalyser::process(std::span<const float> samples) {
     for (const float s : samples) {
         pending_[pending_count_++] = s;
@@ -362,6 +376,29 @@ void LiveAnalyser::on_kick(double t_s) {
         recorded_kicks_.push_back(t_s);
     }
     beat_.on_kick(state_, t_s);
+}
+
+void LiveBeat::set_downbeat(LiveState &s, double t_s) {
+    if (!s.tempo_known) {
+        return;
+    }
+    s.downbeat_beat = std::llround(position(s, t_s));
+    s.last_break_beat = s.downbeat_beat;
+    s.downbeat_from_novelty = false;
+}
+
+void LiveBeat::nudge(LiveState &s, double seconds) {
+    if (s.tempo_known) {
+        s.anchor_s += seconds;
+    }
+}
+
+void LiveBeat::relock(LiveState &s) {
+    acquiring_ = true;
+    s.locked = false;
+    acquire_kicks_s_.clear();
+    off_grid_kicks_ = 0;
+    in_lock_kicks_ = 0;
 }
 
 void LiveBeat::prepare(const LiveParams &params) {

@@ -36,6 +36,9 @@ class LiveInput {
     bool running() const { return thread_.joinable(); }
 
     LiveState state() const { return state_.load(); }
+    // One thread (the GUI): an operator command, applied by the analysis thread within 2 ms.
+    // Const: the queue is an input channel, not state the caller observes.
+    void command(const LiveCommand &c) const { commands_.try_push(c); }
     std::uint32_t state_version() const { return state_.version(); }
     // The live clock: samples captured, extrapolated to now.
     SampleIndex now() const {
@@ -55,6 +58,7 @@ class LiveInput {
     Capture capture_;
     LiveAnalyser analyser_;
     Seqlock<LiveState> state_;
+    mutable SpscQueue<LiveCommand> commands_{64};
     std::atomic<SampleIndex> filled_{0}; // Silence analysed for gaps without samples.
     std::atomic<double> delay_ms_{0.0};
     std::atomic<double> load_{0.0};

@@ -63,6 +63,14 @@ void LiveInput::run() {
         if (started - wake > 10 * kWake) {
             wake = started; // Fell behind (a stall): do not try to catch up the ticks.
         }
+        bool commanded = false;
+        for (LiveCommand c; commands_.try_pop(c);) {
+            analyser_.apply(c);
+            commanded = true;
+        }
+        if (commanded) {
+            state_.store(analyser_.state());
+        }
         // Dropped samples become silence, so the analysis keeps the capture clock.
         const long long dropped = capture_.dropped();
         for (long long missing = dropped - dropped_seen; missing > 0;) {

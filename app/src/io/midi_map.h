@@ -1,13 +1,13 @@
 // MIDI learn and mapping (SPEC section 9, M5): controller messages to show controls. Pure: the
 // GUI feeds it the messages the MIDI input received and applies the actions it returns.
 //
-// Targets: "blackout", "hold" and "tap" (buttons), "auto" (back to the section automation),
-// "scene:<n>" (hold scene n, from 0), "brightness" (the global cap, 0 to 1) and "latency" (the
-// offset, -200 to 200 ms). Buttons fire on a note on, or on a controller crossing from 63 or below
-// to 64 or above (so a toggle switch or a pad works). Continuous targets take a controller's value
-// over 0 to 127; a note on a continuous target sets its maximum.
-// Learn: arm a target; the next controller or note on (any channel) binds it, replacing the
-// target's earlier binding and any other target's binding of that control.
+// Targets: "blackout", "hold", "tap" and "downbeat" (buttons), "auto" (back to the section
+// automation), "scene:<n>" (hold scene n, from 0), "brightness" (the global cap, 0 to 1) and
+// "latency" (the offset, -200 to 200 ms). Buttons fire on a note on, or on a controller crossing
+// from 63 or below to 64 or above (so a toggle switch or a pad works). Continuous targets take a
+// controller's value over 0 to 127; a note on a continuous target sets its maximum. Learn: arm a
+// target; the next controller or note on (any channel) binds it, replacing the target's earlier
+// binding and any other target's binding of that control.
 #pragma once
 
 #include <array>

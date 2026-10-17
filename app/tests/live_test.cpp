@@ -281,3 +281,25 @@ TEST_CASE("live input: capture and analysis threads run at real-time pace (null 
     live.stop();
     CHECK_FALSE(live.running());
 }
+
+TEST_CASE("live beat: the operator sets the downbeat and nudges the beat") {
+    BeatRig rig;
+    for (int b = 0; b < 32; ++b) {
+        rig.kick(1.0 + b * 0.4);
+    }
+    REQUIRE(rig.state.locked);
+    // Pressed 60 ms late on beat 41 (a human on the "one"): beat 41 becomes a downbeat.
+    LiveBeat::set_downbeat(rig.state, 1.0 + 41 * 0.4 + 0.06);
+    EngineInputs in = inputs_at(rig.state, 1.0 + 41 * 0.4 + 0.01);
+    CHECK(in.beat_in_bar == 0);
+    // Live beat numbers count from the kick where the tempo was acquired (the 9th).
+    CHECK(rig.state.downbeat_beat == std::llround(LiveBeat::position(rig.state, 1.0 + 41 * 0.4)));
+    CHECK_FALSE(rig.state.downbeat_from_novelty);
+    const double before = inputs_at(rig.state, 20.0).beat_phase;
+    LiveBeat::nudge(rig.state, 0.010);
+    const double after = inputs_at(rig.state, 20.0).beat_phase;
+    CHECK(before - after == doctest::Approx(0.010 / 0.4).epsilon(0.01)); // Beats come later.
+    rig.beat.relock(rig.state);
+    CHECK_FALSE(rig.state.locked);
+    CHECK(rig.state.tempo_known); // The beat keeps running while it measures again.
+}
