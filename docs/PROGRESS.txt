@@ -155,7 +155,8 @@ Next (no owner needed): bar-level novelty is used only until the first break (it
 - psyight_soak <audio> [--minutes N]: the live show for hours; logs frames, late frames, render time, delay, load, dropped samples, lock and memory each minute. 1 minute: 3600 frames at 60.00 fps, none late. A 4-hour run started 2026-10-17 alongside the M4 export (result to docs/results/M6.md).
 - Crash recovery: logs/psyight.log (rotating), minidumps in logs/ on a crash (not exercised yet), psyight.running marker (an unclean exit is reported at the next start; checked with a forced kill), project autosave within a minute.
 - docs/OPERATOR_GUIDE.md.
-In progress (2026-10-17, background): the M4 export of the added folders (data/m4/export2.log), then retrain, re-tune the decoder (m4_tune.py), re-export the weights (m4_export.py weights) and re-score (psyight_eval --student, psyight_live_check); the 4-hour soak (scratchpad log, to docs/results/M6.md).
+Done 2026-10-17: the student retrained on 441 tracks (96 channels, 40k steps; runs in data/m4/runs/c96_441, installed as data/m4/student.*): OculusDrift F 0.991, gate MAE 0.022 (DSP 0.994, 0.037), live too (docs/results/M4.md, M5.md).
+In progress: the 4-hour soak (scratchpad log, to docs/results/M6.md).
 Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure, a venue dry run (M6 exit).
 
 ## Owner decisions waiting on real LED tests (owner, 2026-10-17: "decide after real LED testing")
