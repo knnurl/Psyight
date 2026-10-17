@@ -5,7 +5,7 @@ Usage, from the repository root (after m4_train.py):
 
 Runs data/m4/student.onnx over the validation tracks named in data/m4/student.json, rebuilds the
 teacher's notes from its targets, and decodes the student's outputs (m4_decode.py) over a grid of
-settings. Onset settings (threshold, minimum gap) are chosen by onset F within +-4 frames (21 ms);
+settings. Onset settings (threshold, minimum gap, kick mask) are chosen by onset F within +-4 frames (21 ms);
 then the gate settings (threshold, minimum length) by the mean absolute note-length error on the
 matched notes. Writes the choice to student.json ("decoder") and prints the grid.
 """
@@ -90,11 +90,11 @@ def main() -> int:
     print(f"{len(refs)} validation tracks, {sum(len(r) for r in refs)} teacher notes")
 
     best_onset = None
-    for threshold, gap in itertools.product((0.3, 0.4, 0.5, 0.6, 0.7), (0, 8)):
-        params = {"onset_threshold": threshold, "min_gap_frames": gap}
+    for threshold, gap, kick in itertools.product((0.3, 0.4, 0.5, 0.6), (0, 8), (0, 2)):
+        params = {"onset_threshold": threshold, "min_gap_frames": gap, "kick_mask_frames": kick}
         s = score(outputs, refs, info, params)
-        print(f"  onset {threshold}, gap {gap}: F {s['f']:.3f} (P {s['precision']:.3f}, "
-              f"R {s['recall']:.3f})")
+        print(f"  onset {threshold}, gap {gap}, kick mask {kick}: F {s['f']:.3f} "
+              f"(P {s['precision']:.3f}, R {s['recall']:.3f})")
         if best_onset is None or s["f"] > best_onset[0]["f"]:
             best_onset = (s, params)
     best = None
