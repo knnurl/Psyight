@@ -1,7 +1,7 @@
 // psyight_eval: scores the bass tracker against a labels file, from the command line.
 //
 //   psyight_eval <audio> [labels.json] [--detail] [--stems] [--notes <estimates.json>]
-//                [--save-notes <out.json>]
+//                [--save-notes <out.json>] [--student [weights]]
 //
 // Decodes the audio, runs the file-mode analysis (analysis/track_analysis.h) with bass tracker v0
 // on the labels' grid, and prints the SPEC 6.10 metrics for each complete region and in total.
@@ -12,14 +12,18 @@
 // beats. --notes scores the bass notes of another labels-format file (for example the M4
 // student's, from tools/python/m4_eval.py) with the same scoring, instead of running the
 // analysis. --save-notes writes the analysis's bass notes and kicks as a labels-format file (for
-// tools/python/eval_mir.py, which recomputes the metrics with mir_eval). For private reference
+// tools/python/eval_mir.py, which recomputes the metrics with mir_eval). --student scores the M4
+// student (ml/student.h) on the mix instead, as live mode would hear it; the weights default to
+// data/m4/student.weights in the working directory. For private reference
 // tracks: run locally, never in CI.
 
 #include "analysis/bass_tracker.h"
 #include "analysis/scoring.h"
 #include "analysis/track_analysis.h"
+#include "audio/audio_file.h"
 #include "core/paths.h"
 #include "io/labels.h"
+#include "ml/student.h"
 
 #include <chrono>
 #include <cmath>
@@ -94,10 +98,17 @@ int wmain(int argc, wchar_t **argv) {
     bool detail = false;
     std::filesystem::path notes_path;
     std::filesystem::path save_path;
+    std::filesystem::path student_path;
     TrackAnalysisOptions options;
     for (int i = 1; i < argc; ++i) {
         if (std::wcscmp(argv[i], L"--notes") == 0 && i + 1 < argc) {
             notes_path = argv[++i];
+        } else if (std::wcscmp(argv[i], L"--student") == 0) {
+            student_path = "data/m4/student.weights";
+            if (i + 1 < argc && argv[i + 1][0] != L'-' &&
+                !std::filesystem::exists(std::filesystem::path(argv[i + 1]))) {
+                student_path = argv[++i]; // A weights base name (its .json and .bin exist).
+            }
         } else if (std::wcscmp(argv[i], L"--save-notes") == 0 && i + 1 < argc) {
             save_path = argv[++i];
         } else if (std::wcscmp(argv[i], L"--detail") == 0) {
@@ -110,7 +121,8 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (paths.empty() || paths.size() > 2) {
         std::fprintf(stderr, "usage: psyight_eval <audio> [labels.json] [--detail] [--stems] "
-                             "[--notes <estimates.json>] [--save-notes <out.json>]\n");
+                             "[--notes <estimates.json>] [--save-notes <out.json>] "
+                             "[--student [weights]]\n");
         return 2;
     }
     const std::filesystem::path audio_path = paths[0];
@@ -142,6 +154,50 @@ int wmain(int argc, wchar_t **argv) {
             std::snprintf(name, sizeof(name), "Region %.3f to %.3f s", region.region.start_s,
                           region.region.end_s);
             print_score(name, region.score);
+        }
+        return 0;
+    }
+    if (!student_path.empty()) {
+        const Result<StudentModel> model = load_student(student_path);
+        Result<AudioBuffer> audio = decode_audio_file(audio_path);
+        if (!model || !audio) {
+            std::fprintf(stderr, "%s\n", (!model ? model.error() : audio.error()).message.c_str());
+            return 1;
+        }
+        const std::vector<float> mono = mono_mix(audio.value());
+        const auto started = std::chrono::steady_clock::now();
+        const Result<StudentResult> student =
+            analyse_student(model.value(), mono, audio.value().sample_rate_hz, grid);
+        if (!student) {
+            std::fprintf(stderr, "%s\n", student.error().message.c_str());
+            return 1;
+        }
+        const double seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        std::printf("%s (M4 student, %d channels, lookahead %d frames, from the mix): %zu notes; "
+                    "features, inference and decoding in %.2f s\n",
+                    path_to_utf8(audio_path.filename()).c_str(), model.value().channels,
+                    model.value().lookahead, student.value().notes.size(), seconds);
+        const TrackScore score = score_track(labels.value(), to_labels(student.value().notes), {});
+        for (const RegionScore &region : score.regions) {
+            char name[160];
+            std::snprintf(name, sizeof(name), "Region %.3f to %.3f s", region.region.start_s,
+                          region.region.end_s);
+            print_score(name, region.score);
+        }
+        if (score.regions.size() > 1) {
+            print_score("All complete regions", score.total);
+        }
+        if (!save_path.empty()) {
+            Labels detected;
+            detected.audio = path_to_utf8(audio_path.filename());
+            detected.sample_rate = sample_rate_hz;
+            detected.grid = label_grid;
+            detected.bass_notes = to_labels(student.value().notes);
+            if (const Result<void> saved = save_labels(save_path, detected); !saved) {
+                std::fprintf(stderr, "%s\n", saved.error().message.c_str());
+                return 1;
+            }
         }
         return 0;
     }
