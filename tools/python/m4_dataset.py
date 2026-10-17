@@ -72,7 +72,8 @@ def fingerprint(args) -> int:
             continue
         print(f"[{i + 1}/{len(files)}] {path.name}", flush=True)
         result = subprocess.run([str(TEACHER), "--fingerprint-only", str(path), str(base)],
-                                capture_output=True, text=True)
+                                capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
         if result.returncode != 0:
             print(f"  failed: {result.stderr.strip()}", flush=True)
             index[fid]["failed"] = result.stderr.strip()
@@ -168,11 +169,13 @@ def export(args) -> int:
         try:
             shutil.copyfile(source, copy)
             separated = subprocess.run([sys.executable, str(SEPARATE), str(copy)],
-                                       capture_output=True, text=True)
+                                       capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
             if separated.returncode != 0:
                 raise RuntimeError("demucs: " + separated.stderr.strip()[-400:])
             labelled = subprocess.run([str(TEACHER), "--stems", str(copy),
-                                       str(tracks / entry["id"])], capture_output=True, text=True)
+                                       str(tracks / entry["id"])], capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
             if labelled.returncode != 0:
                 raise RuntimeError("teacher: " + labelled.stderr.strip())
             meta_path = (tracks / entry["id"]).with_suffix(".json")
