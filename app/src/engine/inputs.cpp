@@ -105,4 +105,73 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s) {
     return in;
 }
 
+EngineInputs inputs_at(const LiveState &s, double t_s) {
+    EngineInputs in;
+    in.t_s = t_s;
+    if (s.tempo_known && s.period_s > 0.0) {
+        const double beat = static_cast<double>(s.anchor_beat) + (t_s - s.anchor_s) / s.period_s;
+        in.beat_index = static_cast<long long>(std::floor(beat));
+        in.beat_phase = beat - std::floor(beat);
+        const double from_downbeat = beat - static_cast<double>(s.downbeat_beat);
+        const long long whole = static_cast<long long>(std::floor(from_downbeat));
+        in.beat_in_bar = static_cast<int>(((whole % 4) + 4) % 4);
+        const double bar = from_downbeat / 4.0;
+        in.bar_index = static_cast<long long>(std::floor(bar));
+        in.bar_phase = bar - std::floor(bar);
+        const double slot = beat * 4.0;
+        in.slot_phase = slot - std::floor(slot);
+        const double phrase = (beat - static_cast<double>(s.phrase_beat)) / (4.0 * s.phrase_bars);
+        if (phrase >= 0.0) {
+            in.phrase_index = static_cast<int>(std::floor(phrase));
+            in.phrase_phase = phrase - std::floor(phrase);
+        }
+        if (s.locked && s.kick_streak >= 4) {
+            const double last_beat_s =
+                s.anchor_s + (std::floor(beat) - static_cast<double>(s.anchor_beat)) * s.period_s;
+            in.since_kick_s = t_s - last_beat_s;
+        }
+    }
+    if (in.since_kick_s == kNever && s.last_kick_s > kLiveNever && t_s >= s.last_kick_s) {
+        in.since_kick_s = t_s - s.last_kick_s;
+    }
+
+    in.bass_notes_so_far = s.bass_notes;
+    if (s.bass_notes > 0) {
+        in.bass_midi = s.bass_midi;
+        in.bass_confidence = s.bass_confidence;
+        in.bass_velocity = 1.0;
+        in.since_bass_onset_s = std::max(0.0, t_s - s.bass_onset_s);
+        in.bass_active = s.bass_active;
+        const double slot_s = s.tempo_known ? s.period_s / 4.0 : 0.0;
+        if (s.bass_active) {
+            in.since_bass_offset_s = 0.0;
+            in.bass_note_phase =
+                s.bass_typical_s > 0.0
+                    ? std::clamp(in.since_bass_onset_s / s.bass_typical_s, 0.0, 1.0)
+                    : 0.0;
+            in.bass_gate_ratio = slot_s > 0.0 ? in.since_bass_onset_s / slot_s : 0.0;
+        } else {
+            in.since_bass_offset_s = std::max(0.0, t_s - s.bass_end_s);
+            in.bass_note_phase = 1.0;
+            in.bass_gate_ratio = slot_s > 0.0 ? (s.bass_end_s - s.bass_onset_s) / slot_s : 0.0;
+        }
+    }
+
+    in.section = live_section_name(s.section);
+    in.section_index = s.section_count - 1;
+    in.since_section_s = std::max(0.0, t_s - s.section_start_s);
+    in.section_length_s = s.tempo_known ? 4.0 * s.phrase_bars * s.period_s : 0.0;
+    in.section_progress =
+        in.section_length_s > 0.0 ? std::min(1.0, in.since_section_s / in.section_length_s) : 0.0;
+
+    in.residual_level = std::clamp(s.residual_level, 0.0, 1.0);
+    in.residual_centroid_hz = s.residual_centroid_hz;
+    in.residual_flatness = s.residual_flatness;
+    in.hats_so_far = s.hats;
+    if (s.last_hat_s > kLiveNever && t_s >= s.last_hat_s) {
+        in.since_hat_s = t_s - s.last_hat_s;
+    }
+    return in;
+}
+
 } // namespace psyight

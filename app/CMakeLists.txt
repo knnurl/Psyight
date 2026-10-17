@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+﻿cmake_minimum_required(VERSION 3.25)
 
 # vcpkg builds the dependencies inside project(). Point it at the developer shell's Visual Studio
 # instance so dependencies and app use the same compiler: MSVC cannot link static libraries built
@@ -76,7 +76,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/output/show.cpp src/output/udp_socket_win32.cpp
                                src/output/precise_sleep_win32.cpp src/output/art_poll.cpp
                                src/output/discovery.cpp src/output/preflight.cpp
-                               src/ml/student.cpp)
+                               src/ml/student.cpp src/analysis/live_analysis.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch
@@ -114,6 +114,10 @@ target_link_libraries(psyight_teacher PRIVATE psyight_options psyight_lib nlohma
 add_executable(psyight_label_draft src/label_draft_main.cpp)
 target_link_libraries(psyight_label_draft PRIVATE psyight_options psyight_lib)
 
+# Runs the live analysis over a file as if live and measures it against file mode.
+add_executable(psyight_live_check src/live_check_main.cpp)
+target_link_libraries(psyight_live_check PRIVATE psyight_options psyight_lib)
+
 # Replays a recorded session and checks it reproduces byte for byte.
 add_executable(psyight_replay src/replay_main.cpp)
 target_link_libraries(psyight_replay PRIVATE psyight_options psyight_lib)
@@ -134,7 +138,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/preflight_test.cpp tests/modulation_test.cpp
                              tests/recorder_test.cpp tests/student_data_test.cpp
                              tests/node_firmware_test.cpp tests/playhead_clock_test.cpp
-                             tests/golden_test.cpp tests/student_test.cpp
+                             tests/golden_test.cpp tests/student_test.cpp tests/live_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)

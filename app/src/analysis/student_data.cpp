@@ -56,10 +56,11 @@ Bands log_bands(const Stft &stft, int count, double min_hz, double max_hz) {
     return b;
 }
 
-void add_frame(const Bands &bands, std::span<const float> magnitudes, float *out) {
-    for (int k = 0; k < bands.count; ++k) {
+void add_frame(const std::vector<std::vector<std::pair<int, float>>> &bands,
+               std::span<const float> magnitudes, float *out) {
+    for (size_t k = 0; k < bands.size(); ++k) {
         double power = 0.0;
-        for (const auto &[bin, w] : bands.weights[static_cast<size_t>(k)]) {
+        for (const auto &[bin, w] : bands[k]) {
             const double m = magnitudes[static_cast<size_t>(bin)];
             power += w * m * m;
         }
@@ -106,10 +107,48 @@ Result<StudentFeatures> student_features(std::span<const float> mono, int sample
         short_stft.process(mono, end - p.short_window / 2, short_mag);
         long_stft.process(mono, end - p.long_window / 2, long_mag);
         float *row = out.values.data() + static_cast<size_t>(k) * static_cast<size_t>(out.dims);
-        add_frame(short_bands, short_mag, row);
-        add_frame(long_bands, long_mag, row + p.short_bands);
+        add_frame(short_bands.weights, short_mag, row);
+        add_frame(long_bands.weights, long_mag, row + p.short_bands);
     }
     return out;
+}
+
+Result<void> StudentFeatureStream::prepare(int sample_rate_hz, const StudentFeatureParams &p) {
+    params_ = p;
+    if (Result<void> r = short_stft_.prepare(sample_rate_hz, p.short_window); !r) {
+        return r;
+    }
+    if (Result<void> r = long_stft_.prepare(sample_rate_hz, p.long_window); !r) {
+        return r;
+    }
+    if (p.short_window > p.long_window || p.hop_samples > p.long_window) {
+        return Error{"student features: the long window must be the longest"};
+    }
+    short_bands_ = log_bands(short_stft_, p.short_bands, p.short_min_hz, p.short_max_hz).weights;
+    long_bands_ = log_bands(long_stft_, p.long_bands, p.long_min_hz, p.long_max_hz).weights;
+    history_.assign(static_cast<size_t>(p.long_window), 0.0f);
+    short_mag_.assign(static_cast<size_t>(short_stft_.bins()), 0.0f);
+    long_mag_.assign(static_cast<size_t>(long_stft_.bins()), 0.0f);
+    return {};
+}
+
+void StudentFeatureStream::reset() { std::fill(history_.begin(), history_.end(), 0.0f); }
+
+void StudentFeatureStream::push(std::span<const float> hop) {
+    const size_t n = std::min(hop.size(), history_.size());
+    std::copy(history_.begin() + static_cast<std::ptrdiff_t>(n), history_.end(), history_.begin());
+    std::copy(hop.end() - static_cast<std::ptrdiff_t>(n), hop.end(),
+              history_.end() - static_cast<std::ptrdiff_t>(n));
+}
+
+void StudentFeatureStream::frame(std::span<float> out) {
+    // The window ends at the newest sample, as the batch code's window ends at the frame's sample;
+    // the history starts as zeros, as the batch code reads zeros before the signal.
+    const auto end = static_cast<SampleIndex>(history_.size());
+    short_stft_.process(history_, end - params_.short_window / 2, short_mag_);
+    long_stft_.process(history_, end - params_.long_window / 2, long_mag_);
+    add_frame(short_bands_, short_mag_, out.data());
+    add_frame(long_bands_, long_mag_, out.data() + params_.short_bands);
 }
 
 TeacherTargets teacher_targets(const TrackAnalysis &a, int frames, int hop_samples) {

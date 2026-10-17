@@ -15,11 +15,13 @@
 // residual activity (the residual level, 0 to 1).
 #pragma once
 
+#include "analysis/stft.h"
 #include "analysis/track_analysis.h"
 #include "core/result.h"
 
 #include <cstdint>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace psyight {
@@ -44,6 +46,29 @@ struct StudentFeatures {
 
 Result<StudentFeatures> student_features(std::span<const float> mono, int sample_rate_hz,
                                          const StudentFeatureParams &params = {});
+
+// The same features a hop at a time (live mode). frame() writes the frame at the samples pushed
+// so far (frame 0 before any); push() adds one hop. student_features over the same samples gives
+// identical values. Allocates only in prepare().
+class StudentFeatureStream {
+  public:
+    Result<void> prepare(int sample_rate_hz, const StudentFeatureParams &params = {});
+    void reset();
+    void push(std::span<const float> hop); // Exactly params.hop_samples samples.
+    void frame(std::span<float> out);      // dims() values.
+    int dims() const { return params_.short_bands + params_.long_bands; }
+    const StudentFeatureParams &params() const { return params_; }
+
+  private:
+    StudentFeatureParams params_;
+    Stft short_stft_;
+    Stft long_stft_;
+    std::vector<std::vector<std::pair<int, float>>> short_bands_;
+    std::vector<std::vector<std::pair<int, float>>> long_bands_;
+    std::vector<float> history_; // The last long_window samples, oldest first.
+    std::vector<float> short_mag_;
+    std::vector<float> long_mag_;
+};
 
 struct TeacherTargets {
     int frames = 0;

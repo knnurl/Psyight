@@ -4,6 +4,7 @@
 // A pure function of the analysis, the grid and the time.
 #pragma once
 
+#include "analysis/live_analysis.h"
 #include "analysis/track_analysis.h"
 #include "core/timebase.h"
 
@@ -56,5 +57,13 @@ struct EngineInputs {
 };
 
 EngineInputs inputs_at(const TrackAnalysis &analysis, const Grid &grid, double t_s);
+
+// Live mode (SPEC 4.3): from the latest causal state, at render time t_s on the capture clock.
+// The beat, bar, phrase and slot come from the loop's prediction, so they carry no analysis
+// latency. Once locked with kicks on recent beats, the kick is predicted too (the last predicted
+// beat at or before t_s); otherwise it is the last detected one. Bass, hats and sections arrive
+// state.latency_s late. Unknown live: a sounding note's end (its phase uses the recent note
+// length) and a section's length (taken as one phrase).
+EngineInputs inputs_at(const LiveState &state, double t_s);
 
 } // namespace psyight
