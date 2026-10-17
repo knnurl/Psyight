@@ -114,6 +114,12 @@ M3 progress (2026-10-16):
   - Recorder and replay (26ee901): Record in the top bar writes recordings/<date_time>/ (meta, frames, params, events; gitignored); psyight_replay re-renders a session and diffs it: 767 of 767 frames byte-identical on a session with seeks, blackout, hold and a held scene. Not yet: audio.wav, features.bin, live-mode recording.
   - Not yet: per-group brightness caps.
 
+## Node firmware (parallel track, SPEC 12; started 2026-10-17 at the owner's request)
+- firmware/node-f767 (a19dd18, a792417): stages F1 (strips), F2 (network), F3 (the node) build warning-free with STM32CubeIDE's GCC 13.3 (F3: 56 KB flash, 176 KB RAM). ST HAL, CMSIS, lwIP 2.2.1 and LAN8742 pinned by commit (fetch_deps.ps1, gitignored).
+- The hardware-free core (protocol, node core, config protocol) is tested on the PC against the app's own sender: 7 test cases in psyight_tests.
+- Checked without hardware: the DMA2 request map for TIM1 and the Nucleo's RMII, LED and VCP pins against CubeMX 6.15's database and board file.
+- Waiting on the owner (bench, README "Bring-up"): F1 waveform on a scope (T0H, T1H, period, the first bit, the latch gap, also under Ethernet load); F2 packets from the app; F3 sync, loss policy, config save across a power cycle; that the 8 MHz HSE comes from the ST-LINK MCO.
+
 ## M4 plan (owner, 2026-10-17: training data in Desktop\launch and Music\Musify\Download\Hall*Purity*; stream the stems; exclude all four reference tracks; Python first, then the app)
 Exit (SPEC 15): the student matches or beats DSP on the labelled regions, with measured inference latency. Today only OculusDrift's minute is labelled (DSP: onset F 0.994 on the mix, file mode, non-causal); the student is causal, so matching it is a high bar.
 Data: about 254 files (105 in Desktop\launch, 149 in the Hall of Purity folders), with duplicates and with copies of all four reference tracks under other names. None of it, nor anything derived from it, enters the repo (data/ is gitignored).
