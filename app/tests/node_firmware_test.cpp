@@ -8,11 +8,13 @@
 #include "output/patch.h"
 #include "output/sender.h"
 
+#include "node_config.h"
 #include "node_core.h"
 #include "protocol.h"
 
 #include <doctest/doctest.h>
 
+#include <cstring>
 #include <memory>
 #include <random>
 #include <vector>
@@ -315,4 +317,48 @@ TEST_CASE("node firmware: the 8-lane transpose matches a bit-by-bit reference") 
             REQUIRE(words[byte * 8u + static_cast<std::uint32_t>(bit)] == zeros << 16);
         }
     }
+}
+
+TEST_CASE("node firmware: the configuration text protocol") {
+    const std::uint8_t mac[6] = {0x02, 0x50, 0x12, 0x34, 0x56, 0x78};
+    node_config c{};
+    node_config_defaults(&c, mac);
+    CHECK(node_config_valid(&c));
+    CHECK(c.ip[0] == 2);
+    CHECK(c.ip[3] == 0x78);
+    char reply[2048];
+    const auto run = [&](const char *command) {
+        return node_config_command(&c, mac, command, std::strlen(command), reply, sizeof(reply));
+    };
+    CHECK(run("get\r\n") == NODE_CMD_NONE);
+    CHECK(std::string(reply).find("lane1 150 72\n") != std::string::npos);
+    CHECK(std::string(reply).find("policy fallback\n") != std::string::npos);
+    CHECK(run("set ip 192.168.1.50") == NODE_CMD_NONE);
+    CHECK(std::string(reply).rfind("ok ip", 0) == 0);
+    CHECK(c.ip[0] == 192);
+    CHECK(c.ip[3] == 50);
+    CHECK(node_config_valid(&c)); // The CRC follows each change.
+    run("set lane5 444 60");
+    CHECK(c.node.lanes[5].first_pixel == 444);
+    CHECK(c.node.lanes[5].pixels == 60);
+    run("set policy blackout");
+    CHECK(c.node.loss_policy == NODE_LOSS_BLACKOUT);
+    run("set fallback_brightness 125");
+    CHECK(c.node.fallback_brightness == doctest::Approx(0.125f));
+    run("set name Booth left");
+    CHECK(std::string(c.short_name) == "Booth left");
+    for (const char *bad : {"set ip 300.1.1.1", "set lane9 0 1", "set lane0 0 5000",
+                            "set universes 99", "set colour red", "set name", "frobnicate",
+                            "set name this name is far too long to fit"}) {
+        CAPTURE(bad);
+        run(bad);
+        CHECK(std::string(reply).rfind("error", 0) == 0);
+    }
+    CHECK(run("save") == NODE_CMD_SAVE);
+    CHECK(run("reboot") == NODE_CMD_REBOOT);
+    c.node.fade_ms = 1; // Changed without updating the CRC: no longer valid.
+    CHECK_FALSE(node_config_valid(&c));
+    run("defaults");
+    CHECK(node_config_valid(&c));
+    CHECK(c.ip[0] == 2);
 }

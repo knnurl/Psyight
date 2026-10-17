@@ -129,9 +129,13 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/recorder_test.cpp tests/student_data_test.cpp
                              tests/node_firmware_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
-                             ../firmware/node-f767/src/core/node_core.c)
+                             ../firmware/node-f767/src/core/node_core.c
+                             ../firmware/node-f767/src/core/node_config.c)
 target_link_libraries(psyight_tests PRIVATE psyight_options psyight_lib psyight_miniaudio
                                             doctest::doctest pffft::pffft)
 # The node firmware's portable core, tested against the app's packets (firmware/node-f767).
 target_include_directories(psyight_tests PRIVATE ../firmware/node-f767/src/core)
+# sscanf and strcpy are plain C on the node; MSVC would flag them as deprecated (C4996).
+set_source_files_properties(../firmware/node-f767/src/core/node_config.c
+                            PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 add_test(NAME psyight_tests COMMAND psyight_tests)
