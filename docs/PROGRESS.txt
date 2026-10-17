@@ -112,7 +112,7 @@ M3 progress (2026-10-16):
   - Group masks and palette editor: a layer can be limited to one strip group; palettes are edited in the Preview's Palettes section; both saved.
   - Tiers: Operate, Tune and Engineer in the top bar (Tune by default); the flash limiter switch is Engineer-only, with a persistent warning while it is off.
   - Recorder and replay (26ee901): Record in the top bar writes recordings/<date_time>/ (meta, frames, params, events; gitignored); psyight_replay re-renders a session and diffs it: 767 of 767 frames byte-identical on a session with seeks, blackout, hold and a held scene. Not yet: audio.wav, features.bin, live-mode recording.
-  - Not yet: per-group brightness caps.
+  - Per-group brightness caps (903004d): a cap per rig group, lowest wins, applied after the global cap.
 
 ## Node firmware (parallel track, SPEC 12; started 2026-10-17 at the owner's request)
 - firmware/node-f767 (a19dd18, a792417): stages F1 (strips), F2 (network), F3 (the node) build warning-free with STM32CubeIDE's GCC 13.3 (F3: 56 KB flash, 176 KB RAM). ST HAL, CMSIS, lwIP 2.2.1 and LAN8742 pinned by commit (fetch_deps.ps1, gitignored).
@@ -132,7 +132,7 @@ Steps:
 M4 progress (2026-10-17): steps 1 to 4 done (docs/results/M4.md). 180 tracks exported (66 duplicates, 8 reference copies excluded); student trained (359k parameters, 1.35 s context, 10.7 ms lookahead). On OculusDrift's labelled minute, causal from the mix: onset F 0.967 (precision 0.938, recall 0.998) against DSP file mode's 0.994; offsets |median| 2.5 ms (DSP 6.8); pitch 0.998 (DSP 0.989); gate MAE 0.106 (DSP 0.037). Inference: 1.3 ms CPU, 1.4 ms DirectML per call. Next: thresholds chosen on validation tracks, the gate head, labelled regions in the other three tracks (owner), then step 5 (ONNX Runtime in the app: vcpkg has CUDA-only onnxruntime-gpu, a decision for the owner).
 
 ## Known issues
-- The show thread reads the transport position, which advances once per audio device period: 480 frames (10 ms) on this laptop's WASAPI device (app log on load). At 60 fps render time then moves 10 or 20 ms a frame instead of 16.7, a jitter of up to 5 ms; about 3 cm on the 6 m/s shockwave, invisible on the slower effects. Fix if it shows on real strips: publish a timestamp with the position (seqlock) and extrapolate while playing.
+- Fixed (2026-10-17): render-time jitter. The transport publishes its position with a timestamp under a seqlock (position_now extrapolates between callbacks) and the show thread smooths it with a delay-locked loop (core/playhead_clock.h). At 60 fps on the null backend the frame-to-frame step went from 10 to 30 ms (sd 6.06 ms) to 15.9 to 17.7 ms (sd 0.34 ms): psyight_tests -tc="transport: render-time steps at 60 fps" --no-skip.
 - Closing the app while a track is still loading waits up to about 3 s for the analysis (make it cancellable).
 - Spectrogram display resolution at the low end is about half a bin (SPEC 6.1); CQT is an M2 option.
 - Bass tracker v0 limits: gaps shorter than the 25 ms envelope window run to the next onset (a dip-depth estimate was tried and reverted: decay looks like a gap); long notes decaying below k x peak end before their gate; long notes held under a kick are split; notes under about two periods get a wrong pitch with low confidence.

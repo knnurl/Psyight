@@ -1,6 +1,8 @@
 #include "gui/preview_view.h"
 
+#include "audio/audio_file.h"
 #include "core/paths.h"
+#include "core/playhead_clock.h"
 #include "engine/effect_spec.h"
 #include "gui/tier.h"
 #include "io/session_record.h"
@@ -11,6 +13,7 @@
 #include <imgui_stdlib.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 
@@ -34,8 +37,16 @@ ImU32 to_imgui(const std::uint8_t *rgb, double gamma) {
 } // namespace
 
 PreviewView::PreviewView(Session &session, ProjectState &project)
-    : session_(session), project_(project),
-      show_([&session] { return session.transport().position(); }) {}
+    : session_(session), project_(project), show_([&session, clock = PlayheadClock()]() mutable {
+          // The show thread's playhead: the transport's position, smoothed (callbacks are
+          // irregular). Files are decoded at the analysis rate, so the rate is 48 kHz times speed.
+          const Transport &t = session.transport();
+          const double now_s =
+              std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
+                  .count();
+          const double rate = t.playing() ? kAnalysisSampleRateHz * t.speed() : 0.0;
+          return clock.update(now_s, t.position_now(), rate);
+      }) {}
 
 void PreviewView::set_ladder(Ladder step) {
     ladder_ = step;

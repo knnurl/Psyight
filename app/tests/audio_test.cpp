@@ -1,14 +1,18 @@
 #include "audio/audio_file.h"
 #include "audio/stretch_renderer.h"
 #include "audio/transport.h"
+#include "core/playhead_clock.h"
+#include "output/precise_sleep.h"
 
 #include <doctest/doctest.h>
 #include <miniaudio.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <functional>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -171,6 +175,39 @@ TEST_CASE("transport: a device thread plays, pauses, seeks, loops and stops (nul
     CHECK_FALSE(transport.is_open());
 }
 
+TEST_CASE("transport: position_now glides between callbacks and holds when paused") {
+    Transport transport({true});
+    REQUIRE(transport.open(ramp_buffer(48000 * 4)).ok());
+    transport.play();
+    REQUIRE(wait_until([&] { return transport.position() > 4800; }, 2000));
+    // Sample both every millisecond for 300 ms: position() moves in period-sized steps,
+    // position_now() in steps near 48 samples, and never runs backwards by more than a period.
+    SampleIndex last = transport.position();
+    SampleIndex last_now = transport.position_now();
+    SampleIndex largest = 0;
+    SampleIndex largest_now = 0;
+    SampleIndex most_backwards = 0;
+    const auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(300)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        const SampleIndex p = transport.position();
+        const SampleIndex q = transport.position_now();
+        largest = std::max(largest, p - last);
+        largest_now = std::max(largest_now, q - last_now);
+        most_backwards = std::max(most_backwards, last_now - q);
+        last = p;
+        last_now = q;
+    }
+    MESSAGE("largest step: position() " << largest << ", position_now() " << largest_now
+                                        << " samples; period " << transport.device_period_frames());
+    CHECK(largest_now < largest);
+    CHECK(most_backwards <= transport.device_period_frames());
+    transport.pause();
+    REQUIRE(wait_until([&] { return !transport.playing(); }, 1000));
+    CHECK(transport.position_now() == transport.position());
+    transport.close();
+}
+
 namespace {
 
 AudioBuffer sine_buffer(double frequency_hz, double seconds, float amplitude) {
@@ -266,5 +303,57 @@ TEST_CASE("transport: set_speed(0.5) halves the playhead rate on a device thread
     const double rate = static_cast<double>(after - before) / 48000.0 / elapsed_s;
     CHECK(transport.speed() == 0.5f);
     CHECK(rate == doctest::Approx(0.5).epsilon(0.2)); // Wall-clock jitter on a test machine.
+    transport.close();
+}
+// Tool (skipped by default): what a 60 fps render sees of the playhead, as the show thread reads
+// it (high-resolution sleep), 3 s on the null backend. Prints the frame-to-frame steps in ms.
+// Run: psyight_tests -tc="transport: render-time steps at 60 fps" --no-skip
+TEST_CASE("transport: render-time steps at 60 fps" * doctest::skip()) {
+    Transport transport({true});
+    REQUIRE(transport.open(ramp_buffer(48000 * 10)).ok());
+    transport.play();
+    REQUIRE(wait_until([&] { return transport.position() > 4800; }, 2000));
+    std::vector<double> steps;
+    std::vector<double> steps_now;
+    std::vector<double> steps_clock;
+    PlayheadClock clock;
+    const auto seconds = [] {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    };
+    SampleIndex last = transport.position();
+    SampleIndex last_now = transport.position_now();
+    SampleIndex last_clock = clock.update(seconds(), last_now, 48000.0);
+    auto next = std::chrono::steady_clock::now();
+    for (int f = 0; f < 180; ++f) {
+        next += std::chrono::microseconds(16667);
+        sleep_until_precise(next);
+        const SampleIndex p = transport.position();
+        const SampleIndex q = transport.position_now();
+        const SampleIndex r = clock.update(seconds(), q, 48000.0);
+        steps.push_back((p - last) / 48.0);
+        steps_now.push_back((q - last_now) / 48.0);
+        steps_clock.push_back((r - last_clock) / 48.0);
+        last = p;
+        last_now = q;
+        last_clock = r;
+    }
+    const auto describe = [](std::vector<double> v) {
+        double mean = 0.0;
+        for (const double x : v) {
+            mean += x / static_cast<double>(v.size());
+        }
+        double variance = 0.0;
+        for (const double x : v) {
+            variance += (x - mean) * (x - mean) / static_cast<double>(v.size());
+        }
+        std::sort(v.begin(), v.end());
+        return std::to_string(mean) + " ms mean, " + std::to_string(std::sqrt(variance)) +
+               " ms sd, " + std::to_string(v.front()) + " to " + std::to_string(v.back()) + " ms";
+    };
+    MESSAGE("position(): " << describe(steps));
+    MESSAGE("position_now(): " << describe(steps_now));
+    steps_clock.erase(steps_clock.begin(), steps_clock.begin() + 60); // Let the clock lock.
+    MESSAGE("PlayheadClock over position_now(), after 1 s: " << describe(steps_clock));
     transport.close();
 }

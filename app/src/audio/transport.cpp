@@ -5,6 +5,7 @@
 #include <miniaudio.h>
 
 #include <algorithm>
+#include <chrono>
 
 namespace psyight {
 
@@ -88,6 +89,36 @@ bool Transport::is_open() const { return impl_ != nullptr; }
 
 const AudioBuffer &Transport::buffer() const { return impl_->buffer; }
 
+SampleIndex Transport::position_now() const {
+    if (!playing() || !is_open()) {
+        return position();
+    }
+    SampleIndex at = 0;
+    std::int64_t time_ns = 0;
+    for (;;) {
+        const std::uint32_t before = stamp_sequence_.load(std::memory_order_acquire);
+        if (before & 1u) {
+            continue; // The callback is writing.
+        }
+        at = stamp_position_.load(std::memory_order_relaxed);
+        time_ns = stamp_time_ns_.load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (stamp_sequence_.load(std::memory_order_relaxed) == before) {
+            break;
+        }
+    }
+    if (time_ns == 0) {
+        return position(); // No callback yet.
+    }
+    const std::int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                    std::chrono::steady_clock::now().time_since_epoch())
+                                    .count();
+    const double rate = impl_->buffer.sample_rate_hz * static_cast<double>(speed());
+    const double ahead = std::clamp(static_cast<double>(now_ns - time_ns) * 1e-9 * rate, 0.0,
+                                    2.0 * device_period_frames());
+    return std::min<SampleIndex>(at + static_cast<SampleIndex>(ahead), impl_->buffer.frames());
+}
+
 int Transport::device_period_frames() const {
     return impl_ && impl_->device_ready
                ? static_cast<int>(impl_->device.playback.internalPeriodSizeInFrames)
@@ -145,14 +176,25 @@ void Transport::on_audio(float *out, SampleIndex frame_count) {
             break;
         }
     }
+    SampleIndex published = 0;
     if (state_.speed < 1.0f) {
         impl_->stretch.render(state_, impl_->buffer, out, frame_count);
-        position_.store(state_.playing ? impl_->stretch.heard_position(state_) : state_.position,
-                        std::memory_order_release);
+        published = state_.playing ? impl_->stretch.heard_position(state_) : state_.position;
     } else {
         render_transport(state_, impl_->buffer, out, frame_count);
-        position_.store(state_.position, std::memory_order_release);
+        published = state_.position;
     }
+    position_.store(published, std::memory_order_release);
+    // Seqlock: odd while writing; the release fence orders the data after the odd count.
+    const std::uint32_t sequence = stamp_sequence_.load(std::memory_order_relaxed);
+    stamp_sequence_.store(sequence + 1, std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_release);
+    stamp_position_.store(published, std::memory_order_relaxed);
+    stamp_time_ns_.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             std::chrono::steady_clock::now().time_since_epoch())
+                             .count(),
+                         std::memory_order_relaxed);
+    stamp_sequence_.store(sequence + 2, std::memory_order_release);
     speed_.store(state_.speed, std::memory_order_release);
     playing_.store(state_.playing, std::memory_order_release);
 }

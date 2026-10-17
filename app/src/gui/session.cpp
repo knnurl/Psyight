@@ -133,7 +133,8 @@ Result<void> Session::save_labels() {
 std::filesystem::path Session::labels_path() const { return labels_path_for(track_->path); }
 
 double Session::playhead_s() const {
-    return has_track() ? samples_to_seconds(transport_.position(), track_->sample_rate_hz) : 0.0;
+    return has_track() ? samples_to_seconds(transport_.position_now(), track_->sample_rate_hz)
+                       : 0.0;
 }
 
 Grid Session::grid() const {
