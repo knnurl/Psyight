@@ -193,6 +193,8 @@ def export(args) -> int:
 
 
 def main() -> int:
+    # File names can hold characters the Windows console code page lacks (logs are redirected).
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     f = sub.add_parser("fingerprint")
