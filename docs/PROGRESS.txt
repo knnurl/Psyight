@@ -149,6 +149,13 @@ Owner check: Phase Change's drafted grid downbeat. Live mode (from a kick break)
 - MIDI learn and mapping (91f6d1e): RtMidi 6.0.0 (MIT, vcpkg); Preview panel MIDI section; bindings for blackout, hold, automation, each scene, brightness cap, latency offset and the tap test; saved with the port in psyight.psyproj. This laptop has no MIDI input, so a real controller is the owner's test.
 Next (no owner needed): bar-level novelty is used only until the first break (it overrode correct break downbeats on OculusDrift); then M6 software (soak test, crash recovery, operator guide).
 
+## M6 progress (software side; started 2026-10-17)
+- Live input from a file at real-time pace, silent (rehearsal, soak, checking live mode with music without sound). Checked in the app: OculusDrift locks at 150.00 BPM, groove, 14 ms delay.
+- psyight_soak <audio> [--minutes N]: the live show for hours; logs frames, late frames, render time, delay, load, dropped samples, lock and memory each minute. 1 minute: 3600 frames at 60.00 fps, none late. A 4-hour run started 2026-10-17 alongside the M4 export (result to docs/results/M6.md).
+- Crash recovery: logs/psyight.log (rotating), minidumps in logs/ on a crash (not exercised yet), psyight.running marker (an unclean exit is reported at the next start; checked with a forced kill), project autosave within a minute.
+- docs/OPERATOR_GUIDE.md.
+Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure, a venue dry run (M6 exit).
+
 ## Owner decisions waiting on real LED tests (owner, 2026-10-17: "decide after real LED testing")
 - Kick flash budget: the kick ring is one flash per kick, about 2.5 of the 3 flashes a second at 150 BPM (docs/results/M3.md).
 - Ambient darkness: the Ambient scene leaves 14% of pixels dark on Hagios against SPEC 7.7's 30 to 50%.

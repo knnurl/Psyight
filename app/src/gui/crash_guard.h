@@ -5,8 +5,8 @@
 // - Any crash writes a minidump to logs/ (dump files open in Visual Studio or WinDbg with the
 //   build's .pdb files) before the process ends.
 // - Logs also go to logs/psyight.log (5 MB, three old files kept).
-// The node keeps or fades the last frame on its own when the stream stops (firmware loss policy),
-// so the lights do not depend on the app surviving.
+// When the stream stops, the node runs its own loss policy after 2 s (by default a dim fallback
+// show; firmware/node-f767), so the lights do not depend on the app surviving.
 #pragma once
 
 #include <filesystem>
