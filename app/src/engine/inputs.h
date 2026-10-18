@@ -8,12 +8,14 @@
 #include "analysis/track_analysis.h"
 #include "core/timebase.h"
 
+#include <array>
 #include <limits>
 #include <string>
 
 namespace psyight {
 
 inline constexpr double kNever = std::numeric_limits<double>::infinity();
+inline constexpr int kMacroCount = 8; // Macro knobs (Show tab, MIDI): modulation sources.
 
 struct EngineInputs {
     double t_s = 0.0;
@@ -54,6 +56,9 @@ struct EngineInputs {
     double residual_flatness = 0.0;
     double since_hat_s = kNever;
     long long hats_so_far = 0;
+    // The operator's macro knobs, 0 to 1: set by the show renderer from its config, not by
+    // inputs_at (they are not music).
+    std::array<double, kMacroCount> macros{};
 };
 
 EngineInputs inputs_at(const TrackAnalysis &analysis, const Grid &grid, double t_s);

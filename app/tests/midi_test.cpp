@@ -72,4 +72,10 @@ TEST_CASE("midi: continuous targets follow a controller") {
     CHECK(a[0].value == 0.0);
     CHECK(midi_target_is_button("scene:3"));
     CHECK_FALSE(midi_target_is_button("latency"));
+    CHECK_FALSE(midi_target_is_button("macro:0"));
+    map.bindings = {{"macro:4", MidiKind::cc, 0, 21}};
+    a = map.handle(cc(0, 21, 64));
+    REQUIRE(a.size() == 1);
+    CHECK(a[0].target == "macro:4");
+    CHECK(a[0].value == doctest::Approx(64.0 / 127.0));
 }

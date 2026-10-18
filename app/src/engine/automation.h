@@ -57,8 +57,12 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
                        const EngineInputs &inputs, const AutomationParams &params,
                        int manual_scene = -1);
 
+// The routes' memory per scene, for render_mix (holding and smoothing; engine/modulation.h).
+using ModMemory = std::vector<std::vector<ModRouteState>>;
+
+// memory: null renders instantaneous route values; otherwise resized to the scenes.
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
-                 std::uint64_t seed);
+                 std::uint64_t seed, ModMemory *memory = nullptr);
 
 } // namespace psyight

@@ -148,16 +148,21 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
 
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
-                 std::uint64_t seed) {
+                 std::uint64_t seed, ModMemory *memory) {
     if (scenes.empty() || palettes.empty() || mix.to < 0 ||
         mix.to >= static_cast<int>(scenes.size())) {
         return Frame(rig.pixels.size());
     }
+    if (memory != nullptr) {
+        memory->resize(scenes.size());
+    }
     const auto render = [&](int scene, int shift) {
         const Scene &s = scenes[static_cast<size_t>(scene)];
-        return render_scene(s, rig, inputs,
-                            palettes[static_cast<size_t>(palette_index(s, shift, palettes.size()))],
-                            seed);
+        // A scene rendered twice in a frame (a palette slew) steps its routes at the same render
+        // time twice, which returns the same values.
+        return render_scene(
+            s, rig, inputs, palettes[static_cast<size_t>(palette_index(s, shift, palettes.size()))],
+            seed, memory != nullptr ? &(*memory)[static_cast<size_t>(scene)] : nullptr);
     };
     // The scene crossfade at one palette shift.
     const auto render_scenes = [&](int shift) {

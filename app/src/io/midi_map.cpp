@@ -16,7 +16,7 @@ constexpr std::uint8_t kButtonEdge = 64;
 } // namespace
 
 bool midi_target_is_button(const std::string &target) {
-    return target != "brightness" && target != "latency";
+    return target != "brightness" && target != "latency" && target.rfind("macro:", 0) != 0;
 }
 
 std::string describe(const MidiBinding &b) {

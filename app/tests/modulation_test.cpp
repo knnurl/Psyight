@@ -74,6 +74,98 @@ TEST_CASE("modulation: every source stays in 0 to 1 and every curve keeps its en
     CHECK(shaped(0.25, ModCurve::logarithmic, false) == doctest::Approx(0.5));
 }
 
+TEST_CASE("modulation: macros are sources") {
+    EngineInputs in;
+    in.macros[2] = 0.75;
+    in.macros[7] = 2.0; // Out of range: clamped.
+    CHECK(source_value(ModSource::macro_3, in, 1) == 0.75);
+    CHECK(source_value(ModSource::macro_8, in, 1) == 1.0);
+    CHECK(source_value(ModSource::macro_1, in, 1) == 0.0);
+    CHECK(mod_source_from_id("macro_5") == ModSource::macro_5);
+}
+
+TEST_CASE("modulation: hold per beat samples at the division's first frame") {
+    ModRoute route;
+    route.source = ModSource::beat_phase;
+    route.quantise = ModQuantise::beat;
+    ModRouteState state;
+    EngineInputs in;
+    // 60 frames a beat: the value is the phase at each beat's first frame, held through it.
+    for (int frame = 0; frame < 180; ++frame) {
+        in.t_s = frame / 60.0;
+        in.beat_index = frame / 60;
+        in.beat_phase = (frame % 60) / 60.0 + 0.01;
+        CHECK(step_route(route, state, in, 1) == doctest::Approx(0.01));
+    }
+    // Sixteenths: four divisions a beat.
+    route.quantise = ModQuantise::sixteenth;
+    in.beat_index = 5;
+    in.beat_phase = 0.3;
+    CHECK(mod_division(ModQuantise::sixteenth, in) == 21);
+    in.beat_phase = 0.99;
+    CHECK(mod_division(ModQuantise::sixteenth, in) == 23);
+}
+
+TEST_CASE("modulation: attack and release smooth a step; time jumps restart") {
+    ModRoute route;
+    route.source = ModSource::macro_1;
+    route.attack_s = 0.1;
+    route.release_s = 0.4;
+    ModRouteState state;
+    EngineInputs in;
+    const double dt = 0.001;
+    in.t_s = 0.0;
+    CHECK(step_route(route, state, in, 1) == 0.0);
+    in.macros[0] = 1.0; // Step up: one attack time constant reaches 1 - 1/e.
+    for (int k = 1; k <= 100; ++k) {
+        in.t_s = k * dt;
+        step_route(route, state, in, 1);
+    }
+    CHECK(state.value == doctest::Approx(1.0 - std::exp(-1.0)).epsilon(1e-6));
+    // The same render time again changes nothing.
+    CHECK(step_route(route, state, in, 1) == doctest::Approx(1.0 - std::exp(-1.0)).epsilon(1e-6));
+    const double top = state.value;
+    in.macros[0] = 0.0; // Step down: the release time constant.
+    for (int k = 101; k <= 500; ++k) {
+        in.t_s = k * dt;
+        step_route(route, state, in, 1);
+    }
+    CHECK(state.value == doctest::Approx(top * std::exp(-1.0)).epsilon(1e-6));
+    // A seek (or a scene not rendered for a while) restarts at the current value.
+    in.macros[0] = 0.9;
+    in.t_s = 10.0;
+    CHECK(step_route(route, state, in, 1) == 0.9);
+    in.t_s = 2.0; // Backwards.
+    in.macros[0] = 0.2;
+    CHECK(step_route(route, state, in, 1) == 0.2);
+}
+
+TEST_CASE("modulation: rendering with memory follows the same render times identically") {
+    const Rig rig = default_rig();
+    Scene scene = default_scene();
+    ModRoute route;
+    route.source = ModSource::random_bar;
+    route.target = ModTarget::opacity;
+    route.layer = 0;
+    route.amount = 0.5;
+    route.quantise = ModQuantise::beat;
+    route.attack_s = 0.2;
+    route.release_s = 0.2;
+    scene.routes.push_back(route);
+    const std::vector<Palette> palettes = default_palettes();
+    std::vector<ModRouteState> a;
+    std::vector<ModRouteState> b;
+    for (int frame = 0; frame < 240; ++frame) {
+        EngineInputs in = sample_inputs(frame / 60.0);
+        in.beat_index = frame / 30;
+        const Frame fa = render_scene(scene, rig, in, palettes, 7, &a);
+        const Frame fb = render_scene(scene, rig, in, palettes, 7, &b);
+        REQUIRE(max_difference(fa, fb) == 0.0f);
+    }
+    REQUIRE(a.size() == scene.routes.size());
+    CHECK(a.back().value == b.back().value);
+}
+
 TEST_CASE("modulation: hue rotation keeps grey, wraps at 360 and keeps luminance roughly") {
     const Rgb grey{0.4f, 0.4f, 0.4f};
     const Rgb g = rotate_hue(grey, 123.0);

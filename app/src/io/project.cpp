@@ -133,6 +133,10 @@ Scene parse_scene(const json &item) {
             route.invert = optional(r, "invert", false);
             route.layer = integer(r, "layer", 0, 0, 1000);
             route.amount = number(r, "amount", 0.0, -360.0, 360.0);
+            const std::string quantise = optional<std::string>(r, "quantise", "off");
+            route.quantise = from_id_or_throw(mod_quantise_from_id(quantise), "quantise", quantise);
+            route.attack_s = number(r, "attack_s", 0.0, 0.0, kMaxSmoothingS);
+            route.release_s = number(r, "release_s", 0.0, 0.0, kMaxSmoothingS);
             s.routes.push_back(route);
         }
     }
@@ -161,7 +165,10 @@ json scene_json(const Scene &s) {
                           {"invert", r.invert},
                           {"target", mod_target_id(r.target)},
                           {"layer", r.layer},
-                          {"amount", finite(r.amount, "amount")}});
+                          {"amount", finite(r.amount, "amount")},
+                          {"quantise", mod_quantise_id(r.quantise)},
+                          {"attack_s", finite(r.attack_s, "attack_s")},
+                          {"release_s", finite(r.release_s, "release_s")}});
     }
     return {{"name", s.name},
             {"palette", s.palette},
@@ -171,6 +178,11 @@ json scene_json(const Scene &s) {
 }
 
 } // namespace
+
+std::string macro_name(const Project &project, int index) {
+    const std::string &name = project.macro_names[static_cast<size_t>(index)];
+    return name.empty() ? "Macro " + std::to_string(index + 1) : name;
+}
 
 const char *colour_order_name(ColourOrder order) {
     switch (order) {
@@ -373,6 +385,14 @@ Result<Project> parse_project_json(std::string_view json_text) {
             }
         }
 
+        if (const auto it = root.find("macros"); it != root.end()) {
+            const json::array_t &macros = it->get_ref<const json::array_t &>();
+            for (size_t i = 0; i < macros.size() && i < p.macro_values.size(); ++i) {
+                p.macro_names[i] = optional<std::string>(macros[i], "name", "");
+                p.macro_values[i] = number(macros[i], "value", 0.0, 0.0, 1.0);
+            }
+        }
+
         const json &aut = section(root, "automation");
         AutomationParams &a = p.automation;
         a.crossfade_beats = number(aut, "crossfade_beats", a.crossfade_beats, 0.0, 64.0);
@@ -440,6 +460,11 @@ Result<std::string> to_project_json(const Project &p) {
         for (const GroupCap &c : p.group_caps) {
             group_caps.push_back({{"group", c.group}, {"cap", finite(c.cap, "cap")}});
         }
+        json macros = json::array();
+        for (size_t i = 0; i < p.macro_values.size(); ++i) {
+            macros.push_back(
+                {{"name", p.macro_names[i]}, {"value", finite(p.macro_values[i], "macro value")}});
+        }
         json midi_bindings = json::array();
         for (const MidiBinding &b : p.midi) {
             midi_bindings.push_back({{"target", b.target},
@@ -491,6 +516,7 @@ Result<std::string> to_project_json(const Project &p) {
             {"scenes", scenes},
             {"palettes", palettes},
             {"midi", {{"port", p.midi_port}, {"bindings", midi_bindings}}},
+            {"macros", macros},
         };
         return root.dump(2) + "\n";
     } catch (const json::exception &e) {

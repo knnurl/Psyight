@@ -75,6 +75,17 @@ double source_value(ModSource source, const EngineInputs &in, std::uint64_t seed
     case ModSource::random_bar:
         v = hash01(seed, static_cast<std::uint64_t>(in.bar_index));
         break;
+    case ModSource::macro_1:
+    case ModSource::macro_2:
+    case ModSource::macro_3:
+    case ModSource::macro_4:
+    case ModSource::macro_5:
+    case ModSource::macro_6:
+    case ModSource::macro_7:
+    case ModSource::macro_8:
+        v = in.macros[static_cast<size_t>(static_cast<int>(source) -
+                                          static_cast<int>(ModSource::macro_1))];
+        break;
     }
     return std::isfinite(v) ? std::clamp(v, 0.0, 1.0) : 0.0;
 }
@@ -99,6 +110,46 @@ double shaped(double value, ModCurve curve, bool invert) {
 
 double route_value(const ModRoute &route, const EngineInputs &in, std::uint64_t seed) {
     return shaped(source_value(route.source, in, seed), route.curve, route.invert);
+}
+
+long long mod_division(ModQuantise quantise, const EngineInputs &in) {
+    switch (quantise) {
+    case ModQuantise::off:
+        return 0;
+    case ModQuantise::sixteenth:
+        return 4 * in.beat_index +
+               std::clamp(static_cast<long long>(std::floor(4.0 * in.beat_phase)), 0LL, 3LL);
+    case ModQuantise::beat:
+        return in.beat_index;
+    case ModQuantise::bar:
+        return in.bar_index;
+    }
+    return 0;
+}
+
+double step_route(const ModRoute &route, ModRouteState &state, const EngineInputs &in,
+                  std::uint64_t seed) {
+    const double now = route_value(route, in, seed);
+    const long long division = mod_division(route.quantise, in);
+    const double dt = in.t_s - state.t_s;
+    if (!state.started || dt < 0.0 || dt > kModRestartS) {
+        state = {true, in.t_s, division, now, now};
+        return state.value;
+    }
+    if (route.quantise == ModQuantise::off) {
+        state.held = now;
+    } else if (division != state.division) {
+        state.held = now; // Sample at the division's first frame, hold until the next.
+        state.division = division;
+    }
+    const double tau = state.held > state.value ? route.attack_s : route.release_s;
+    if (tau <= 0.0) {
+        state.value = state.held;
+    } else if (dt > 0.0) {
+        state.value += (1.0 - std::exp(-dt / tau)) * (state.held - state.value);
+    }
+    state.t_s = in.t_s;
+    return state.value;
 }
 
 Rgb rotate_hue(const Rgb &c, double degrees) {
@@ -153,6 +204,22 @@ const char *mod_source_name(ModSource source) {
         return "LFO, phrase";
     case ModSource::random_bar:
         return "Random per bar";
+    case ModSource::macro_1:
+        return "Macro 1";
+    case ModSource::macro_2:
+        return "Macro 2";
+    case ModSource::macro_3:
+        return "Macro 3";
+    case ModSource::macro_4:
+        return "Macro 4";
+    case ModSource::macro_5:
+        return "Macro 5";
+    case ModSource::macro_6:
+        return "Macro 6";
+    case ModSource::macro_7:
+        return "Macro 7";
+    case ModSource::macro_8:
+        return "Macro 8";
     }
     return "?";
 }
@@ -181,6 +248,34 @@ const char *mod_target_name(ModTarget target) {
         return "Brightness";
     }
     return "?";
+}
+
+const char *mod_quantise_name(ModQuantise quantise) {
+    switch (quantise) {
+    case ModQuantise::off:
+        return "Free";
+    case ModQuantise::sixteenth:
+        return "Hold 1/16";
+    case ModQuantise::beat:
+        return "Hold beat";
+    case ModQuantise::bar:
+        return "Hold bar";
+    }
+    return "?";
+}
+
+const char *mod_quantise_id(ModQuantise quantise) {
+    switch (quantise) {
+    case ModQuantise::off:
+        return "off";
+    case ModQuantise::sixteenth:
+        return "sixteenth";
+    case ModQuantise::beat:
+        return "beat";
+    case ModQuantise::bar:
+        return "bar";
+    }
+    return "off";
 }
 
 const char *mod_source_id(ModSource source) {
@@ -217,6 +312,22 @@ const char *mod_source_id(ModSource source) {
         return "lfo_phrase";
     case ModSource::random_bar:
         return "random_bar";
+    case ModSource::macro_1:
+        return "macro_1";
+    case ModSource::macro_2:
+        return "macro_2";
+    case ModSource::macro_3:
+        return "macro_3";
+    case ModSource::macro_4:
+        return "macro_4";
+    case ModSource::macro_5:
+        return "macro_5";
+    case ModSource::macro_6:
+        return "macro_6";
+    case ModSource::macro_7:
+        return "macro_7";
+    case ModSource::macro_8:
+        return "macro_8";
     }
     return "constant";
 }
@@ -272,6 +383,10 @@ std::optional<ModCurve> mod_curve_from_id(const std::string &id) {
 
 std::optional<ModTarget> mod_target_from_id(const std::string &id) {
     return from_id(id, kModTargets, mod_target_id);
+}
+
+std::optional<ModQuantise> mod_quantise_from_id(const std::string &id) {
+    return from_id(id, kModQuantises, mod_quantise_id);
 }
 
 } // namespace psyight

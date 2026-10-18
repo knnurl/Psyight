@@ -46,6 +46,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     }
     if (std::abs(t_s - last_t_s_) > kSeekResetS) {
         limiters_.reset();
+        modulation_.clear();
     }
     last_t_s_ = t_s;
     if (config.send_to_network && socket_ == nullptr) {
@@ -75,13 +76,19 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
             out.mix = automate(config.scenes, *config.analysis, config.grid, inputs,
                                config.automation, config.manual_scene);
         }
+        inputs.macros = config.macros;
         out.section = inputs.section;
         out.beat_in_bar = inputs.beat_in_bar;
         if (config.blackout) {
             out.frame.assign(config.rig.pixels.size(), Rgb{});
         } else {
             out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
-                                   config.seed);
+                                   config.seed, &modulation_);
+            if (out.mix.to >= 0 && static_cast<size_t>(out.mix.to) < modulation_.size()) {
+                for (const ModRouteState &r : modulation_[static_cast<size_t>(out.mix.to)]) {
+                    out.route_values.push_back(r.value);
+                }
+            }
         }
     } else {
         out.frame.assign(config.rig.pixels.size(), Rgb{});

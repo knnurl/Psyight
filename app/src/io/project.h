@@ -16,6 +16,7 @@
 #include "output/patch.h"
 #include "output/sender.h"
 
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -45,7 +46,13 @@ struct Project {
     std::vector<Palette> palettes = default_palettes();
     std::vector<MidiBinding> midi; // MIDI learn (io/midi_map.h).
     std::string midi_port;         // Reopened at start when present.
+    // The macro knobs (modulation sources), saved with the show as a set saves its macros.
+    std::array<double, kMacroCount> macro_values{};
+    std::array<std::string, kMacroCount> macro_names{}; // Empty: "Macro n".
 };
+
+// "Macro n" (from 1) unless the project names it.
+std::string macro_name(const Project &project, int index);
 
 // The default frame rig (engine/rig.h default_rig) with default settings.
 Project default_project();

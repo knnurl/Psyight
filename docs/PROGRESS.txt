@@ -164,6 +164,12 @@ Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure
 - Live mode: the same riser idea causally, and both build rules on 1 s averages. psyight_live_check: OculusDrift builds at 183, 204, 237 (file 234), 393 s, down from 26, 29, 183, 201, 230, 378 s; Hall of Purity about half as many.
 - Not fixed, seen on the way: Hall of Purity and Hagios flip between breakdown and groove or drop every few bars (the kick state per bar), in both modes.
 
+## Modulation transforms and macros (owner request 2026-10-18)
+- engine/modulation.*: ModSource macro_1 to macro_8 (EngineInputs::macros, set by the show renderer from ShowConfig::macros), ModQuantise (free, hold 1/16, beat, bar), attack_s and release_s per route, step_route with ModRouteState. render_scene and render_mix take optional route memory; ShowRenderer owns it (cleared on a seek) and reports the playing scene's route values in ShowFrame::route_values (for the GUI's rings).
+- io/project.*: macro values and names, the route fields (older files load with defaults). MIDI targets macro:0 to macro:7 (continuous). Replay sets the macros from the recorded project.
+- Show tab: Macros (8 sliders for now), and per route a hold choice and attack and release in ms.
+- Tests: macros as sources, hold per beat, attack and release time constants, restart on a time jump, memory determinism, project round trip, the MIDI macro target.
+
 ## UI restyle (docs/RESTYLE.md; phases stop for the owner's approval)
 - Phase 0 (754831d): `psyight --capture <out.png> --theme <desk|show> --audio <file> --time <s> --frames 60`, deterministic (byte-identical PNGs), offscreen 1920x1080 at DPI 1.0, default layout, no ini. Baseline: data\OculusDrift.mp3 at 120 s; captures in captures/ (gitignored).
 - Phase 1: theme module (gui/theme.*), fonts in assets/fonts (copied beside the exe at build), View > Theme (Desk, Show), F12 style editor, theme.json overrides beside the exe. Frame time median 3.21 ms (baseline 3.28).

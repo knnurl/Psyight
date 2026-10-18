@@ -134,12 +134,16 @@ struct Scene {
     std::vector<ModRoute> routes;      // Modulation (SPEC 7.4).
 };
 
-// Renders the layers bottom to top onto black, with the scene's modulation applied.
+// Renders the layers bottom to top onto black, with the scene's modulation applied. memory: the
+// routes' memory (one per route, resized to fit) for holding and smoothing; null renders each
+// route's instantaneous value, a pure function of the inputs.
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
-                   const std::vector<Palette> &palettes, std::uint64_t seed);
+                   const std::vector<Palette> &palettes, std::uint64_t seed,
+                   std::vector<ModRouteState> *memory = nullptr);
 // The same with an explicit palette instead of the scene's.
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
-                   const Palette &palette, std::uint64_t seed);
+                   const Palette &palette, std::uint64_t seed,
+                   std::vector<ModRouteState> *memory = nullptr);
 
 // Layer edits that keep each route on the same layer: removing a layer removes its routes and
 // renumbers the rest; swapping two layers swaps their routes' indices.

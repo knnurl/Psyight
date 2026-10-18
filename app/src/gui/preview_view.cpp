@@ -281,6 +281,7 @@ void PreviewView::sync_config() {
     config_.automation = p.automation;
     config_.scenes = p.scenes;
     config_.palettes = p.palettes;
+    config_.macros = p.macro_values;
     if (config_.manual_scene >= static_cast<int>(config_.scenes.size())) {
         config_.manual_scene = -1;
     }
@@ -578,6 +579,13 @@ void PreviewView::apply_midi(const MidiAction &a) {
     } else if (a.target == "latency") {
         project_.edit().latency_offset_ms = -200.0 + 400.0 * std::clamp(a.value, 0.0, 1.0);
         project_.changed();
+    } else if (a.target.rfind("macro:", 0) == 0) {
+        const int macro = std::atoi(a.target.c_str() + 6);
+        if (macro >= 0 && macro < kMacroCount) {
+            project_.edit().macro_values[static_cast<size_t>(macro)] =
+                std::clamp(a.value, 0.0, 1.0);
+            project_.changed();
+        }
     } else if (a.target == "tap") {
         tap();
     } else if (a.target == "downbeat") {
@@ -628,6 +636,9 @@ void PreviewView::draw_midi() {
         {"auto", "Automation (scenes)"},    {"brightness", "Brightness cap"},
         {"latency", "Latency offset"},      {"tap", "Tap test"},
         {"downbeat", "Downbeat now (live)"}};
+    for (int i = 0; i < kMacroCount; ++i) {
+        targets.emplace_back("macro:" + std::to_string(i), macro_name(project_.project(), i));
+    }
     for (size_t i = 0; i < config_.scenes.size(); ++i) {
         targets.emplace_back("scene:" + std::to_string(i), "Scene: " + config_.scenes[i].name);
     }
@@ -684,6 +695,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     }
     ImGui::SetItemTooltip("Render time minus playhead. About 2.9 ms per metre from the speakers "
                           "(SPEC 4.3).");
+    draw_macros();
     if (tier_at_least(Tier::tune)) {
         std::vector<Scene> &scenes = project_.edit().scenes;
         edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(scenes.size()) - 1);
@@ -1044,9 +1056,9 @@ void PreviewView::draw_routes(Scene &scene) {
         ModRoute &r = scene.routes[i];
         ImGui::PushID(static_cast<int>(i));
         ImGui::SetNextItemWidth(8.0f * em);
-        if (ImGui::BeginCombo("##source", mod_source_name(r.source))) {
+        if (ImGui::BeginCombo("##source", source_label(r.source).c_str())) {
             for (const ModSource s : kModSources) {
-                if (ImGui::Selectable(mod_source_name(s), s == r.source)) {
+                if (ImGui::Selectable(source_label(s).c_str(), s == r.source)) {
                     r.source = s;
                     scene_edited_ = true;
                 }
@@ -1110,6 +1122,35 @@ void PreviewView::draw_routes(Scene &scene) {
             r.amount = amount;
             scene_edited_ = true;
         }
+        // Transforms: hold per grid division, then attack and release smoothing.
+        ImGui::SetNextItemWidth(7.0f * em);
+        if (ImGui::BeginCombo("##quantise", mod_quantise_name(r.quantise))) {
+            for (const ModQuantise q : kModQuantises) {
+                if (ImGui::Selectable(mod_quantise_name(q), q == r.quantise)) {
+                    r.quantise = q;
+                    scene_edited_ = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SetItemTooltip("Free follows the source; Hold samples it at each 16th, beat or bar "
+                              "and keeps it until the next.");
+        ImGui::SameLine();
+        const auto smoothing = [&](const char *label, double &seconds, const char *tip) {
+            float ms = static_cast<float>(1e3 * seconds);
+            ImGui::SetNextItemWidth(5.5f * em);
+            if (mono_field(label, [&](const char *id) {
+                    return ImGui::DragFloat(id, &ms, 2.0f, 0.0f, 1e3f * kMaxSmoothingS, "%.0f ms",
+                                            ImGuiSliderFlags_AlwaysClamp);
+                })) {
+                seconds = 1e-3 * ms;
+                scene_edited_ = true;
+            }
+            ImGui::SetItemTooltip("%s", tip);
+        };
+        smoothing("attack", r.attack_s, "Time constant while the value rises; 0: at once.");
+        ImGui::SameLine();
+        smoothing("release", r.release_s, "Time constant while the value falls; 0: at once.");
         ImGui::Unindent();
         ImGui::PopID();
     }
@@ -1123,6 +1164,33 @@ void PreviewView::draw_routes(Scene &scene) {
     }
     ImGui::SetItemTooltip("Source, curve and amount onto a layer's opacity or hue, or the "
                           "scene's brightness (SPEC 7.4). Routes to one target add up.");
+    ImGui::TreePop();
+}
+
+std::string PreviewView::source_label(ModSource source) const {
+    const int macro = static_cast<int>(source) - static_cast<int>(ModSource::macro_1);
+    return macro >= 0 && macro < kMacroCount ? macro_name(project_.project(), macro)
+                                             : mod_source_name(source);
+}
+
+void PreviewView::draw_macros() {
+    if (!ImGui::TreeNode("Macros")) {
+        return;
+    }
+    const float em = ImGui::GetFontSize();
+    for (int i = 0; i < kMacroCount; ++i) {
+        ImGui::PushID(i);
+        float value = static_cast<float>(project_.project().macro_values[static_cast<size_t>(i)]);
+        ImGui::SetNextItemWidth(8.0f * em);
+        if (mono_field(macro_name(project_.project(), i).c_str(), [&](const char *id) {
+                return ImGui::SliderFloat(id, &value, 0.0f, 1.0f, "%.2f");
+            })) {
+            project_.edit().macro_values[static_cast<size_t>(i)] = value;
+            project_.changed();
+        }
+        ImGui::PopID();
+    }
+    ImGui::TextDisabled("Sources for modulation routes; MIDI learn binds a knob to each.");
     ImGui::TreePop();
 }
 

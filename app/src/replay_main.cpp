@@ -75,6 +75,7 @@ int replay(const std::filesystem::path &folder) {
         c->manual_scene = e.runtime.manual_scene;
         c->blackout = e.runtime.blackout;
         c->hold = e.runtime.hold;
+        c->macros = e.project.macro_values;
         configs[e.version] = c;
     }
 

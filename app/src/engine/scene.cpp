@@ -242,25 +242,36 @@ std::unique_ptr<Effect> make_drop_burst(const DropBurstParams &params) {
 }
 
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
-                   const std::vector<Palette> &palettes, std::uint64_t seed) {
+                   const std::vector<Palette> &palettes, std::uint64_t seed,
+                   std::vector<ModRouteState> *memory) {
     if (palettes.empty()) {
         return Frame(rig.pixels.size());
     }
     return render_scene(scene, rig, inputs,
                         palettes[static_cast<size_t>(
                             std::clamp(scene.palette, 0, static_cast<int>(palettes.size()) - 1))],
-                        seed);
+                        seed, memory);
 }
 
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
-                   const Palette &palette, std::uint64_t seed) {
+                   const Palette &palette, std::uint64_t seed, std::vector<ModRouteState> *memory) {
     Frame frame(rig.pixels.size());
     const EffectContext context{rig, inputs, palette, seed};
     Frame layer(rig.pixels.size());
+    // Each route's value once per frame.
+    std::vector<double> values(scene.routes.size());
+    if (memory != nullptr) {
+        memory->resize(scene.routes.size());
+    }
+    for (size_t i = 0; i < scene.routes.size(); ++i) {
+        values[i] = memory != nullptr ? step_route(scene.routes[i], (*memory)[i], inputs, seed)
+                                      : route_value(scene.routes[i], inputs, seed);
+    }
     double brightness = 1.0;
-    for (const ModRoute &r : scene.routes) {
+    for (size_t i = 0; i < scene.routes.size(); ++i) {
+        const ModRoute &r = scene.routes[i];
         if (r.target == ModTarget::brightness) {
-            brightness += r.amount * (route_value(r, inputs, seed) - 1.0);
+            brightness += r.amount * (values[i] - 1.0);
         }
     }
     for (size_t k = 0; k < scene.layers.size(); ++k) {
@@ -270,14 +281,15 @@ Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &input
         }
         double opacity = l.opacity;
         double hue_deg = 0.0;
-        for (const ModRoute &r : scene.routes) {
+        for (size_t i = 0; i < scene.routes.size(); ++i) {
+            const ModRoute &r = scene.routes[i];
             if (r.layer != static_cast<int>(k)) {
                 continue;
             }
             if (r.target == ModTarget::opacity) {
-                opacity += r.amount * route_value(r, inputs, seed);
+                opacity += r.amount * values[i];
             } else if (r.target == ModTarget::hue_shift) {
-                hue_deg += r.amount * route_value(r, inputs, seed);
+                hue_deg += r.amount * values[i];
             }
         }
         opacity = std::clamp(opacity, 0.0, 1.0);

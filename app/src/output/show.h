@@ -23,6 +23,7 @@
 #include "output/udp_socket.h"
 #include "output/virtual_node.h"
 
+#include <array>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -56,6 +57,7 @@ struct ShowConfig {
     bool blackout = false;
     bool hold = false;
     std::uint64_t seed = 1;
+    std::array<double, kMacroCount> macros{}; // The macro knobs, 0 to 1 (modulation sources).
 };
 
 struct ShowFrame {
@@ -66,6 +68,9 @@ struct ShowFrame {
     std::int64_t flashes_limited = 0; // Frames the flash limiter clipped so far.
     std::string section;
     SceneMix mix;
+    // The playing scene's (mix.to) route values this frame, held and smoothed, for the GUI's
+    // modulation rings; empty during blackout and hold.
+    std::vector<double> route_values;
     int beat_in_bar = 0;
     std::vector<std::uint8_t> node_rgb; // What the virtual node latched (gamma-encoded bytes).
     VirtualNodeStats node;
@@ -85,6 +90,7 @@ class ShowRenderer {
 
     std::uint64_t config_version_ = ~std::uint64_t{0};
     Limiters limiters_;
+    ModMemory modulation_; // The routes' memory (holding, smoothing); cleared on a seek.
     OutputSender sender_;
     VirtualNode node_;
     std::unique_ptr<UdpSocket> socket_;

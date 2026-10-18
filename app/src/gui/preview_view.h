@@ -62,6 +62,8 @@ class PreviewView {
     void draw_scene_cards(const ShowFrame &frame);
     void draw_scene_editor(std::vector<Scene> &scenes);
     void draw_routes(Scene &scene);
+    void draw_macros(); // The 8 macro knobs (modulation sources, MIDI-learnable).
+    std::string source_label(ModSource source) const; // Macros by their project names.
     void draw_palettes();
     void draw_group_caps();
     void draw_output(const ShowFrame &frame);
