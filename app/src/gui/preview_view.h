@@ -17,12 +17,15 @@
 #include "gui/project_state.h"
 #include "gui/session.h"
 #include "io/midi_input.h"
+#include "io/presets.h"
 #include "io/user_settings.h"
 #include "output/show.h"
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -68,6 +71,12 @@ class PreviewView {
                            float height, int &remove, int &move_from, int &move_to);
     void draw_routes(Scene &scene, const ShowFrame &frame); // Modulation routes as cards.
     void draw_macros(); // The 8 macro knobs (modulation sources, MIDI-learnable).
+    // Presets (engine/presets.h, io/presets.h). The user's are rescanned when a menu opens. A
+    // scene preset is applied after the scene editor (which holds references into the scenes).
+    void draw_library();         // Show packs: load (confirmed) and save.
+    void draw_scene_presets();   // In the scene editor: replace this scene or add one; save.
+    void draw_palette_library(); // In Palettes: add from the library; save one.
+    void apply_pending_scene_preset();
     std::string source_label(ModSource source) const; // Macros by their project names.
     void draw_palettes();
     void draw_group_caps();
@@ -85,6 +94,14 @@ class PreviewView {
     bool scene_edited_ = false; // A scene changed this frame: the project is told once.
     Ladder ladder_ = Ladder::preview;
     bool preview_open_ = true;
+    std::filesystem::path presets_dir_ = "presets"; // Beside the project (the working directory).
+    UserPresets user_presets_;
+    std::optional<ScenePreset> pending_scene_;
+    bool pending_scene_replace_ = true;
+    std::optional<ShowPack> pending_pack_;
+    std::string preset_name_;
+    std::string preset_description_;
+    std::string preset_status_;
     bool stage_ = false;    // The preview is drawn in the Stage window (draw).
     int playing_scene_ = 0; // The automation's current scene, from the latest frame.
     std::shared_ptr<Recorder> recorder_;

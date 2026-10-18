@@ -171,6 +171,11 @@ Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure
 - Show tab: Macros (8 sliders for now), and per route a hold choice and attack and release in ms.
 - Tests: macros as sources, hold per beat, attack and release time constants, restart on a time jump, memory determinism, project round trip, the MIDI macro target.
 
+## Presets (owner request 2026-10-18: scene presets, show packs, palette presets; a library folder)
+- engine/presets.*: the built-in library. Scene presets: Rolling conveyor, Staccato pulse, Acid swirl, Floating, Tension rise, Drop impact, Minimal dark, Macro performer (macros 1 to 6: ambience, hue spin, density, shimmer, drift, fade out). Palettes: the 4 defaults plus Ice, Ember, Magenta storm, Mono violet, Toxic, Sunset, Aurora, Ocean UV (no white). Show packs: Psyight default, Dark minimal, Full colour, Live macros.
+- io/presets.*: the file formats (in io/project.cpp, sharing the scene, palette and automation JSON), the user's folder presets/{scenes,palettes,shows} beside the project (gitignored), load (bad files named, skipped), save, apply (a scene preset replaces the scene or adds one, reusing a palette of the same name or adding it; a show pack replaces scenes, palettes, automation and macro names, macro values stay).
+- Show tab (Tune): Show packs (load with a confirmation, save), the scene's Presets menu (replace this scene, add as new, save), Palettes: add from the library (with swatches), save to the library. tests/presets_test.cpp: the library's consistency (routes point at existing layers and settings, no white), JSON round trips, applying, the user folder.
+
 ## Rig templates (owner request 2026-10-18: pillars and matrix panel, as generators)
 - engine/rig_templates.*: pillars_strips (count, height, base, spacing or circle radius, density, serpentine) and matrix_strips (rows, width, row spacing, base, density, serpentine). Strips come out ordinary, with group tags pillars/matrix, left/right, top/bottom, even/odd. Rig tab > Templates: the numbers, a summary (strips, pixels, universes, full-white current, the pixel budget) and Replace the rig (confirmation; scenes and settings stay). tests/rig_templates_test.cpp.
 

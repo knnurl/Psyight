@@ -66,7 +66,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/analysis/align.cpp src/analysis/residual.cpp
                                src/analysis/bass_aggregates.cpp src/engine/rig.cpp
                                src/engine/colour.cpp src/engine/inputs.cpp
-                               src/engine/scene.cpp src/engine/rig_templates.cpp src/engine/limiters.cpp
+                               src/engine/scene.cpp src/engine/rig_templates.cpp src/engine/presets.cpp src/engine/limiters.cpp
                                src/engine/automation.cpp src/engine/modulation.cpp
                                src/engine/effect_spec.cpp
                                src/io/text_file.cpp src/io/session_record.cpp
@@ -80,7 +80,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/ml/student.cpp src/analysis/live_analysis.cpp
                                src/audio/capture.cpp src/audio/live_input.cpp
                                src/io/midi_map.cpp src/io/png.cpp src/io/recent_files.cpp
-                               src/io/user_settings.cpp)
+                               src/io/user_settings.cpp src/io/presets.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch
@@ -185,7 +185,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/golden_test.cpp tests/student_test.cpp tests/live_test.cpp
                              tests/midi_test.cpp tests/png_test.cpp
                              tests/recent_files_test.cpp tests/user_settings_test.cpp
-                             tests/rig_templates_test.cpp
+                             tests/rig_templates_test.cpp tests/presets_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)

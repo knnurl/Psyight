@@ -8,6 +8,8 @@ CMakeUserPresets.json
 imgui.ini
 psyight.recent.json
 psyight.settings.json
+# The user's own presets, beside the project (io/presets.h)
+/presets/
 
 # Private data: never commit audio, stems, labels for private tracks, or trained weights
 data/

@@ -92,6 +92,14 @@ The Show tab works like a rack in Ableton Live:
 
 Knobs: drag up or down (Shift for fine), double-click to type, right-click to reset.
 
+**Presets** (Tune depth):
+
+- **Show packs:** a whole show style in one go: scenes, palettes, automation and macro names. Built-in: Psyight default, Dark minimal, Full colour, Live macros. Loading asks first; macro values, the rig, limiters and output stay. "Save this show as a pack" keeps yours.
+- **Scene presets** (the scene's Presets button): a look with its layers, modulation and palette. Replace the scene you are editing, or add it as a new one. "Save this scene as a preset" keeps yours.
+- **Palettes:** "Add from the library" for more palettes (none use white: it is kept for kicks and drops); "Save to the library" keeps one.
+
+Your presets are JSON files in the `presets` folder beside the project (`scenes`, `palettes`, `shows`), easy to copy to another machine.
+
 ## MIDI controller
 
 In the Show tab, open "MIDI" and choose the controller. For each control you want, press Learn, then move the knob or press the pad. You can bind:

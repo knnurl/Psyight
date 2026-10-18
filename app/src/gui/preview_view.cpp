@@ -697,6 +697,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
                           "(SPEC 4.3).");
     draw_macros();
     if (tier_at_least(Tier::tune)) {
+        draw_library();
         std::vector<Scene> &scenes = project_.edit().scenes;
         edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(scenes.size()) - 1);
         const std::string scene_label =
@@ -705,6 +706,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
             draw_scene_editor(scenes, frame);
             ImGui::TreePop();
         }
+        apply_pending_scene_preset();
         if (scene_edited_) {
             project_.changed();
             scene_edited_ = false;
@@ -750,6 +752,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
 
 void PreviewView::draw_scene_editor(std::vector<Scene> &scenes, const ShowFrame &frame) {
     const float em = ImGui::GetFontSize();
+    draw_scene_presets();
     Scene &scene = scenes[static_cast<size_t>(edit_scene_)];
     ImGui::SetNextItemWidth(10.0f * em);
     scene_edited_ |= ImGui::InputText("Name", &scene.name);
@@ -851,6 +854,7 @@ void PreviewView::draw_palettes() {
     if (!ImGui::TreeNode("Palettes")) {
         return;
     }
+    draw_palette_library();
     Project &project = project_.edit();
     std::vector<Palette> &palettes = project.palettes;
     bool changed = false;
@@ -1603,6 +1607,246 @@ void PreviewView::draw_rig(const ShowFrame &frame) {
         draw->AddCircleFilled(at, radius, to_imgui(&frame.node_rgb[3 * i], config_.limiter.gamma));
     }
     ImGui::Dummy(size);
+}
+
+void PreviewView::draw_library() {
+    if (ImGui::Button("Show packs")) {
+        user_presets_ = load_user_presets(presets_dir_);
+        ImGui::OpenPopup("##show packs");
+    }
+    ImGui::SetItemTooltip("Whole show styles: scenes, palettes, automation and macro names.");
+    if (!preset_status_.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", preset_status_.c_str());
+    }
+    bool confirm = false;
+    bool save = false;
+    if (ImGui::BeginPopup("##show packs")) {
+        const auto item = [&](const ShowPack &pack) {
+            if (ImGui::Selectable(pack.name.c_str())) {
+                pending_pack_ = pack;
+                confirm = true;
+            }
+            if (!pack.description.empty()) {
+                ImGui::SetItemTooltip("%s", pack.description.c_str());
+            }
+        };
+        ImGui::SeparatorText("Built-in");
+        for (const ShowPack &pack : builtin_show_packs()) {
+            item(pack);
+        }
+        if (!user_presets_.shows.empty()) {
+            ImGui::SeparatorText("Yours");
+            for (const ShowPack &pack : user_presets_.shows) {
+                item(pack);
+            }
+        }
+        ImGui::Separator();
+        if (ImGui::Selectable("Save this show as a pack...")) {
+            preset_name_ = "My show";
+            preset_description_.clear();
+            save = true;
+        }
+        ImGui::EndPopup();
+    }
+    if (confirm) {
+        ImGui::OpenPopup("Load show pack?");
+    }
+    if (save) {
+        ImGui::OpenPopup("Save show pack");
+    }
+    if (ImGui::BeginPopupModal("Load show pack?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (pending_pack_) {
+            ImGui::Text("Replace the scenes, palettes and automation with %s?",
+                        pending_pack_->name.c_str());
+            ImGui::TextDisabled("Macro values, the rig, limiters and output stay.");
+            if (primary_button("Load")) {
+                apply_show_pack(project_.edit(), *pending_pack_);
+                project_.changed();
+                edit_scene_ = 0;
+                config_.manual_scene = -1;
+                dirty_ = true;
+                preset_status_ = "Loaded " + pending_pack_->name + ".";
+                pending_pack_.reset();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+        }
+        if (ImGui::Button("Cancel")) {
+            pending_pack_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    if (ImGui::BeginPopupModal("Save show pack", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SetNextItemWidth(16.0f * ImGui::GetFontSize());
+        ImGui::InputText("Name", &preset_name_);
+        ImGui::SetNextItemWidth(16.0f * ImGui::GetFontSize());
+        ImGui::InputText("Description", &preset_description_);
+        const std::filesystem::path path =
+            preset_path(presets_dir_, PresetKind::show, preset_name_);
+        if (std::filesystem::exists(path)) {
+            ImGui::TextColored(theme().warning, "Replaces %s.",
+                               path_to_utf8(path.filename()).c_str());
+        }
+        if (primary_button("Save")) {
+            ShowPack pack = show_pack_of(project_.project(), preset_name_);
+            pack.description = preset_description_;
+            const Result<void> saved = save_show_pack(presets_dir_, pack);
+            preset_status_ = saved ? "Saved " + path_to_utf8(path) + "." : saved.error().message;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void PreviewView::draw_scene_presets() {
+    if (ImGui::Button("Presets")) {
+        user_presets_ = load_user_presets(presets_dir_);
+        ImGui::OpenPopup("##scene presets");
+    }
+    ImGui::SetItemTooltip("Load a look into this scene, or add it as a new one; save this one.");
+    bool save = false;
+    if (ImGui::BeginPopup("##scene presets")) {
+        const auto item = [&](const ScenePreset &preset) {
+            if (ImGui::BeginMenu(preset.name.c_str())) {
+                if (ImGui::MenuItem("Replace this scene")) {
+                    pending_scene_ = preset;
+                    pending_scene_replace_ = true;
+                }
+                if (ImGui::MenuItem("Add as a new scene")) {
+                    pending_scene_ = preset;
+                    pending_scene_replace_ = false;
+                }
+                ImGui::EndMenu();
+            }
+            if (!preset.description.empty()) {
+                ImGui::SetItemTooltip("%s", preset.description.c_str());
+            }
+        };
+        ImGui::SeparatorText("Built-in");
+        for (const ScenePreset &preset : builtin_scene_presets()) {
+            item(preset);
+        }
+        if (!user_presets_.scenes.empty()) {
+            ImGui::SeparatorText("Yours");
+            for (const ScenePreset &preset : user_presets_.scenes) {
+                item(preset);
+            }
+        }
+        ImGui::Separator();
+        if (ImGui::Selectable("Save this scene as a preset...")) {
+            preset_name_ = project_.project().scenes[static_cast<size_t>(edit_scene_)].name;
+            preset_description_.clear();
+            save = true;
+        }
+        ImGui::EndPopup();
+    }
+    if (save) {
+        ImGui::OpenPopup("Save scene preset");
+    }
+    if (ImGui::BeginPopupModal("Save scene preset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SetNextItemWidth(16.0f * ImGui::GetFontSize());
+        ImGui::InputText("Name", &preset_name_);
+        ImGui::SetNextItemWidth(16.0f * ImGui::GetFontSize());
+        ImGui::InputText("Description", &preset_description_);
+        const std::filesystem::path path =
+            preset_path(presets_dir_, PresetKind::scene, preset_name_);
+        if (std::filesystem::exists(path)) {
+            ImGui::TextColored(theme().warning, "Replaces %s.",
+                               path_to_utf8(path.filename()).c_str());
+        }
+        if (primary_button("Save")) {
+            ScenePreset preset = scene_preset_of(project_.project(), edit_scene_);
+            preset.name = preset_name_;
+            preset.scene.name = preset_name_;
+            preset.description = preset_description_;
+            const Result<void> saved = save_scene_preset(presets_dir_, preset);
+            preset_status_ = saved ? "Saved " + path_to_utf8(path) + "." : saved.error().message;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void PreviewView::apply_pending_scene_preset() {
+    if (!pending_scene_) {
+        return;
+    }
+    edit_scene_ = apply_scene_preset(project_.edit(), *pending_scene_,
+                                     pending_scene_replace_ ? edit_scene_ : -1);
+    preset_status_ = (pending_scene_replace_ ? "Loaded " : "Added ") + pending_scene_->name + ".";
+    pending_scene_.reset();
+    scene_edited_ = true;
+}
+
+void PreviewView::draw_palette_library() {
+    if (ImGui::Button("Add from the library")) {
+        user_presets_ = load_user_presets(presets_dir_);
+        ImGui::OpenPopup("##palette library");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Save to the library")) {
+        ImGui::OpenPopup("##save palette");
+    }
+    ImGui::SetItemTooltip("Save one of this project's palettes as a preset.");
+    const auto swatches = [](const Palette &palette) {
+        for (size_t c = 0; c < palette.colours.size(); ++c) {
+            const Rgb &rgb = palette.colours[c];
+            ImGui::SameLine();
+            ImGui::PushID(static_cast<int>(c));
+            ImGui::ColorButton("##swatch", ImVec4(rgb.r, rgb.g, rgb.b, 1.0f),
+                               ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker,
+                               ImVec2(ImGui::GetFontSize(), ImGui::GetFontSize()));
+            ImGui::PopID();
+        }
+    };
+    if (ImGui::BeginPopup("##palette library")) {
+        const auto item = [&](const Palette &palette) {
+            ImGui::PushID(palette.name.c_str());
+            if (ImGui::Selectable(palette.name.c_str(), false, 0,
+                                  ImVec2(8.0f * ImGui::GetFontSize(), 0.0f))) {
+                add_palette(project_.edit(), palette);
+                project_.changed();
+                preset_status_ = "Added the palette " + palette.name + ".";
+            }
+            swatches(palette);
+            ImGui::PopID();
+        };
+        ImGui::SeparatorText("Built-in");
+        for (const Palette &palette : builtin_palettes()) {
+            item(palette);
+        }
+        if (!user_presets_.palettes.empty()) {
+            ImGui::SeparatorText("Yours");
+            for (const Palette &palette : user_presets_.palettes) {
+                item(palette);
+            }
+        }
+        ImGui::EndPopup();
+    }
+    if (ImGui::BeginPopup("##save palette")) {
+        for (const Palette &palette : project_.project().palettes) {
+            ImGui::PushID(palette.name.c_str());
+            if (ImGui::Selectable(palette.name.c_str(), false, 0,
+                                  ImVec2(8.0f * ImGui::GetFontSize(), 0.0f))) {
+                const Result<void> saved = save_palette_preset(presets_dir_, palette);
+                preset_status_ =
+                    saved ? "Saved the palette " + palette.name + "." : saved.error().message;
+            }
+            swatches(palette);
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
 }
 
 } // namespace psyight

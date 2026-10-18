@@ -1,5 +1,7 @@
 #include "io/project.h"
 
+#include "io/presets.h"
+
 #include "core/paths.h"
 #include "engine/effect_spec.h"
 #include "io/text_file.h"
@@ -142,6 +144,45 @@ Scene parse_scene(const json &item) {
         }
     }
     return s;
+}
+
+Palette parse_palette(const json &item) {
+    Palette palette;
+    palette.name = optional<std::string>(item, "name", "");
+    for (const json &c : item.at("colours").get_ref<const json::array_t &>()) {
+        const auto &rgb = c.get_ref<const json::array_t &>();
+        if (rgb.size() != 3) {
+            throw FieldError{"palette colours need r, g and b"};
+        }
+        palette.colours.push_back(
+            {unit_value(rgb[0], "r"), unit_value(rgb[1], "g"), unit_value(rgb[2], "b")});
+    }
+    if (palette.colours.empty()) {
+        throw FieldError{"palette " + palette.name + " has no colours"};
+    }
+    return palette;
+}
+
+json palette_json(const Palette &palette) {
+    json colours = json::array();
+    for (const Rgb &c : palette.colours) {
+        colours.push_back({finite(c.r, "r"), finite(c.g, "g"), finite(c.b, "b")});
+    }
+    return {{"name", palette.name}, {"colours", colours}};
+}
+
+AutomationParams parse_automation(const json &aut) {
+    AutomationParams a;
+    a.crossfade_beats = number(aut, "crossfade_beats", a.crossfade_beats, 0.0, 64.0);
+    a.palette_every_phrases = integer(aut, "palette_every_phrases", a.palette_every_phrases, 0, 64);
+    a.palette_slew_beats = number(aut, "palette_slew_beats", a.palette_slew_beats, 0.0, 64.0);
+    return a;
+}
+
+json automation_json(const AutomationParams &a) {
+    return {{"crossfade_beats", finite(a.crossfade_beats, "crossfade_beats")},
+            {"palette_every_phrases", a.palette_every_phrases},
+            {"palette_slew_beats", finite(a.palette_slew_beats, "palette_slew_beats")}};
 }
 
 json scene_json(const Scene &s) {
@@ -395,30 +436,12 @@ Result<Project> parse_project_json(std::string_view json_text) {
             }
         }
 
-        const json &aut = section(root, "automation");
-        AutomationParams &a = p.automation;
-        a.crossfade_beats = number(aut, "crossfade_beats", a.crossfade_beats, 0.0, 64.0);
-        a.palette_every_phrases =
-            integer(aut, "palette_every_phrases", a.palette_every_phrases, 0, 64);
-        a.palette_slew_beats = number(aut, "palette_slew_beats", a.palette_slew_beats, 0.0, 64.0);
+        p.automation = parse_automation(section(root, "automation"));
 
         if (const auto it = root.find("palettes"); it != root.end()) {
             p.palettes.clear();
             for (const json &item : it->get_ref<const json::array_t &>()) {
-                Palette palette;
-                palette.name = optional<std::string>(item, "name", "");
-                for (const json &c : item.at("colours").get_ref<const json::array_t &>()) {
-                    const auto &rgb = c.get_ref<const json::array_t &>();
-                    if (rgb.size() != 3) {
-                        throw FieldError{"palette colours need r, g and b"};
-                    }
-                    palette.colours.push_back({unit_value(rgb[0], "r"), unit_value(rgb[1], "g"),
-                                               unit_value(rgb[2], "b")});
-                }
-                if (palette.colours.empty()) {
-                    throw FieldError{"palette " + palette.name + " has no colours"};
-                }
-                p.palettes.push_back(std::move(palette));
+                p.palettes.push_back(parse_palette(item));
             }
             if (p.palettes.empty()) {
                 throw FieldError{"no palettes"};
@@ -480,11 +503,7 @@ Result<std::string> to_project_json(const Project &p) {
         }
         json palettes = json::array();
         for (const Palette &palette : p.palettes) {
-            json colours = json::array();
-            for (const Rgb &c : palette.colours) {
-                colours.push_back({finite(c.r, "r"), finite(c.g, "g"), finite(c.b, "b")});
-            }
-            palettes.push_back({{"name", palette.name}, {"colours", colours}});
+            palettes.push_back(palette_json(palette));
         }
         const json root = {
             {"schema", kProjectSchemaVersion},
@@ -511,10 +530,7 @@ Result<std::string> to_project_json(const Project &p) {
               {"gamma", finite(l.gamma, "gamma")},
               {"group_caps", group_caps}}},
             {"latency_offset_ms", finite(p.latency_offset_ms, "latency_offset_ms")},
-            {"automation",
-             {{"crossfade_beats", finite(a.crossfade_beats, "crossfade_beats")},
-              {"palette_every_phrases", a.palette_every_phrases},
-              {"palette_slew_beats", finite(a.palette_slew_beats, "palette_slew_beats")}}},
+            {"automation", automation_json(a)},
             {"scenes", scenes},
             {"palettes", palettes},
             {"midi", {{"port", p.midi_port}, {"bindings", midi_bindings}}},
@@ -546,6 +562,128 @@ Result<void> save_project(const std::filesystem::path &path, const Project &proj
         return json_text.error();
     }
     return write_text_file_atomic(path, json_text.value());
+}
+
+// Preset files (io/presets.h): the project's scene, palette and automation JSON in small files.
+namespace {
+
+constexpr int kPresetSchemaVersion = 1;
+
+void expect_format(const json &root, const char *format) {
+    if (optional<std::string>(root, "format", "") != format) {
+        throw FieldError{std::string("not a ") + format + " file"};
+    }
+}
+
+template <typename T, typename F> Result<T> parse_preset(std::string_view text, F &&parse) {
+    try {
+        return parse(json::parse(text));
+    } catch (const json::exception &e) {
+        return Error{std::string("invalid preset JSON: ") + e.what()};
+    } catch (const FieldError &e) {
+        return Error{"invalid preset: " + e.message};
+    }
+}
+
+template <typename F> Result<std::string> write_preset(F &&make) {
+    try {
+        return make().dump(2) + "\n";
+    } catch (const json::exception &e) {
+        return Error{std::string("cannot write preset: ") + e.what()};
+    } catch (const FieldError &e) {
+        return Error{"cannot write preset: " + e.message};
+    }
+}
+
+} // namespace
+
+Result<std::string> scene_preset_json(const ScenePreset &preset) {
+    return write_preset([&] {
+        return json{{"format", "psyight scene preset"},
+                    {"schema", kPresetSchemaVersion},
+                    {"name", preset.name},
+                    {"description", preset.description},
+                    {"scene", scene_json(preset.scene)},
+                    {"palette", palette_json(preset.palette)}};
+    });
+}
+
+Result<ScenePreset> parse_scene_preset(std::string_view text) {
+    return parse_preset<ScenePreset>(text, [](const json &root) {
+        expect_format(root, "psyight scene preset");
+        ScenePreset preset;
+        preset.name = root.at("name").get<std::string>();
+        preset.description = optional<std::string>(root, "description", "");
+        preset.scene = parse_scene(root.at("scene"));
+        preset.scene.palette = 0;
+        preset.palette = parse_palette(root.at("palette"));
+        return preset;
+    });
+}
+
+Result<std::string> palette_preset_json(const Palette &palette) {
+    return write_preset([&] {
+        return json{{"format", "psyight palette"},
+                    {"schema", kPresetSchemaVersion},
+                    {"palette", palette_json(palette)}};
+    });
+}
+
+Result<Palette> parse_palette_preset(std::string_view text) {
+    return parse_preset<Palette>(text, [](const json &root) {
+        expect_format(root, "psyight palette");
+        return parse_palette(root.at("palette"));
+    });
+}
+
+Result<std::string> show_pack_json(const ShowPack &pack) {
+    return write_preset([&] {
+        json scenes = json::array();
+        for (const Scene &s : pack.scenes) {
+            scenes.push_back(scene_json(s));
+        }
+        json palettes = json::array();
+        for (const Palette &p : pack.palettes) {
+            palettes.push_back(palette_json(p));
+        }
+        return json{{"format", "psyight show pack"},
+                    {"schema", kPresetSchemaVersion},
+                    {"name", pack.name},
+                    {"description", pack.description},
+                    {"scenes", scenes},
+                    {"palettes", palettes},
+                    {"automation", automation_json(pack.automation)},
+                    {"macro_names", pack.macro_names}};
+    });
+}
+
+Result<ShowPack> parse_show_pack(std::string_view text) {
+    return parse_preset<ShowPack>(text, [](const json &root) {
+        expect_format(root, "psyight show pack");
+        ShowPack pack;
+        pack.name = root.at("name").get<std::string>();
+        pack.description = optional<std::string>(root, "description", "");
+        for (const json &item : root.at("palettes").get_ref<const json::array_t &>()) {
+            pack.palettes.push_back(parse_palette(item));
+        }
+        for (const json &item : root.at("scenes").get_ref<const json::array_t &>()) {
+            pack.scenes.push_back(parse_scene(item));
+        }
+        if (pack.scenes.empty() || pack.palettes.empty()) {
+            throw FieldError{"a show pack needs scenes and palettes"};
+        }
+        for (Scene &s : pack.scenes) {
+            s.palette = std::clamp(s.palette, 0, static_cast<int>(pack.palettes.size()) - 1);
+        }
+        pack.automation = parse_automation(section(root, "automation"));
+        if (const auto names = root.find("macro_names"); names != root.end()) {
+            const json::array_t &list = names->get_ref<const json::array_t &>();
+            for (size_t i = 0; i < list.size() && i < pack.macro_names.size(); ++i) {
+                pack.macro_names[i] = list[i].get<std::string>();
+            }
+        }
+        return pack;
+    });
 }
 
 } // namespace psyight
