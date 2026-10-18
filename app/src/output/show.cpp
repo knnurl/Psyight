@@ -11,6 +11,7 @@ namespace psyight {
 namespace {
 
 constexpr double kSeekResetS = 0.5; // A jump this large restarts the limiters' history.
+constexpr double kTestPatternFrameRateHz = 60.0; // The show thread's rate: the pattern's clock.
 
 } // namespace
 
@@ -49,7 +50,13 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         modulation_.clear();
     }
     last_t_s_ = t_s;
-    if (config.send_to_network && socket_ == nullptr) {
+    const bool testing = config.test.kind != TestPatternKind::off;
+    if (config.test.kind != test_kind_) {
+        test_kind_ = config.test.kind;
+        test_frames_ = 0;
+    }
+    const bool network = config.send_to_network || (testing && config.test.send);
+    if (network && socket_ == nullptr) {
         Result<std::unique_ptr<UdpSocket>> opened = open_udp_socket();
         if (opened) {
             socket_ = std::move(opened.value());
@@ -57,12 +64,18 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         } else {
             network_error_ = opened.error().message;
         }
-    } else if (!config.send_to_network) {
+    } else if (!network) {
         socket_.reset();
     }
 
     ShowFrame out;
-    if (config.hold && !config.blackout && held_.frame.size() == config.rig.pixels.size()) {
+    if (testing) {
+        out.section = "test";
+        out.test_clock_s = static_cast<double>(test_frames_++) / kTestPatternFrameRateHz;
+        out.frame = config.blackout ? Frame(config.rig.pixels.size())
+                                    : render_test_pattern(config.test, config.rig, config.patch,
+                                                          out.test_clock_s);
+    } else if (config.hold && !config.blackout && held_.frame.size() == config.rig.pixels.size()) {
         out = held_; // The look, frozen; the limiters and automation are skipped.
     } else if (config.analysis != nullptr || config.live != nullptr) {
         EngineInputs inputs;
@@ -93,7 +106,8 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     } else {
         out.frame.assign(config.rig.pixels.size(), Rgb{});
     }
-    if (!config.hold || config.blackout || held_.frame.size() != config.rig.pixels.size()) {
+    if (testing || !config.hold || config.blackout ||
+        held_.frame.size() != config.rig.pixels.size()) {
         out.report = limiters_.process(out.frame, t_s);
         flashes_limited_ += out.report.flash_limited;
         held_ = out;

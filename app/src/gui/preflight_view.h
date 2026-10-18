@@ -1,7 +1,8 @@
 // Preflight panel (SPEC section 11): the checks of output/preflight.h, run every frame on the
 // current project, track, audio device and network, coloured by level, with Art-Net node
-// discovery on request (it broadcasts an ArtPoll on every interface, so it is never automatic)
-// and a button that copies the report as text.
+// discovery on request (it broadcasts an ArtPoll on every interface, so it is never automatic),
+// a button that copies the report as text, and test patterns (output/test_patterns.h: chase,
+// colour order, identify universe, all on) for checking the wiring.
 #pragma once
 
 #include "gui/preview_view.h"
@@ -20,15 +21,17 @@ namespace psyight {
 
 class PreflightView {
   public:
-    PreflightView(Session &session, ProjectState &project, const PreviewView &preview)
+    PreflightView(Session &session, ProjectState &project, PreviewView &preview)
         : session_(session), project_(project), preview_(preview) {}
 
     void draw();
 
   private:
+    void draw_test_patterns();
+
     Session &session_;
     ProjectState &project_;
-    const PreviewView &preview_;
+    PreviewView &preview_;
     std::vector<NetworkInterface> interfaces_;
     std::chrono::steady_clock::time_point interfaces_at_{};
     std::optional<std::vector<ArtNode>> nodes_;

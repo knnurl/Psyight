@@ -1,6 +1,7 @@
 #include "gui/preflight_view.h"
 
 #include "gui/theme.h"
+#include "gui/widgets.h"
 #include "output/discovery.h"
 #include "output/preflight.h"
 
@@ -124,6 +125,7 @@ void PreflightView::draw() {
         ImGui::TextColored(level_colour(CheckLevel::warn), "Discovery: %s",
                            discovery_error_.c_str());
     }
+    draw_test_patterns();
     const ImGuiTableFlags flags =
         ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY;
     if (ImGui::BeginTable("checks", 2, flags)) {
@@ -142,6 +144,126 @@ void PreflightView::draw() {
         ImGui::EndTable();
     }
     ImGui::End();
+}
+
+void PreflightView::draw_test_patterns() {
+    if (!ImGui::CollapsingHeader("Test patterns", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+    if (!preview_.test_allowed()) {
+        ImGui::TextDisabled("Test patterns run in Preflight or Preview (top bar).");
+        return;
+    }
+    TestPattern t = preview_.test_pattern();
+    // A segmented choice; clicking the one that is on turns it off.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, ImGui::GetStyle().ItemSpacing.y));
+    bool first = true;
+    for (const TestPatternKind kind :
+         {TestPatternKind::chase, TestPatternKind::colour_order, TestPatternKind::identify_universe,
+          TestPatternKind::all_on}) {
+        if (!first) {
+            ImGui::SameLine();
+        }
+        first = false;
+        if (toggle_button(test_pattern_name(kind), t.kind == kind)) {
+            t.kind = t.kind == kind ? TestPatternKind::off : kind;
+        }
+    }
+    ImGui::PopStyleVar();
+
+    const float em = ImGui::GetFontSize();
+    const Project &p = project_.project();
+    const std::shared_ptr<const ShowFrame> frame = preview_.latest_frame();
+    const auto help = [](const char *text) {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme().text_dim);
+        ImGui::TextWrapped("%s", text);
+        ImGui::PopStyleColor();
+    };
+    switch (t.kind) {
+    case TestPatternKind::off:
+        help("Chase: each strip's direction and order. Colour order: catches a wrong RGB order. "
+             "Identify universe: which pixels a universe reaches. All on: what full white draws "
+             "through the limiters.");
+        break;
+    case TestPatternKind::chase: {
+        ImGui::SetNextItemWidth(12.0f * em);
+        const std::string shown = t.strip >= 0 && t.strip < static_cast<int>(p.strips.size())
+                                      ? p.strips[static_cast<size_t>(t.strip)].spec.name
+                                      : std::string("Every strip");
+        if (ImGui::BeginCombo("##strip", shown.c_str())) {
+            if (ImGui::Selectable("Every strip", t.strip < 0)) {
+                t.strip = -1;
+            }
+            for (int i = 0; i < static_cast<int>(p.strips.size()); ++i) {
+                ImGui::PushID(i);
+                if (ImGui::Selectable(p.strips[static_cast<size_t>(i)].spec.name.c_str(),
+                                      t.strip == i)) {
+                    t.strip = i;
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(7.0f * em);
+        drag_double("##speed", &t.chase_pixels_per_s, 0.5f, 1.0, 600.0, "%.0f px/s");
+        help("A short segment runs from each strip's first pixel to its last, in the strip's own "
+             "colour. Check each strip starts at the end you expect, and the order along the "
+             "chain.");
+        break;
+    }
+    case TestPatternKind::colour_order: {
+        static constexpr const char *kNames[] = {"RED", "GREEN", "BLUE"};
+        const ImVec4 colours[] = {ImVec4(1.0f, 0.25f, 0.25f, 1.0f), ImVec4(0.3f, 1.0f, 0.3f, 1.0f),
+                                  ImVec4(0.35f, 0.5f, 1.0f, 1.0f)};
+        const int step = frame != nullptr ? colour_order_step(frame->test_clock_s) : 0;
+        ImGui::TextUnformatted("Every pixel should show");
+        ImGui::SameLine();
+        ImGui::PushFont(theme_font(ThemeFont::timecode));
+        ImGui::TextColored(colours[step], "%s", kNames[step]);
+        ImGui::PopFont();
+        help("Red, green and blue in turn, a second each. A strip showing another colour has the "
+             "wrong colour order: change its Order in the Rig tab.");
+        break;
+    }
+    case TestPatternKind::identify_universe: {
+        const std::vector<int> &universes = project_.patch().universes;
+        if (!universes.empty() &&
+            std::find(universes.begin(), universes.end(), t.universe) == universes.end()) {
+            t.universe = universes.front();
+        }
+        ImGui::SetNextItemWidth(8.0f * em);
+        if (ImGui::BeginCombo("Universe", std::to_string(t.universe).c_str())) {
+            for (const int u : universes) {
+                if (ImGui::Selectable(std::to_string(u).c_str(), u == t.universe)) {
+                    t.universe = u;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        help("Only the pixels patched to this universe light, in cyan.");
+        break;
+    }
+    case TestPatternKind::all_on:
+        if (frame != nullptr) {
+            mono_text("%.1f A estimated%s", frame->report.current_a,
+                      frame->report.power_scale < 1.0 ? " (power limited)" : "");
+        }
+        help("White at full, through the brightness cap and the power budget: what the rig "
+             "really draws. Mind the supply.");
+        break;
+    }
+    if (t.kind != TestPatternKind::off && t.kind != TestPatternKind::all_on) {
+        ImGui::SetNextItemWidth(7.0f * em);
+        drag_double("Level", &t.level, 0.005f, 0.0, 1.0, "%.2f");
+    }
+    ImGui::Checkbox("Send to the lights", &t.send);
+    ImGui::SetItemTooltip("Off: the preview (virtual node) only.");
+    if (t.kind != TestPatternKind::off && t.send) {
+        ImGui::SameLine();
+        ImGui::TextColored(theme().danger, "Test pattern on the lights.");
+    }
+    preview_.set_test_pattern(t);
 }
 
 } // namespace psyight

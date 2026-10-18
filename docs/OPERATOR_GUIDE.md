@@ -26,7 +26,14 @@ Rig tab (Engineer depth) > Templates builds a rig from a few numbers: **Pillars*
 
 ## Before the show: Preflight
 
-Open the Preflight tab. Every line should be green; read every amber line:
+Open the Preflight tab. **Test patterns** check the wiring before anything else (in Preflight or Preview; "Send to the lights" puts them on the node):
+
+- **Chase:** a short segment runs along every strip, in that strip's colour. Each should start at the end you expect.
+- **Colour order:** the whole rig shows red, green, blue in turn, and the panel names the colour. A strip showing another colour needs its Order changed in the Rig tab.
+- **Identify universe:** only one universe's pixels light.
+- **All on:** full white through the limiters, with the current it draws. Mind the supply.
+
+Every check line should be green; read every amber line:
 
 - **Audio:** device, sample rate and buffer size.
 - **Analysis:** the track, or live input, is analysed.

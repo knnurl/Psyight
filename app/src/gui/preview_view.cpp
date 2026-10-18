@@ -56,8 +56,21 @@ PreviewView::PreviewView(Session &session, ProjectState &project)
           return clock.update(now_s, t.position_now(), rate);
       }) {}
 
+void PreviewView::set_test_pattern(const TestPattern &pattern) {
+    if (pattern.kind != TestPatternKind::off && !test_allowed()) {
+        return;
+    }
+    if (pattern != config_.test) {
+        config_.test = pattern;
+        dirty_ = true;
+    }
+}
+
 void PreviewView::set_ladder(Ladder step) {
     ladder_ = step;
+    if (step >= Ladder::ambient) {
+        config_.test.kind = TestPatternKind::off; // The show, not a test, goes to the lights.
+    }
     config_.send_to_network = step >= Ladder::ambient;
     if (step == Ladder::ambient) {
         config_.manual_scene = ambient_scene();

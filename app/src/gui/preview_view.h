@@ -44,6 +44,12 @@ class PreviewView {
     // React or Show on the top bar: the app may switch to its show look (main.cpp).
     bool performing() const { return ladder_ == Ladder::react || ladder_ == Ladder::show; }
     bool &preview_open() { return preview_open_; } // View > Rig preview.
+    // Test patterns (Preflight tab): only in Preflight and Preview; stepping up to Ambient, React
+    // or Show stops one.
+    const TestPattern &test_pattern() const { return config_.test; }
+    void set_test_pattern(const TestPattern &pattern);
+    bool test_allowed() const { return ladder_ <= Ladder::preview; }
+    std::shared_ptr<const ShowFrame> latest_frame() const { return show_.latest(); }
     void apply_settings(const UserSettings &settings) { preview_open_ = settings.preview_open; }
     void store_settings(UserSettings &settings) const { settings.preview_open = preview_open_; }
 
