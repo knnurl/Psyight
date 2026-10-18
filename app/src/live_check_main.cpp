@@ -1,4 +1,4 @@
-﻿// psyight_live_check: runs the live analysis (analysis/live_analysis.h) over a file as if it were
+// psyight_live_check: runs the live analysis (analysis/live_analysis.h) over a file as if it were
 // arriving live, and measures it against the file-mode analysis of the same audio.
 //
 //   psyight_live_check <audio> [--block <samples>] [--student <weights>]

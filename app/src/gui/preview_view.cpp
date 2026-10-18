@@ -4,6 +4,7 @@
 #include "core/paths.h"
 #include "core/playhead_clock.h"
 #include "engine/effect_spec.h"
+#include "gui/theme.h"
 #include "gui/tier.h"
 #include "io/session_record.h"
 
@@ -23,8 +24,6 @@ namespace psyight {
 namespace {
 
 constexpr float kMarginPixels = 12.0f;
-constexpr ImU32 kBackground = IM_COL32(8, 8, 12, 255);
-const ImVec4 kWarning(1.0f, 0.45f, 0.35f, 1.0f);
 constexpr double kRateWindowS = 1.0;
 
 // Node bytes are LED drive levels (gamma applied); the screen wants the frame's values back.
@@ -152,9 +151,11 @@ void PreviewView::draw_top_bar() {
     ImGui::TextDisabled("|");
     for (const Step &s : kSteps) {
         ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, theme().accent); // The active mode.
         if (ImGui::RadioButton(s.name, ladder_ == s.step)) {
             set_ladder(s.step);
         }
+        ImGui::PopStyleColor();
         ImGui::SetItemTooltip("%s", s.meaning);
     }
     ImGui::SameLine();
@@ -180,11 +181,12 @@ void PreviewView::draw_top_bar() {
         ImGui::SetItemTooltip("Record the show to recordings/ (frames, settings, detections). "
                               "psyight_replay checks a recording replays identically.");
     } else {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.15f, 0.1f, 1.0f));
-        if (ImGui::Button("Stop recording")) {
+        push_filled_button(theme().danger); // Recording: red, as on recorders.
+        const bool stop = ImGui::Button("Stop recording");
+        pop_filled_button();
+        if (stop) {
             stop_recording("Recorded");
         }
-        ImGui::PopStyleColor();
         ImGui::SameLine();
         ImGui::Text("REC %lld frames%s", static_cast<long long>(recorder_->frames_written()),
                     recorder_->dropped() > 0 ? ", some dropped" : "");
@@ -198,7 +200,7 @@ void PreviewView::draw_top_bar() {
     }
     if (!project_.project().limiter.flash_limiter) { // Persistent, at every tier (SPEC 7.7).
         ImGui::SameLine();
-        ImGui::TextColored(kWarning, "FLASH LIMITER OFF");
+        ImGui::TextColored(theme().danger, "FLASH LIMITER OFF");
     }
     // Blackout and Hold: fixed at the right, with hotkeys, no confirmation (SPEC 9.1).
     const ImGuiStyle &style = ImGui::GetStyle();
@@ -207,20 +209,21 @@ void PreviewView::draw_top_bar() {
                           style.ItemSpacing.x;
     ImGui::SameLine(ImGui::GetWindowWidth() - buttons - style.WindowPadding.x);
     const auto toggle = [this](const char *label, bool &on, const ImVec4 &colour) {
-        if (on) {
-            ImGui::PushStyleColor(ImGuiCol_Button, colour);
+        const bool was_on = on;
+        if (was_on) {
+            push_filled_button(colour);
         }
         if (ImGui::Button(label)) {
             on = !on;
             dirty_ = true;
         }
-        if (on) {
-            ImGui::PopStyleColor();
+        if (was_on) {
+            pop_filled_button();
         }
     };
-    toggle("Blackout (B)", config_.blackout, ImVec4(0.8f, 0.15f, 0.1f, 1.0f));
+    toggle("Blackout (B)", config_.blackout, theme().danger); // Safety: red, not the accent.
     ImGui::SameLine();
-    toggle("Hold (H)", config_.hold, ImVec4(0.8f, 0.55f, 0.1f, 1.0f));
+    toggle("Hold (H)", config_.hold, theme().accent);
     if (!ImGui::GetIO().WantTextInput) {
         if (ImGui::IsKeyPressed(ImGuiKey_B, false)) {
             config_.blackout = !config_.blackout;
@@ -374,7 +377,7 @@ void PreviewView::draw_live() {
         ImGui::SetItemTooltip("Analyses the input causally (the M4 student and a beat loop on the "
                               "kicks) and drives the show from it. Pauses the file.");
         if (!live_error_.empty()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "%s", live_error_.c_str());
+            ImGui::TextColored(theme().danger, "%s", live_error_.c_str());
         }
         return;
     }
@@ -568,7 +571,7 @@ void PreviewView::draw_midi() {
         ImGui::EndCombo();
     }
     if (!midi_error_.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "%s", midi_error_.c_str());
+        ImGui::TextColored(theme().danger, "%s", midi_error_.c_str());
     }
     std::vector<std::pair<std::string, std::string>> targets = {
         {"blackout", "Blackout"},           {"hold", "Hold"},
@@ -589,7 +592,7 @@ void PreviewView::draw_midi() {
         ImGui::TableNextColumn();
         const MidiBinding *b = midi_map_.binding_of(target);
         if (midi_map_.learning() == target) {
-            ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.2f, 1.0f), "move a control...");
+            ImGui::TextColored(theme().accent, "move a control...");
         } else if (b != nullptr) {
             ImGui::TextUnformatted(describe(*b).c_str());
         } else {
@@ -675,8 +678,8 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
             project_.changed();
         }
         if (!p.flash_limiter) {
-            ImGui::TextColored(kWarning, "Flash limiter off: photosensitive epilepsy risk "
-                                         "(SPEC 7.7).");
+            ImGui::TextColored(theme().danger, "Flash limiter off: photosensitive epilepsy risk "
+                                               "(SPEC 7.7).");
         }
         ImGui::Text("Flashes held back so far: %lld",
                     static_cast<long long>(frame.flashes_limited));
@@ -1070,9 +1073,13 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
         const bool playing = frame.mix.to == i;
         const bool fading_out = frame.mix.from == i;
         if (playing || fading_out) {
-            ImVec4 colour = style.Colors[ImGuiCol_ButtonActive];
-            colour.w = playing ? 1.0f : 0.5f;
-            ImGui::PushStyleColor(ImGuiCol_Button, colour);
+            // The playing scene is an active toggle: the accent; half the accent while it fades
+            // out, with the normal text (dark text would be lost on it).
+            if (playing) {
+                push_filled_button(theme().accent);
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button, with_alpha(theme().accent, 0.5f));
+            }
         }
         ImGui::PushID(i);
         if (ImGui::Button(name.c_str())) {
@@ -1084,7 +1091,9 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
             dirty_ = true;
         }
         ImGui::PopID();
-        if (playing || fading_out) {
+        if (playing) {
+            pop_filled_button();
+        } else if (fading_out) {
             ImGui::PopStyleColor();
         }
         std::string tags;
@@ -1123,7 +1132,8 @@ void PreviewView::draw_output(const ShowFrame &frame) {
     int first_universe = project_.project().first_universe;
     bool changed = false;
     if (config_.send_to_network) {
-        ImGui::TextColored(kWarning, "Sending to the network (top bar: Ambient, React or Show).");
+        ImGui::TextColored(theme().danger,
+                           "Sending to the network (top bar: Ambient, React or Show).");
     } else {
         ImGui::TextUnformatted("Not sending: the virtual node (this preview) only. The top bar's "
                                "Ambient, React and Show send.");
@@ -1155,7 +1165,7 @@ void PreviewView::draw_output(const ShowFrame &frame) {
         address_active_ = ImGui::IsItemActive();
         if (!parse_ipv4(address_text_)) {
             ImGui::SameLine();
-            ImGui::TextColored(kWarning, "not an IPv4 address");
+            ImGui::TextColored(theme().danger, "not an IPv4 address");
         }
     }
     ImGui::SetNextItemWidth(6.0f * em);
@@ -1183,7 +1193,7 @@ void PreviewView::draw_output(const ShowFrame &frame) {
     const std::vector<int> &universes = project_.patch().universes;
     if (o.protocol == OutputProtocol::sacn && o.sync &&
         std::find(universes.begin(), universes.end(), o.sync_universe) != universes.end()) {
-        ImGui::TextColored(kWarning, "The sync universe carries pixel data.");
+        ImGui::TextColored(theme().danger, "The sync universe carries pixel data.");
     }
     ImGui::Text("Universes %d to %d, %d packets a frame, %.1f fps",
                 universes.empty() ? 0 : universes.front(), universes.empty() ? 0 : universes.back(),
@@ -1200,7 +1210,7 @@ void PreviewView::draw_output(const ShowFrame &frame) {
                 static_cast<long long>(frame.node.sequence_gaps),
                 static_cast<long long>(frame.node.bad_packets));
     if (frame.send_errors > 0 || !frame.network_error.empty()) {
-        ImGui::TextColored(kWarning, "Network: %lld send errors. %s",
+        ImGui::TextColored(theme().danger, "Network: %lld send errors. %s",
                            static_cast<long long>(frame.send_errors), frame.network_error.c_str());
     }
 }
@@ -1213,7 +1223,8 @@ void PreviewView::draw_rig(const ShowFrame &frame) {
         return;
     }
     ImDrawList *draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), kBackground);
+    draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y),
+                        to_u32(theme().preview_bg));
     const double width_m = std::max(1e-3, rig.max.x - rig.min.x);
     const double height_m = std::max(1e-3, rig.max.y - rig.min.y);
     const double scale = std::min((size.x - 2.0f * kMarginPixels) / width_m,

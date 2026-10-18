@@ -1,5 +1,6 @@
 #include "gui/analysis_view.h"
 
+#include "gui/theme.h"
 #include "gui/time_plot.h"
 
 #include <imgui.h>
@@ -29,8 +30,6 @@ constexpr float kMinPlotHeight = 4.0f;
 int kWholeNumbers = 0; // Decimals for format_fixed_width (ImPlot takes a non-const pointer).
 int kHundredths = 2;
 constexpr double kMaxRestSlots = 2000.0; // Rests are shaded only when this few slots are in view.
-constexpr ImU32 kRestShade = IM_COL32(170, 110, 255, 45);
-constexpr ImU32 kHatTick = IM_COL32(255, 255, 255, 200);
 
 // Plots the visible part of a per-frame series, decimated to at most kMaxPlotPoints.
 void plot_series(const char *label, const std::vector<float> &values, double frame_s, double from_s,
@@ -63,7 +62,7 @@ void AnalysisView::draw() {
     draw_toolbar(track);
     if (!textures_.built_for(&analysis->spectrogram) || colours_changed_) {
         textures_.build(analysis->spectrogram, analysis->hop_samples, analysis->sample_rate_hz,
-                        min_db_, max_db_, implot_colour_table(ImPlotColormap_Viridis));
+                        min_db_, max_db_, implot_colour_table(theme().spectrogram_colormap));
         colours_changed_ = false;
     }
 
@@ -83,15 +82,33 @@ void AnalysisView::draw() {
         ImGui::GetContentRegionAvail().y -
         static_cast<float>(kPlotRatios.size()) * ImGui::GetFrameHeightWithSpacing() -
         static_cast<float>(open_count) * ImGui::GetStyle().ItemSpacing.y;
-    const auto height = [&](size_t i) {
-        return std::max(kMinPlotHeight * ImGui::GetFontSize(),
-                        available * kPlotRatios[i] / std::max(open_ratio, 1e-3f));
-    };
+    // Plots whose share falls below the minimum get the minimum; the rest share what is left by
+    // their ratios, so the open plots always fit (unless even the minimums do not).
+    std::array<float, kPlotRatios.size()> heights{};
+    {
+        const float minimum = kMinPlotHeight * plot_font_size(); // Lines of axis labels.
+        float rest = available;
+        float rest_ratio = open_ratio;
+        std::array<bool, kPlotRatios.size()> fixed{};
+        for (size_t i = 0; i < kPlotRatios.size(); ++i) {
+            if (open_[i] && available * kPlotRatios[i] / std::max(open_ratio, 1e-3f) < minimum) {
+                fixed[i] = true;
+                rest -= minimum;
+                rest_ratio -= kPlotRatios[i];
+            }
+        }
+        for (size_t i = 0; i < kPlotRatios.size(); ++i) {
+            heights[i] = fixed[i] ? minimum
+                         : rest > minimum
+                             ? rest * kPlotRatios[i] / std::max(rest_ratio, 1e-3f)
+                             : available * kPlotRatios[i] / std::max(open_ratio, 1e-3f);
+        }
+    }
+    const auto height = [&](size_t i) { return heights[i]; };
 
     const LogSpectrogram &spectrogram = analysis->spectrogram;
     open_[0] = ImGui::CollapsingHeader("Spectrogram", ImGuiTreeNodeFlags_DefaultOpen);
-    if (open_[0] &&
-        ImPlot::BeginPlot("##spectrogram", ImVec2(-1, height(0)), ImPlotFlags_NoLegend)) {
+    if (open_[0] && begin_plot("##spectrogram", ImVec2(-1, height(0)), ImPlotFlags_NoLegend)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "Hz", ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, spectrogram.rows, ImPlotCond_Always);
@@ -124,8 +141,7 @@ void AnalysisView::draw() {
         // Dragging the downbeat is one undoable gesture from press to release.
         LabelEditor &labels = session_.labels();
         LabelGrid label_grid = labels.labels().grid;
-        if (ImPlot::DragLineX(1, &label_grid.first_downbeat_s, ImVec4(1.0f, 0.4f, 0.3f, 1.0f),
-                              2.0f)) {
+        if (ImPlot::DragLineX(1, &label_grid.first_downbeat_s, theme().downbeat_handle, 2.0f)) {
             if (!dragging_downbeat_) {
                 labels.begin_gesture();
                 dragging_downbeat_ = true;
@@ -141,10 +157,10 @@ void AnalysisView::draw() {
         std::vector<double> handles = draw_loop(session_, true, 10);
         handles.push_back(label_grid.first_downbeat_s);
         seek_on_click(session_, handles);
-        ImPlot::EndPlot();
+        end_plot();
     }
     open_[1] = ImGui::CollapsingHeader("Band energy", ImGuiTreeNodeFlags_DefaultOpen);
-    if (open_[1] && ImPlot::BeginPlot("##band energy", ImVec2(-1, height(1)), ImPlotFlags_None)) {
+    if (open_[1] && begin_plot("##band energy", ImVec2(-1, height(1)), ImPlotFlags_None)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "dBFS");
         ImPlot::SetupAxisFormat(ImAxis_Y1, format_fixed_width, &kWholeNumbers);
@@ -158,11 +174,10 @@ void AnalysisView::draw() {
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
         seek_on_click(session_, draw_loop(session_, false, 20));
-        ImPlot::EndPlot();
+        end_plot();
     }
     open_[2] = ImGui::CollapsingHeader("Spectral flux", ImGuiTreeNodeFlags_DefaultOpen);
-    if (open_[2] &&
-        ImPlot::BeginPlot("##spectral flux", ImVec2(-1, height(2)), ImPlotFlags_NoLegend)) {
+    if (open_[2] && begin_plot("##spectral flux", ImVec2(-1, height(2)), ImPlotFlags_NoLegend)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "flux", ImPlotAxisFlags_AutoFit);
         ImPlot::SetupAxisFormat(ImAxis_Y1, format_fixed_width, &kHundredths);
@@ -171,10 +186,10 @@ void AnalysisView::draw() {
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
         seek_on_click(session_, draw_loop(session_, false, 30));
-        ImPlot::EndPlot();
+        end_plot();
     }
     open_[3] = ImGui::CollapsingHeader("Residual (non-bass) and hats");
-    if (open_[3] && ImPlot::BeginPlot("##residual", ImVec2(-1, height(3)), ImPlotFlags_None)) {
+    if (open_[3] && begin_plot("##residual", ImVec2(-1, height(3)), ImPlotFlags_None)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "0-1", ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 1.0, ImPlotCond_Always);
@@ -190,7 +205,7 @@ void AnalysisView::draw() {
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
         seek_on_click(session_, draw_loop(session_, false, 40));
-        ImPlot::EndPlot();
+        end_plot();
     }
     ImGui::End();
 }
@@ -220,7 +235,8 @@ void AnalysisView::draw_residual(const TrackAnalysis &analysis, const Grid &grid
             }
             if (!covered && middle_s >= 0.0 && middle_s <= analysis.duration_s) {
                 draw->AddRectFilled(ImPlot::PlotToPixels(start_s, 1.0),
-                                    ImPlot::PlotToPixels(start_s + slot_s, 0.0), kRestShade);
+                                    ImPlot::PlotToPixels(start_s + slot_s, 0.0),
+                                    to_u32(theme().rest_shade));
             }
         }
     }
@@ -250,7 +266,8 @@ void AnalysisView::draw_residual(const TrackAnalysis &analysis, const Grid &grid
         if (hat.t_s >= from_s && hat.t_s <= to_s) {
             const double length = 0.05 + 0.1 * std::min(1.0, hat.strength);
             draw->AddLine(ImPlot::PlotToPixels(hat.t_s, 1.0),
-                          ImPlot::PlotToPixels(hat.t_s, 1.0 - length), kHatTick, 2.0f);
+                          ImPlot::PlotToPixels(hat.t_s, 1.0 - length), to_u32(theme().hat_tick),
+                          2.0f);
         }
     }
     ImPlot::PopPlotClipRect();

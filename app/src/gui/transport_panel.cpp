@@ -1,5 +1,7 @@
 #include "gui/transport_panel.h"
 
+#include "gui/theme.h"
+
 #include <imgui.h>
 #include <implot.h>
 
@@ -90,7 +92,7 @@ void TransportPanel::draw() {
 
 void TransportPanel::draw_overview(const LoadedTrack &track) {
     Transport &transport = session_.transport();
-    if (!ImPlot::BeginPlot("##overview", ImVec2(-1, -1), ImPlotFlags_CanvasOnly)) {
+    if (!begin_plot("##overview", ImVec2(-1, -1), ImPlotFlags_CanvasOnly)) {
         return;
     }
     // The overview always shows the whole track, so both axes are locked.
@@ -103,9 +105,8 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
 
     LoopRegion loop = session_.loop();
     if (loop.enabled) {
-        const ImVec4 loop_colour(0.95f, 0.75f, 0.2f, 1.0f);
-        const bool moved = ImPlot::DragLineX(1, &loop.start_s, loop_colour, 2.0f) |
-                           ImPlot::DragLineX(2, &loop.end_s, loop_colour, 2.0f);
+        const bool moved = ImPlot::DragLineX(1, &loop.start_s, theme().loop, 2.0f) |
+                           ImPlot::DragLineX(2, &loop.end_s, theme().loop, 2.0f);
         if (moved) {
             loop.start_s = std::clamp(loop.start_s, 0.0, track.duration_s);
             loop.end_s = std::clamp(loop.end_s, 0.0, track.duration_s);
@@ -116,10 +117,10 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
     double view_bottom = -1.0;
     double view_top = 1.0;
     ImPlot::DragRect(3, &session_.view.min_s, &view_bottom, &session_.view.max_s, &view_top,
-                     ImVec4(1.0f, 1.0f, 1.0f, 0.25f), ImPlotDragToolFlags_NoInputs);
+                     theme().view_rect, ImPlotDragToolFlags_NoInputs);
 
     const double playhead_s = samples_to_seconds(transport.position(), track.sample_rate_hz);
-    ImPlot::SetNextLineStyle(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), 1.5f);
+    ImPlot::SetNextLineStyle(theme().playhead, 1.5f);
     ImPlot::PlotInfLines("##playhead", &playhead_s, 1);
 
     // Click to seek, unless the click is on a loop handle. (The plot itself becomes the active
@@ -133,7 +134,7 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
         const double target_s = std::clamp(ImPlot::GetPlotMousePos().x, 0.0, track.duration_s);
         transport.seek(seconds_to_samples(target_s, track.sample_rate_hz));
     }
-    ImPlot::EndPlot();
+    end_plot();
 }
 
 } // namespace psyight

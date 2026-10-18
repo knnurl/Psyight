@@ -1,5 +1,7 @@
 #include "gui/log_view.h"
 
+#include "gui/theme.h"
+
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
@@ -17,10 +19,10 @@ constexpr size_t kKeptMessages = 1000;
 ImVec4 level_colour(spdlog::level::level_enum level) {
     switch (level) {
     case spdlog::level::warn:
-        return {0.95f, 0.75f, 0.2f, 1.0f};
+        return theme().warning;
     case spdlog::level::err:
     case spdlog::level::critical:
-        return {1.0f, 0.45f, 0.4f, 1.0f};
+        return theme().danger;
     case spdlog::level::debug:
     case spdlog::level::trace:
         return ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);

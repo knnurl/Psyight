@@ -3,6 +3,7 @@
 #include "core/paths.h"
 #include "core/pitch.h"
 #include "gui/spectrogram_image.h"
+#include "gui/theme.h"
 #include "gui/time_plot.h"
 
 #include <imgui.h>
@@ -24,18 +25,6 @@ constexpr int kLowestMidi = 21;  // A0.
 constexpr int kHighestMidi = 64; // E4: bass with an octave or two of headroom.
 constexpr float kEdgeGrabPixels = 5.0f;
 constexpr float kMinNoteWidthForEdgesPixels = 14.0f;
-constexpr ImU32 kNoteFill = IM_COL32(64, 190, 170, 200);
-constexpr ImU32 kNoteBorder = IM_COL32(150, 240, 225, 255);
-constexpr ImU32 kSelectedBorder = IM_COL32(255, 230, 120, 255);
-constexpr ImU32 kSlideLine = IM_COL32(150, 240, 225, 200);
-constexpr ImU32 kBlackKeyRow = IM_COL32(255, 255, 255, 10);
-constexpr ImU32 kDetectionBorder = IM_COL32(255, 196, 110, 170);
-constexpr ImU32 kSelectedDetectionBorder = IM_COL32(255, 255, 255, 255);
-constexpr ImU32 kKickLine = IM_COL32(255, 120, 80, 70);
-constexpr ImU32 kBoxFill = IM_COL32(255, 230, 120, 30);
-constexpr ImU32 kBoxBorder = IM_COL32(255, 230, 120, 180);
-constexpr ImU32 kCompleteRegion = IM_COL32(80, 200, 120, 28);
-constexpr ImU32 kIncompleteRegion = IM_COL32(200, 200, 200, 18);
 constexpr double kPitchRangeLowQuantile = 0.6; // Most frames are quiet: keep them dark.
 constexpr double kPitchRangeHighQuantile = 0.997;
 static_assert(kLowestMidi == kSalienceFirstMidi && kHighestMidi == kSalienceLastMidi,
@@ -170,7 +159,7 @@ void BassRollView::draw_roll() {
     if (analysis != nullptr && pitch_range_changed_) {
         salience_textures_.build(analysis->pitch_salience, analysis->hop_samples,
                                  analysis->sample_rate_hz, pitch_min_db_, pitch_max_db_,
-                                 implot_colour_table(ImPlotColormap_Plasma));
+                                 implot_colour_table(theme().pitch_colormap));
         pitch_range_changed_ = false;
     }
     ImGui::SameLine();
@@ -183,8 +172,8 @@ void BassRollView::draw_roll() {
     const ImPlotInputMap saved_input = input;
     input.Pan = ImGuiMouseButton_Middle;
     input.Fit = ImGuiMouseButton_Middle;
-    if (ImPlot::BeginPlot("##bass roll", ImVec2(-1, -1),
-                          ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect)) {
+    if (begin_plot("##bass roll", ImVec2(-1, -1),
+                   ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect)) {
         setup_time_axis(session_.view);
         ImPlot::SetupAxis(ImAxis_Y1, "pitch", ImPlotAxisFlags_Lock);
         ImPlot::SetupAxisLimits(ImAxis_Y1, kLowestMidi, kHighestMidi + 1, ImPlotCond_Always);
@@ -214,7 +203,8 @@ void BassRollView::draw_roll() {
         for (int midi = kLowestMidi; midi <= kHighestMidi && !show_pitch_; ++midi) {
             if (is_black_key(midi)) {
                 draw->AddRectFilled(ImPlot::PlotToPixels(limits.X.Min, midi + 1),
-                                    ImPlot::PlotToPixels(limits.X.Max, midi), kBlackKeyRow);
+                                    ImPlot::PlotToPixels(limits.X.Max, midi),
+                                    to_u32(theme().black_key_row));
             }
         }
         draw_regions();
@@ -229,7 +219,7 @@ void BassRollView::draw_roll() {
         draw_playhead(session_.playhead_s());
         draw_loop(session_, false, 10); // Shaded only: dragging here edits notes.
         handle_mouse(track);
-        ImPlot::EndPlot();
+        end_plot();
     }
     input = saved_input;
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
@@ -243,7 +233,8 @@ void BassRollView::draw_regions() const {
     for (const LabelRegion &region : session_.labels().labels().regions) {
         draw->AddRectFilled(ImPlot::PlotToPixels(region.start_s, kHighestMidi + 1),
                             ImPlot::PlotToPixels(region.end_s, kLowestMidi),
-                            region.complete ? kCompleteRegion : kIncompleteRegion);
+                            region.complete ? to_u32(theme().region_complete)
+                                            : to_u32(theme().region_incomplete));
     }
 }
 
@@ -275,7 +266,7 @@ void BassRollView::draw_detections() const {
     for (const double t_s : session_.track().track_analysis->bass.kick_times_s) {
         if (t_s >= limits.X.Min && t_s <= limits.X.Max) {
             draw->AddLine(ImPlot::PlotToPixels(t_s, kHighestMidi + 1),
-                          ImPlot::PlotToPixels(t_s, kLowestMidi), kKickLine);
+                          ImPlot::PlotToPixels(t_s, kLowestMidi), to_u32(theme().kick_line));
         }
     }
     for (int i = 0; i < static_cast<int>(found->size()); ++i) {
@@ -285,11 +276,14 @@ void BassRollView::draw_detections() const {
         }
         const ImVec2 top_left = ImPlot::PlotToPixels(note.onset_s, note.pitch_midi + 1);
         const ImVec2 bottom_right = ImPlot::PlotToPixels(note.offset_s, note.pitch_midi);
-        const auto alpha = static_cast<int>(40.0 + 170.0 * std::clamp(note.confidence, 0.0, 1.0));
-        draw->AddRectFilled(top_left, bottom_right, IM_COL32(235, 160, 50, alpha), 2.0f);
+        // More opaque when more confident (16% to 82%).
+        const auto alpha =
+            static_cast<float>((40.0 + 170.0 * std::clamp(note.confidence, 0.0, 1.0)) / 255.0);
+        draw->AddRectFilled(top_left, bottom_right, to_u32(with_alpha(theme().detection, alpha)),
+                            2.0f);
         const bool selected = i == selected_detection_;
         draw->AddRect(top_left, bottom_right,
-                      selected ? kSelectedDetectionBorder : kDetectionBorder, 2.0f, 0,
+                      selected ? to_u32(theme().text) : to_u32(theme().detection_border), 2.0f, 0,
                       selected ? 2.0f : 1.0f);
     }
 }
@@ -301,14 +295,16 @@ void BassRollView::draw_notes() const {
         const BassNoteLabel &note = notes[i];
         const ImVec2 top_left = ImPlot::PlotToPixels(note.onset_s, note.midi + 1);
         const ImVec2 bottom_right = ImPlot::PlotToPixels(note.offset_s, note.midi);
-        draw->AddRectFilled(top_left, bottom_right, kNoteFill, 2.0f);
+        draw->AddRectFilled(top_left, bottom_right, to_u32(theme().note_fill), 2.0f);
         const bool selected = is_selected(static_cast<int>(i));
-        draw->AddRect(top_left, bottom_right, selected ? kSelectedBorder : kNoteBorder, 2.0f, 0,
+        draw->AddRect(top_left, bottom_right,
+                      selected ? to_u32(theme().accent) : to_u32(theme().note_border), 2.0f, 0,
                       selected ? 2.0f : 1.0f);
         if (note.slide_in && i > 0) {
             const BassNoteLabel &previous = notes[i - 1];
             draw->AddLine(ImPlot::PlotToPixels(previous.offset_s, previous.midi + 0.5),
-                          ImPlot::PlotToPixels(note.onset_s, note.midi + 0.5), kSlideLine, 2.0f);
+                          ImPlot::PlotToPixels(note.onset_s, note.midi + 0.5),
+                          to_u32(theme().note_slide), 2.0f);
         }
     }
 }
@@ -545,8 +541,8 @@ void BassRollView::handle_box_select(double mouse_s, double mouse_row) {
     ImDrawList *draw = ImPlot::GetPlotDrawList();
     const ImVec2 top_left = ImPlot::PlotToPixels(from_s, high_row);
     const ImVec2 bottom_right = ImPlot::PlotToPixels(to_s, low_row);
-    draw->AddRectFilled(top_left, bottom_right, kBoxFill);
-    draw->AddRect(top_left, bottom_right, kBoxBorder);
+    draw->AddRectFilled(top_left, bottom_right, to_u32(theme().selection_fill));
+    draw->AddRect(top_left, bottom_right, to_u32(theme().accent));
     ImPlot::PopPlotClipRect();
 }
 
@@ -681,7 +677,7 @@ void BassRollView::draw_inspector_note() {
     ImGui::SameLine();
     ImGui::Text("MIDI %d", note.midi);
     if (!pitch_error_.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "%s", pitch_error_.c_str());
+        ImGui::TextColored(theme().danger, "%s", pitch_error_.c_str());
     }
     ImGui::SetNextItemWidth(9.0f * em);
     changed |= ImGui::InputDouble("Cents", &note.cents, 1.0, 10.0, "%.0f");
@@ -727,8 +723,10 @@ void BassRollView::draw_inspector_detection() {
 void BassRollView::draw_inspector_selection() {
     LabelEditor &labels = session_.labels();
     if (selection_.empty()) {
-        ImGui::TextDisabled("Click a note, or drag a box around notes. Ctrl+A selects the notes "
-                            "in view.");
+        ImGui::PushStyleColor(ImGuiCol_Text, theme().text_dim);
+        ImGui::TextWrapped("Click a note, or drag a box around notes. Ctrl+A selects the notes "
+                           "in view.");
+        ImGui::PopStyleColor();
     } else {
         ImGui::Text("%zu note%s selected", selection_.size(), selection_.size() == 1 ? "" : "s");
     }
@@ -825,12 +823,12 @@ void BassRollView::draw_inspector_regions(const LoadedTrack &track) {
         ImGui::PushID(i);
         LabelRegion region = regions[i];
         bool changed = false;
-        ImGui::SetNextItemWidth(7.0f * em);
+        ImGui::SetNextItemWidth(8.0f * em);
         changed |= ImGui::InputDouble("##start", &region.start_s, 0.01, 1.0, "%.3f");
         ImGui::SameLine();
         ImGui::TextUnformatted("to");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(7.0f * em);
+        ImGui::SetNextItemWidth(8.0f * em);
         changed |= ImGui::InputDouble("s##end", &region.end_s, 0.01, 1.0, "%.3f");
         ImGui::SameLine();
         changed |= ImGui::Checkbox("Complete", &region.complete);

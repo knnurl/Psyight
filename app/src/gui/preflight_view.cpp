@@ -1,5 +1,6 @@
 #include "gui/preflight_view.h"
 
+#include "gui/theme.h"
 #include "output/discovery.h"
 #include "output/preflight.h"
 
@@ -16,17 +17,18 @@ constexpr int kDiscoveryTimeoutMs = 1000;
 constexpr std::uint16_t kArtNetPortNumber = 6454;
 
 ImVec4 level_colour(CheckLevel level) {
+    const ThemeTokens &t = theme();
     switch (level) {
     case CheckLevel::ok:
-        return {0.45f, 0.85f, 0.45f, 1.0f};
+        return t.success;
     case CheckLevel::info:
-        return {0.7f, 0.7f, 0.7f, 1.0f};
+        return t.text_dim;
     case CheckLevel::warn:
-        return {1.0f, 0.7f, 0.3f, 1.0f};
+        return t.warning;
     case CheckLevel::fail:
-        return {1.0f, 0.35f, 0.3f, 1.0f};
+        return t.danger;
     }
-    return {1.0f, 1.0f, 1.0f, 1.0f};
+    return t.text;
 }
 
 // Polls every interface's subnet from one socket on Art-Net's port (nodes reply there).

@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.25)
 
 # vcpkg builds the dependencies inside project(). Point it at the developer shell's Visual Studio
 # instance so dependencies and app use the same compiler: MSVC cannot link static libraries built
@@ -93,11 +93,16 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/project_state.cpp src/gui/rig_view.cpp
                        src/gui/preflight_view.cpp src/gui/tier.cpp
                        src/gui/scoring_view.cpp src/gui/log_view.cpp src/io/midi_input.cpp
-                       src/gui/crash_guard_win32.cpp src/gui/capture.cpp)
+                       src/gui/crash_guard_win32.cpp src/gui/capture.cpp src/gui/theme.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32
-                                      RtMidi::rtmidi dbghelp)
+                                      RtMidi::rtmidi dbghelp nlohmann_json::nlohmann_json)
+# Fonts beside the executable (gui/theme.h looks there first, then in the working directory).
+add_custom_command(TARGET psyight POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory
+                           ${CMAKE_CURRENT_SOURCE_DIR}/../assets/fonts
+                           $<TARGET_FILE_DIR:psyight>/assets/fonts)
 
 # Scores the bass tracker against a labels file (local reference tracks; never run in CI).
 add_executable(psyight_eval src/eval_main.cpp)

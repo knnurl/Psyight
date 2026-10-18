@@ -1,6 +1,7 @@
 #include "gui/rig_view.h"
 
 #include "core/paths.h"
+#include "gui/theme.h"
 #include "gui/tier.h"
 
 #include <imgui.h>
@@ -14,7 +15,6 @@ namespace psyight {
 
 namespace {
 
-const ImVec4 kWarning(1.0f, 0.45f, 0.35f, 1.0f);
 constexpr int kPixelBudget = 1500; // SPEC 8: about 9 universes.
 constexpr std::array<ColourOrder, 6> kOrders = {ColourOrder::rgb, ColourOrder::grb,
                                                 ColourOrder::brg, ColourOrder::rbg,
@@ -135,7 +135,7 @@ void RigView::draw_strips() {
             ImGui::SetNextItemWidth(-1.0f);
             const auto points = parse_polyline_text(polyline_texts_[i]);
             if (!points) {
-                ImGui::PushStyleColor(ImGuiCol_Text, kWarning);
+                ImGui::PushStyleColor(ImGuiCol_Text, theme().warning);
             }
             if (ImGui::InputText("##points", &polyline_texts_[i])) {
                 if (const auto edited = parse_polyline_text(polyline_texts_[i])) {
@@ -218,7 +218,7 @@ void RigView::draw_strips() {
     for (const ProjectStrip &s : project_.project().strips) {
         const int fill = pixels_to_fill(s.spec);
         if (s.spec.count > fill + 1) {
-            ImGui::TextColored(kWarning, "%s: %d pixels run %.2f m past its polyline.",
+            ImGui::TextColored(theme().warning, "%s: %d pixels run %.2f m past its polyline.",
                                s.spec.name.c_str(), s.spec.count,
                                (s.spec.count - fill) / s.spec.pixels_per_m);
         }
@@ -243,7 +243,7 @@ void RigView::draw_patch() {
                 patch.universes.empty() ? 0 : patch.universes.back(), rig.max.x - rig.min.x,
                 rig.max.y - rig.min.y, rig.max.z - rig.min.z);
     if (pixels > kPixelBudget) {
-        ImGui::TextColored(kWarning, "Over the 1,500-pixel budget (SPEC 2.1).");
+        ImGui::TextColored(theme().warning, "Over the 1,500-pixel budget (SPEC 2.1).");
     }
     const double full_white_a = pixels * 3 * p.limiter.current_per_channel_ma * 1e-3;
     ImGui::Text("Full white: %.1f A estimated; power budget %.1f A%s", full_white_a,

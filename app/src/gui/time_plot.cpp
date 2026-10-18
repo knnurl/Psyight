@@ -1,5 +1,7 @@
 #include "gui/time_plot.h"
 
+#include "gui/theme.h"
+
 #include <imgui.h>
 #include <implot.h>
 
@@ -16,26 +18,22 @@ namespace {
 constexpr size_t kMaxGridLines = 400;    // Finer levels are dropped beyond this.
 constexpr float kClickSlopPixels = 3.0f; // Mouse travel below this is a click, not a pan.
 constexpr float kHandleGrabPixels = 6.0f;
-const ImVec4 kLoopShade(0.95f, 0.75f, 0.2f, 0.05f); // Faint on purpose: the edges mark the loop.
-const ImVec4 kLoopEdge(0.95f, 0.75f, 0.2f, 1.0f);   // As in the transport overview.
-constexpr ImU32 kSectionBoundary = IM_COL32(0, 0, 0, 170);
-constexpr ImU32 kSectionText = IM_COL32(255, 255, 255, 235);
-constexpr ImU32 kPhraseTick = IM_COL32(255, 255, 255, 220);
 
 ImU32 section_colour(const std::string &label) {
+    const ThemeTokens &t = theme();
     if (label == "groove") {
-        return IM_COL32(40, 150, 130, 190);
+        return to_u32(t.section_groove);
     }
     if (label == "breakdown") {
-        return IM_COL32(60, 90, 200, 190);
+        return to_u32(t.section_breakdown);
     }
     if (label == "build") {
-        return IM_COL32(230, 140, 40, 190);
+        return to_u32(t.section_build);
     }
     if (label == "drop") {
-        return IM_COL32(220, 60, 60, 200);
+        return to_u32(t.section_drop);
     }
-    return IM_COL32(120, 120, 120, 170); // Intro and outro.
+    return to_u32(t.section_other); // Intro and outro.
 }
 
 } // namespace
@@ -73,7 +71,7 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s) {
     }
     const auto plot_lines = [](const char *label, const std::vector<double> &times, float alpha,
                                float weight) {
-        ImPlot::SetNextLineStyle(ImVec4(1.0f, 1.0f, 1.0f, alpha), weight);
+        ImPlot::SetNextLineStyle(with_alpha(theme().text, alpha), weight);
         ImPlot::PlotInfLines(label, times.data(), static_cast<int>(times.size()));
     };
     plot_lines("##slots", slots, 0.10f, 1.0f);
@@ -95,24 +93,26 @@ void draw_sections(const std::vector<DetectedSection> &sections,
         const float right = ImPlot::PlotToPixels(section.end_s, 0.0).x;
         draw->AddRectFilled(ImVec2(left, origin.y), ImVec2(right, origin.y + height),
                             section_colour(section.label));
-        draw->AddLine(ImVec2(left, origin.y), ImVec2(left, origin.y + height), kSectionBoundary,
-                      2.0f);
+        draw->AddLine(ImVec2(left, origin.y), ImVec2(left, origin.y + height),
+                      to_u32(theme().section_boundary), 2.0f);
         const float text_left = std::max(left, origin.x) + 3.0f;
         if (right - text_left > ImGui::CalcTextSize(section.label.c_str()).x + 3.0f) {
-            draw->AddText(ImVec2(text_left, origin.y + 1.0f), kSectionText, section.label.c_str());
+            draw->AddText(ImVec2(text_left, origin.y + 1.0f), to_u32(theme().section_text),
+                          section.label.c_str());
         }
     }
     for (const double t_s : phrase_starts_s) {
         if (t_s >= from_s && t_s <= to_s) {
             const float x = ImPlot::PlotToPixels(t_s, 0.0).x;
-            draw->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + height), kPhraseTick, 3.0f);
+            draw->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + height),
+                          to_u32(theme().phrase_tick), 3.0f);
         }
     }
     ImPlot::PopPlotClipRect();
 }
 
 void draw_playhead(double playhead_s) {
-    ImPlot::SetNextLineStyle(ImVec4(1.0f, 1.0f, 1.0f, 0.95f), 2.0f);
+    ImPlot::SetNextLineStyle(theme().playhead, 2.0f);
     ImPlot::PlotInfLines("##playhead", &playhead_s, 1);
 }
 
@@ -127,15 +127,15 @@ std::vector<double> draw_loop(Session &session, bool editable, int first_drag_id
     ImPlot::PushPlotClipRect();
     ImPlot::GetPlotDrawList()->AddRectFilled(ImPlot::PlotToPixels(start_s, limits.Y.Max),
                                              ImPlot::PlotToPixels(end_s, limits.Y.Min),
-                                             ImGui::ColorConvertFloat4ToU32(kLoopShade));
+                                             to_u32(theme().loop_shade));
     ImPlot::PopPlotClipRect();
     if (!editable) {
         const double edges_s[] = {start_s, end_s};
-        ImPlot::SetNextLineStyle(kLoopEdge, 2.0f);
+        ImPlot::SetNextLineStyle(theme().loop, 2.0f);
         ImPlot::PlotInfLines("##loop edges", edges_s, 2);
     } else {
-        const bool moved = ImPlot::DragLineX(first_drag_id, &loop.start_s, kLoopEdge, 2.0f) |
-                           ImPlot::DragLineX(first_drag_id + 1, &loop.end_s, kLoopEdge, 2.0f);
+        const bool moved = ImPlot::DragLineX(first_drag_id, &loop.start_s, theme().loop, 2.0f) |
+                           ImPlot::DragLineX(first_drag_id + 1, &loop.end_s, theme().loop, 2.0f);
         if (moved) {
             const double duration_s = session.track().duration_s;
             loop.start_s = std::clamp(loop.start_s, 0.0, duration_s);

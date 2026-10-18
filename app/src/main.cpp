@@ -15,6 +15,7 @@
 #include "gui/rig_view.h"
 #include "gui/scoring_view.h"
 #include "gui/session.h"
+#include "gui/theme.h"
 #include "gui/transport_panel.h"
 #include "io/png.h"
 
@@ -39,7 +40,6 @@ namespace {
 
 constexpr int kInitialWidthPixels = 1600; // Size when restored from the initial maximised state.
 constexpr int kInitialHeightPixels = 900;
-constexpr float kDefaultFontSizePixels = 13.0f;
 constexpr int kMinimisedSleepMs = 10;
 // OpenGL 3.2 or later lets the ImGui backend use vertex offsets, which large ImPlot draws (such as
 // spectrograms) need with ImGui's 16-bit indices.
@@ -127,21 +127,15 @@ int main() {
     if (capture) {
         io.IniFilename = nullptr; // The default layout, and the owner's imgui.ini untouched.
     }
-    ImGui::StyleColorsDark();
 
-    // Scale text and widget sizes to the monitor's DPI setting (1.0 for captures).
+    // Fonts, colours and sizes (gui/theme.h), scaled to the monitor's DPI (1.0 for captures).
     float dpi_scale = 1.0f;
     if (!capture) {
         glfwGetWindowContentScale(window, &dpi_scale, nullptr);
     }
-    ImFontConfig font_config;
-    font_config.SizePixels = kDefaultFontSizePixels * dpi_scale;
-    // AddFontDefault sets these only when given no config; they keep the pixel font sharp.
-    font_config.OversampleH = 1;
-    font_config.OversampleV = 1;
-    font_config.PixelSnapH = true;
-    io.Fonts->AddFontDefault(&font_config);
-    ImGui::GetStyle().ScaleAllSizes(dpi_scale);
+    psyight::init_theme(dpi_scale);
+    psyight::apply_psyight_theme(capture && capture->theme == "show" ? psyight::ThemeMode::show
+                                                                     : psyight::ThemeMode::desk);
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(kGlslVersion);
@@ -190,6 +184,7 @@ int main() {
 
         bool show_imgui_demo = false;
         bool show_implot_demo = false;
+        bool show_style_editor = false;
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
@@ -212,6 +207,17 @@ int main() {
             if (ImGui::BeginMainMenuBar()) {
                 if (ImGui::BeginMenu("View")) {
                     ImGui::MenuItem("Reset layout", nullptr, &reset_layout);
+                    if (ImGui::BeginMenu("Theme")) {
+                        const psyight::ThemeMode mode = psyight::theme_mode();
+                        if (ImGui::MenuItem("Desk", nullptr, mode == psyight::ThemeMode::desk)) {
+                            psyight::apply_psyight_theme(psyight::ThemeMode::desk);
+                        }
+                        if (ImGui::MenuItem("Show", nullptr, mode == psyight::ThemeMode::show)) {
+                            psyight::apply_psyight_theme(psyight::ThemeMode::show);
+                        }
+                        ImGui::EndMenu();
+                    }
+                    ImGui::MenuItem("Style editor", "F12", &show_style_editor);
                     ImGui::Separator();
                     ImGui::MenuItem("ImGui demo", nullptr, &show_imgui_demo);
                     ImGui::MenuItem("ImPlot demo", nullptr, &show_implot_demo);
@@ -251,6 +257,10 @@ int main() {
             if (show_implot_demo) {
                 ImPlot::ShowDemoWindow(&show_implot_demo);
             }
+            if (ImGui::IsKeyPressed(ImGuiKey_F12, false)) {
+                show_style_editor = !show_style_editor; // Dev only (RESTYLE Phase 1).
+            }
+            psyight::draw_style_editor(&show_style_editor);
 
             ImGui::Render();
             int framebuffer_width_pixels = 0;

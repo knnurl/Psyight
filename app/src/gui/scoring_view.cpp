@@ -2,6 +2,7 @@
 
 #include "analysis/bass_tracker.h"
 #include "core/pitch.h"
+#include "gui/theme.h"
 
 #include <imgui.h>
 #include <implot.h>
@@ -196,12 +197,12 @@ void ScoringView::draw_offsets() const {
         return;
     }
     const float em = ImGui::GetFontSize();
-    if (ImPlot::BeginPlot("##offset errors", ImVec2(-1.0f, kHistogramHeightEm * em),
-                          ImPlotFlags_NoLegend | ImPlotFlags_NoMenus)) {
+    if (begin_plot("##offset errors", ImVec2(-1.0f, kHistogramHeightEm * em),
+                   ImPlotFlags_NoLegend | ImPlotFlags_NoMenus)) {
         ImPlot::SetupAxes("ms", "notes", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
         ImPlot::PlotHistogram("offsets", offset_errors_ms_.data(),
                               static_cast<int>(offset_errors_ms_.size()), kOffsetHistogramBins);
-        ImPlot::EndPlot();
+        end_plot();
     }
 }
 
