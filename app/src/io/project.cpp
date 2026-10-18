@@ -137,6 +137,7 @@ Scene parse_scene(const json &item) {
             route.quantise = from_id_or_throw(mod_quantise_from_id(quantise), "quantise", quantise);
             route.attack_s = number(r, "attack_s", 0.0, 0.0, kMaxSmoothingS);
             route.release_s = number(r, "release_s", 0.0, 0.0, kMaxSmoothingS);
+            route.param = optional<std::string>(r, "param", "");
             s.routes.push_back(route);
         }
     }
@@ -168,7 +169,8 @@ json scene_json(const Scene &s) {
                           {"amount", finite(r.amount, "amount")},
                           {"quantise", mod_quantise_id(r.quantise)},
                           {"attack_s", finite(r.attack_s, "attack_s")},
-                          {"release_s", finite(r.release_s, "release_s")}});
+                          {"release_s", finite(r.release_s, "release_s")},
+                          {"param", r.param}});
     }
     return {{"name", s.name},
             {"palette", s.palette},

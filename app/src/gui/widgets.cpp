@@ -224,9 +224,9 @@ bool knob(const char *label, double *value, double min, double max, const char *
 }
 
 bool knob_int(const char *label, int *value, int min, int max, const char *format,
-              int default_value) {
+              int default_value, const double *modulated) {
     double v = *value;
-    if (!knob_impl(label, &v, min, max, format, default_value, nullptr, true)) {
+    if (!knob_impl(label, &v, min, max, format, default_value, modulated, true)) {
         return false;
     }
     *value = static_cast<int>(std::lround(v));

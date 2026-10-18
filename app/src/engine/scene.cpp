@@ -241,6 +241,42 @@ std::unique_ptr<Effect> make_drop_burst(const DropBurstParams &params) {
     return std::make_unique<DropBurst>(params);
 }
 
+std::shared_ptr<const Effect> Layer::effect_for(const std::vector<ModRoute> &routes,
+                                                const std::vector<double> &values,
+                                                size_t index) const {
+    std::vector<EffectParamInfo> infos;
+    std::vector<double> offsets;
+    for (size_t i = 0; i < routes.size() && i < values.size(); ++i) {
+        const ModRoute &r = routes[i];
+        if (r.target != ModTarget::setting || r.layer != static_cast<int>(index)) {
+            continue;
+        }
+        if (infos.empty()) {
+            infos = effect_param_infos(spec.type());
+            offsets.assign(infos.size(), 0.0);
+        }
+        for (size_t p = 0; p < infos.size(); ++p) {
+            if (r.param == infos[p].id) {
+                offsets[p] += r.amount * (infos[p].max - infos[p].min) * values[i];
+            }
+        }
+    }
+    bool moved = false;
+    for (const double offset : offsets) {
+        moved |= offset != 0.0;
+    }
+    if (!moved) {
+        return effect;
+    }
+    EffectSpec modulated = spec;
+    for (size_t p = 0; p < offsets.size(); ++p) {
+        if (offsets[p] != 0.0) {
+            set_effect_param(modulated, p, effect_param(spec, p) + offsets[p]); // Clamped.
+        }
+    }
+    return make_effect(modulated);
+}
+
 Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &inputs,
                    const std::vector<Palette> &palettes, std::uint64_t seed,
                    std::vector<ModRouteState> *memory) {
@@ -296,7 +332,7 @@ Frame render_scene(const Scene &scene, const Rig &rig, const EngineInputs &input
         if (opacity <= 0.0) {
             continue;
         }
-        l.effect->render(context, layer);
+        l.effect_for(scene.routes, values, k)->render(context, layer);
         const bool rotate = std::abs(hue_deg) > 1e-9;
         std::vector<char> strip_in_group; // Per strip, when the layer has a group mask.
         if (!l.group.empty()) {

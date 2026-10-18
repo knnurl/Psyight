@@ -33,6 +33,8 @@ EngineInputs sample_inputs(double t) {
     return in;
 }
 
+EffectSpec plain_spec() { return default_scene().layers[0].spec; }
+
 float max_difference(const Frame &a, const Frame &b) {
     float most = 0.0f;
     for (size_t i = 0; i < a.size(); ++i) {
@@ -164,6 +166,49 @@ TEST_CASE("modulation: rendering with memory follows the same render times ident
     }
     REQUIRE(a.size() == scene.routes.size());
     CHECK(a.back().value == b.back().value);
+}
+
+TEST_CASE("modulation: a route moves an effect setting as if it were set by hand") {
+    const Rig rig = default_rig();
+    const std::vector<Palette> palettes = default_palettes();
+    const EngineInputs in = sample_inputs(13.7);
+    Scene routed = default_scene(); // Layer 0 is plasma.
+    ModRoute route;
+    route.source = ModSource::constant;
+    route.target = ModTarget::setting;
+    route.layer = 0;
+    route.param = "ambient_level"; // The inputs are in the intro.
+    route.amount = 0.3;            // Of the 0 to 1 range: the ambient level 0.45 becomes 0.75.
+    routed.routes = {route};
+
+    Scene by_hand = default_scene();
+    EffectSpec spec = by_hand.layers[0].spec;
+    const std::vector<EffectParamInfo> infos = effect_param_infos(spec.type());
+    size_t ambient = 0;
+    while (std::string(infos[ambient].id) != "ambient_level") {
+        ++ambient;
+    }
+    set_effect_param(spec, ambient, effect_param(spec, ambient) + 0.3);
+    by_hand.layers[0] = make_layer(spec, by_hand.layers[0].blend, by_hand.layers[0].opacity);
+
+    const Frame a = render_scene(routed, rig, in, palettes, 3);
+    const Frame b = render_scene(by_hand, rig, in, palettes, 3);
+    const Frame plain = render_scene(default_scene(), rig, in, palettes, 3);
+    CHECK(max_difference(a, b) == 0.0f);
+    CHECK(max_difference(a, plain) > 0.0f);
+    // The stored layer is untouched: the modulated effect is made per frame.
+    CHECK(effect_param(routed.layers[0].spec, ambient) == effect_param(plain_spec(), ambient));
+
+    // Past the range: clamped, so a huge amount equals the maximum.
+    routed.routes[0].amount = 50.0;
+    set_effect_param(spec, ambient, 1.0);
+    by_hand.layers[0] = make_layer(spec, by_hand.layers[0].blend, by_hand.layers[0].opacity);
+    CHECK(max_difference(render_scene(routed, rig, in, palettes, 3),
+                         render_scene(by_hand, rig, in, palettes, 3)) == 0.0f);
+
+    // An id the layer's effect does not have changes nothing.
+    routed.routes[0].param = "no_such_setting";
+    CHECK(max_difference(render_scene(routed, rig, in, palettes, 3), plain) == 0.0f);
 }
 
 TEST_CASE("modulation: hue rotation keeps grey, wraps at 360 and keeps luminance roughly") {

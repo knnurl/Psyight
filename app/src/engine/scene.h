@@ -124,6 +124,11 @@ struct Layer {
     bool enabled = true;
     EffectSpec spec;
     std::string group; // Group mask (SPEC 7.3): only strips with this tag; empty for all.
+
+    // The effect with this frame's modulated settings (routes with ModTarget::setting on layer
+    // `index`, values in route order): `effect` itself when none moves a setting.
+    std::shared_ptr<const Effect> effect_for(const std::vector<ModRoute> &routes,
+                                             const std::vector<double> &values, size_t index) const;
 };
 
 struct Scene {

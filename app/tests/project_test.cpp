@@ -51,6 +51,8 @@ TEST_CASE("project: every stored setting survives a round trip") {
     route.quantise = ModQuantise::bar;
     route.attack_s = 0.05;
     route.release_s = 1.5;
+    route.target = ModTarget::setting;
+    route.param = "speed_hz";
     p.scenes[0].routes.push_back(route);
     const Result<Project> back = parse_project_json(to_project_json(p).value());
     REQUIRE(back.ok());

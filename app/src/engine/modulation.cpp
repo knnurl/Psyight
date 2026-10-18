@@ -246,6 +246,8 @@ const char *mod_target_name(ModTarget target) {
         return "Hue shift";
     case ModTarget::brightness:
         return "Brightness";
+    case ModTarget::setting:
+        return "Setting";
     }
     return "?";
 }
@@ -354,6 +356,8 @@ const char *mod_target_id(ModTarget target) {
         return "hue_shift";
     case ModTarget::brightness:
         return "brightness";
+    case ModTarget::setting:
+        return "setting";
     }
     return "opacity";
 }

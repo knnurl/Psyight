@@ -981,8 +981,10 @@ void PreviewView::draw_routes(Scene &scene, const ShowFrame &frame) {
             scene_edited_ = true;
         }
         ImGui::SetItemTooltip("Invert: 1 minus the shaped source.");
-        // Target, and its layer.
-        ImGui::SetNextItemWidth(full);
+        // Target (and for a setting, which one), and its layer.
+        const bool setting = r.target == ModTarget::setting && !scene.layers.empty();
+        const float half = 0.5f * (full - style.ItemSpacing.x);
+        ImGui::SetNextItemWidth(setting ? half : full);
         if (ImGui::BeginCombo("##target", mod_target_name(r.target))) {
             for (const ModTarget t : kModTargets) {
                 if (ImGui::Selectable(mod_target_name(t), t == r.target)) {
@@ -994,6 +996,33 @@ void PreviewView::draw_routes(Scene &scene, const ShowFrame &frame) {
             ImGui::EndCombo();
         }
         ImGui::SetItemTooltip("Target");
+        if (r.target == ModTarget::setting && !scene.layers.empty()) {
+            // A setting of the route's layer: keep the id valid for that layer's effect.
+            r.layer = std::clamp(r.layer, 0, static_cast<int>(scene.layers.size()) - 1);
+            const std::vector<EffectParamInfo> infos =
+                effect_param_infos(scene.layers[static_cast<size_t>(r.layer)].spec.type());
+            const auto found = std::find_if(infos.begin(), infos.end(),
+                                            [&](const auto &info) { return r.param == info.id; });
+            if (found == infos.end() && !infos.empty()) {
+                r.param = infos.front().id;
+                scene_edited_ = true;
+            }
+            const char *shown = found != infos.end() ? found->label : "";
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(half);
+            if (ImGui::BeginCombo("##setting", shown)) {
+                for (const EffectParamInfo &info : infos) {
+                    if (ImGui::Selectable(info.label, r.param == info.id)) {
+                        r.param = info.id;
+                        scene_edited_ = true;
+                    }
+                    ImGui::SetItemTooltip("%s", info.description);
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SetItemTooltip("The layer's setting this route moves (amount: a fraction of "
+                                  "its range).");
+        }
         ImGui::SetNextItemWidth(full);
         if (r.target == ModTarget::brightness || scene.layers.empty()) {
             ImGui::BeginDisabled();
@@ -1255,9 +1284,35 @@ void PreviewView::draw_layer_device(Scene &scene, size_t index,
     if (!routes_here.empty()) {
         ImGui::SetItemTooltip("Opacity, modulated by:%s", routes_here.c_str());
     }
+    // Routes moving each setting: their live sum (a fraction of the range each) and a list for
+    // the tooltip.
+    std::vector<double> setting_offsets(infos.size(), 0.0);
+    std::vector<std::string> setting_routes(infos.size());
+    for (size_t r = 0; r < scene.routes.size(); ++r) {
+        const ModRoute &route = scene.routes[r];
+        if (route.layer != static_cast<int>(index) || route.target != ModTarget::setting) {
+            continue;
+        }
+        for (size_t k = 0; k < infos.size(); ++k) {
+            if (route.param != infos[k].id) {
+                continue;
+            }
+            if (route_values != nullptr) {
+                setting_offsets[k] +=
+                    route.amount * (infos[k].max - infos[k].min) * (*route_values)[r];
+            }
+            char line[96];
+            std::snprintf(line, sizeof(line), "\n%s, %+.2f", source_label(route.source).c_str(),
+                          route.amount);
+            setting_routes[k] += line;
+        }
+    }
     bool params_changed = false;
     for (size_t k = 0; k < infos.size(); ++k) {
         const EffectParamInfo &info = infos[k];
+        const double moved =
+            std::clamp(effect_param(layer.spec, k) + setting_offsets[k], info.min, info.max);
+        const bool ring = route_values != nullptr && !setting_routes[k].empty();
         if ((k + 1) % static_cast<size_t>(columns) != 0) {
             ImGui::SameLine();
         }
@@ -1267,19 +1322,23 @@ void PreviewView::draw_layer_device(Scene &scene, size_t index,
             int v = static_cast<int>(std::lround(effect_param(layer.spec, k)));
             if (knob_int(label.c_str(), &v, static_cast<int>(info.min), static_cast<int>(info.max),
                          ("%.0f" + unit).c_str(),
-                         static_cast<int>(std::lround(effect_param(defaults, k))))) {
+                         static_cast<int>(std::lround(effect_param(defaults, k))),
+                         ring ? &moved : nullptr)) {
                 set_effect_param(layer.spec, k, v);
                 params_changed = true;
             }
         } else {
             double v = effect_param(layer.spec, k);
             if (knob(label.c_str(), &v, info.min, info.max, ("%.3g" + unit).c_str(),
-                     effect_param(defaults, k))) {
+                     effect_param(defaults, k), ring ? &moved : nullptr)) {
                 set_effect_param(layer.spec, k, v);
                 params_changed = true;
             }
         }
-        if (info.description[0] != '\0') {
+        if (!setting_routes[k].empty()) {
+            ImGui::SetItemTooltip("%s, modulated by:%s", info.description,
+                                  setting_routes[k].c_str());
+        } else if (info.description[0] != '\0') {
             ImGui::SetItemTooltip("%s. Drag (Shift: fine); double-click to type; right-click "
                                   "resets.",
                                   info.description);

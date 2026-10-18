@@ -59,7 +59,7 @@ bool drag_double(const char *label, double *value, float speed, double min, doub
 bool knob(const char *label, double *value, double min, double max, const char *format,
           double default_value, const double *modulated = nullptr);
 bool knob_int(const char *label, int *value, int min, int max, const char *format,
-              int default_value);
+              int default_value, const double *modulated = nullptr);
 float knob_width(); // Pixels: lay knobs out in columns of this width.
 
 // A device panel (the Show tab's racks): a child window of `size` in the device colour with a

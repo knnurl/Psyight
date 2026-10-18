@@ -6,10 +6,11 @@
 // need memory across frames (ModRouteState): with it, a route is deterministic for the same
 // sequence of render times (as the limiters are); without it, a route is its instantaneous shaped
 // value. Routes to one target are summed, then clamped to its range.
-// Targets in v0: a layer's opacity (base plus routes, 0 to 1), a layer's hue shift (degrees,
-// rotated about the grey axis, which keeps luminance roughly), and the scene's brightness (1 plus
-// amount times (source minus 1), so amount 1 lets the source set it). Not yet: registry
-// parameters as targets.
+// Targets: a layer's opacity (base plus routes, 0 to 1), a layer's hue shift (degrees, rotated
+// about the grey axis, which keeps luminance roughly), the scene's brightness (1 plus amount times
+// (source minus 1), so amount 1 lets the source set it), and a layer's effect setting (`param`, an
+// id from engine/effect_spec.h; amount is a fraction of the setting's range, so 1 sweeps all of
+// it; the sum is clamped to the range and the effect is remade for the frame).
 #pragma once
 
 #include "engine/colour.h"
@@ -50,7 +51,7 @@ enum class ModSource {
 };
 
 enum class ModCurve { linear, exponential, logarithmic, s_curve };
-enum class ModTarget { opacity, hue_shift, brightness };
+enum class ModTarget { opacity, hue_shift, brightness, setting };
 enum class ModQuantise { off, sixteenth, beat, bar }; // Sample-and-hold per grid division.
 
 inline constexpr std::array<ModSource, 24> kModSources = {
@@ -67,16 +68,18 @@ inline constexpr std::array<ModQuantise, 4> kModQuantises = {
 inline constexpr double kMaxSmoothingS = 4.0; // Attack and release, at most.
 inline constexpr std::array<ModCurve, 4> kModCurves = {ModCurve::linear, ModCurve::exponential,
                                                        ModCurve::logarithmic, ModCurve::s_curve};
-inline constexpr std::array<ModTarget, 3> kModTargets = {ModTarget::opacity, ModTarget::hue_shift,
-                                                         ModTarget::brightness};
+inline constexpr std::array<ModTarget, 4> kModTargets = {ModTarget::opacity, ModTarget::hue_shift,
+                                                         ModTarget::brightness, ModTarget::setting};
 
 struct ModRoute {
     ModSource source = ModSource::lfo_bar;
     ModCurve curve = ModCurve::linear;
     bool invert = false;
     ModTarget target = ModTarget::opacity;
-    int layer = 0;       // For opacity and hue shift.
-    double amount = 0.5; // Opacity and brightness: a fraction; hue shift: degrees.
+    int layer = 0; // For opacity, hue shift and settings.
+    // Opacity and brightness: a fraction; hue shift: degrees; a setting: a fraction of its range.
+    double amount = 0.5;
+    std::string param; // The setting's id, for ModTarget::setting.
     ModQuantise quantise = ModQuantise::off;
     double attack_s = 0.0;  // Time constant while the value rises; 0: at once.
     double release_s = 0.0; // Time constant while it falls.
