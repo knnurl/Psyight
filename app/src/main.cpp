@@ -476,6 +476,9 @@ int main() {
             scoring_view.draw();
             // Before the log: the Show tab comes first in its group.
             preview_view.draw(show_mode && prefs.show_mode_hides_editing);
+            // A strip hovered in one of the preview and the Rig tab is highlighted in the other.
+            preview_view.set_highlighted_strip(rig_view.hovered_strip());
+            rig_view.set_highlighted_strip(preview_view.hovered_strip());
             log_view.draw();
             rig_view.draw();
             preflight_view.draw();

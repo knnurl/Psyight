@@ -24,6 +24,9 @@ The window: the transport (play, loop, half speed, time, volume, the track's wav
 
 ## Setting up the rig
 
+Hover the rig preview to see each strip's name and an arrow at its first pixel (where its data comes in); the strip under the mouse is outlined, and its row lights up in the Rig tab (and hovering a row there outlines the strip).
+
+
 Rig tab (Engineer depth) > Templates builds a rig from a few numbers: **Pillars** (how many, height, spacing or a circle, density, serpentine wiring) or a **Matrix panel** (rows, width, row spacing, density, zigzag wiring). The line under them shows strips, pixels, universes and the current at full white. "Replace the rig..." swaps the strips after a confirmation; scenes, palettes and settings stay. The strips get group tags (left and right, top and bottom, even and odd) that layers can be limited to. Each strip can still be edited by hand below.
 
 ## Before the show: Preflight

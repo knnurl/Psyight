@@ -56,6 +56,10 @@ class PreviewView {
     void set_test_pattern(const TestPattern &pattern);
     bool test_allowed() const { return ladder_ <= Ladder::preview; }
     std::shared_ptr<const ShowFrame> latest_frame() const { return show_.latest(); }
+    // The strip under the mouse in the preview (-1: none), and the one to outline from elsewhere
+    // (the Rig tab's hovered row).
+    int hovered_strip() const { return hovered_strip_; }
+    void set_highlighted_strip(int strip) { highlighted_strip_ = strip; }
     void apply_settings(const UserSettings &settings) { preview_open_ = settings.preview_open; }
     void store_settings(UserSettings &settings) const { settings.preview_open = preview_open_; }
 
@@ -116,6 +120,8 @@ class PreviewView {
     bool scene_edited_ = false; // A scene changed this frame: the project is told once.
     Ladder ladder_ = Ladder::preview;
     bool preview_open_ = true;
+    int hovered_strip_ = -1;
+    int highlighted_strip_ = -1;
     std::filesystem::path presets_dir_ = "presets"; // Beside the project (the working directory).
     UserPresets user_presets_;
     std::optional<ScenePreset> pending_scene_;

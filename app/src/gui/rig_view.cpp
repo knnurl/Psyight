@@ -6,6 +6,7 @@
 #include "gui/widgets.h"
 
 #include <imgui.h>
+#include <imgui_internal.h> // TableGetHoveredRow.
 #include <imgui_stdlib.h>
 
 #include <algorithm>
@@ -201,7 +202,9 @@ void RigView::draw_strips() {
     const float height =
         std::min(ImGui::GetContentRegionAvail().y * 0.6f,
                  (static_cast<float>(strips.size()) + 2.5f) * ImGui::GetFrameHeightWithSpacing());
+    hovered_strip_ = -1;
     if (ImGui::BeginTable("strips", 7, flags, ImVec2(0.0f, height))) {
+        hovered_strip_ = ImGui::TableGetHoveredRow() - 1; // Row 0 is the header.
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 4.5f * em);
         ImGui::TableSetupColumn("Points (x,y[,z] m)", ImGuiTableColumnFlags_WidthFixed, 10.0f * em);
         ImGui::TableSetupColumn("Per m", ImGuiTableColumnFlags_WidthFixed, 2.5f * em);
@@ -214,6 +217,9 @@ void RigView::draw_strips() {
             ProjectStrip &s = strips[i];
             ImGui::PushID(static_cast<int>(i));
             ImGui::TableNextRow();
+            if (static_cast<int>(i) == highlighted_strip_) { // Hovered in the preview.
+                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, to_u32(theme().selection_fill));
+            }
             ImGui::TableNextColumn();
             ImGui::SetNextItemWidth(-1.0f);
             changed |= ImGui::InputText("##name", &s.spec.name);

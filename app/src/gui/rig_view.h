@@ -19,6 +19,9 @@ class RigView {
     explicit RigView(ProjectState &project) : project_(project) {}
 
     void draw();
+    // The strip whose row is hovered (-1: none), and the one to highlight (hovered in the preview).
+    int hovered_strip() const { return hovered_strip_; }
+    void set_highlighted_strip(int strip) { highlighted_strip_ = strip; }
 
   private:
     void draw_project();
@@ -33,6 +36,8 @@ class RigView {
     std::vector<std::string> group_texts_;
     std::uint64_t texts_version_ = 0;
     int template_ = 0; // 0: pillars, 1: matrix panel.
+    int hovered_strip_ = -1;
+    int highlighted_strip_ = -1;
     PillarsTemplate pillars_;
     MatrixTemplate matrix_;
 };
