@@ -33,6 +33,10 @@ float volume_to_gain(float volume_db) {
 
 } // namespace
 
+void TransportPanel::apply_settings(const UserSettings &settings) {
+    volume_db_ = std::clamp(settings.volume_db, kMinVolumeDb, kMaxVolumeDb);
+}
+
 void TransportPanel::draw() {
     Transport &transport = session_.transport();
     ImGui::Begin("Transport");

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "gui/session.h"
+#include "io/user_settings.h"
 
 namespace psyight {
 
@@ -11,6 +12,8 @@ class TransportPanel {
     explicit TransportPanel(Session &session) : session_(session) {}
 
     void draw();
+    void apply_settings(const UserSettings &settings); // The volume.
+    void store_settings(UserSettings &settings) const { settings.volume_db = volume_db_; }
 
   private:
     void draw_overview(const LoadedTrack &track);

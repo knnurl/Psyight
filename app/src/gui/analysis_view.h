@@ -10,6 +10,7 @@
 #include "gui/session.h"
 #include "gui/spectrogram_textures.h"
 #include "gui/theme.h"
+#include "io/user_settings.h"
 
 namespace psyight {
 
@@ -18,6 +19,8 @@ class AnalysisView {
     explicit AnalysisView(Session &session) : session_(session) {}
 
     void draw();
+    void apply_settings(const UserSettings &settings); // The spectrogram's colours.
+    void store_settings(UserSettings &settings) const;
 
   private:
     void draw_toolbar(const LoadedTrack &track);

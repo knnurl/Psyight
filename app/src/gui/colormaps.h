@@ -13,5 +13,9 @@ const ColourTable &colormap_table(Colormap map);
 inline const char *colormap_name(Colormap map) {
     return map == Colormap::magma ? "Magma" : map == Colormap::inferno ? "Inferno" : "Viridis";
 }
+// The name in the settings file (io/user_settings.h).
+inline const char *colormap_id(Colormap map) {
+    return map == Colormap::magma ? "magma" : map == Colormap::inferno ? "inferno" : "viridis";
+}
 
 } // namespace psyight

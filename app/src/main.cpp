@@ -18,9 +18,11 @@
 #include "gui/session.h"
 #include "gui/settings_view.h"
 #include "gui/theme.h"
+#include "gui/tier.h"
 #include "gui/transport_panel.h"
 #include "io/png.h"
 #include "io/recent_files.h"
+#include "io/user_settings.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -51,6 +53,14 @@ constexpr int kMinimisedSleepMs = 10;
 constexpr int kGlVersionMajor = 3;
 constexpr int kGlVersionMinor = 3;
 constexpr const char *kGlslVersion = "#version 330 core";
+constexpr const char *kSettingsFile = "psyight.settings.json"; // In the working directory.
+
+// The interface depth's name in the settings file.
+const char *tier_id(psyight::Tier tier) {
+    return tier == psyight::Tier::operate    ? "operate"
+           : tier == psyight::Tier::engineer ? "engineer"
+                                             : "tune";
+}
 
 void log_glfw_error(int code, const char *description) {
     spdlog::error("GLFW error {}: {}", code, description);
@@ -168,6 +178,23 @@ int main() {
         psyight::PreflightView preflight_view(session, project, preview_view);
         psyight::SettingsView settings_view(project);
         psyight::RecentFiles recent;
+        // The operator's preferences: loaded at start, saved when they change (not in capture
+        // mode, which always renders the defaults).
+        psyight::UserSettings settings;
+        if (!capture) {
+            settings = psyight::load_user_settings(kSettingsFile);
+            psyight::apply_psyight_theme(settings.theme == "show" ? psyight::ThemeMode::show
+                                                                  : psyight::ThemeMode::desk);
+            for (const psyight::Tier t :
+                 {psyight::Tier::operate, psyight::Tier::tune, psyight::Tier::engineer}) {
+                if (settings.interface_depth == tier_id(t)) {
+                    psyight::set_current_tier(t);
+                }
+            }
+            transport_panel.apply_settings(settings);
+            analysis_view.apply_settings(settings);
+            bass_roll_view.apply_settings(settings);
+        }
         std::filesystem::path recent_path; // The track last added to the recent list.
         bool show_settings = false;
         bool open_requested = false;
@@ -325,6 +352,18 @@ int main() {
             }
             settings_view.draw(&show_settings, reset_layout);
             project.autosave();
+            if (!capture && !ImGui::IsAnyItemActive()) { // Not on every step of a drag.
+                psyight::UserSettings now = settings;
+                now.theme = psyight::theme_mode() == psyight::ThemeMode::show ? "show" : "desk";
+                now.interface_depth = tier_id(psyight::current_tier());
+                transport_panel.store_settings(now);
+                analysis_view.store_settings(now);
+                bass_roll_view.store_settings(now);
+                if (now != settings) {
+                    settings = now;
+                    psyight::save_user_settings(kSettingsFile, settings);
+                }
+            }
             session.end_frame();
             if (show_imgui_demo) {
                 ImGui::ShowDemoWindow(&show_imgui_demo);

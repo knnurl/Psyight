@@ -657,6 +657,18 @@ void BassRollView::draw_inspector() {
     ImGui::End();
 }
 
+void BassRollView::apply_settings(const UserSettings &settings) {
+    show_detections_ = settings.show_detections;
+    show_pitch_ = settings.show_pitch;
+    snap_ = settings.snap;
+}
+
+void BassRollView::store_settings(UserSettings &settings) const {
+    settings.show_detections = show_detections_;
+    settings.show_pitch = show_pitch_;
+    settings.snap = snap_;
+}
+
 void BassRollView::draw_inspector_note() {
     LabelEditor &labels = session_.labels();
     const int selected = selection_.front();

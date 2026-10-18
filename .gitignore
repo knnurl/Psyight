@@ -7,6 +7,7 @@ vcpkg_installed/
 CMakeUserPresets.json
 imgui.ini
 psyight.recent.json
+psyight.settings.json
 
 # Private data: never commit audio, stems, labels for private tracks, or trained weights
 data/

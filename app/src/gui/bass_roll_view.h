@@ -22,6 +22,7 @@
 #include "gui/spectrogram_textures.h"
 #include "gui/theme.h"
 #include "io/note_pattern.h"
+#include "io/user_settings.h"
 
 #include <array>
 #include <optional>
@@ -36,6 +37,8 @@ class BassRollView {
 
     void draw_roll();
     void draw_inspector();
+    void apply_settings(const UserSettings &settings); // The display toggles.
+    void store_settings(UserSettings &settings) const;
 
   private:
     enum class Drag { none, move, resize_start, resize_end };

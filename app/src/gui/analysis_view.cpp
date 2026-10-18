@@ -277,6 +277,25 @@ void AnalysisView::draw_residual(const TrackAnalysis &analysis, const Grid &grid
     ImPlot::PopPlotClipRect();
 }
 
+void AnalysisView::apply_settings(const UserSettings &settings) {
+    for (const Colormap map : {Colormap::magma, Colormap::inferno, Colormap::viridis}) {
+        if (settings.spectrogram_colours == colormap_id(map)) {
+            colormap_ = map;
+        }
+    }
+    if (settings.spectrogram_min_db < settings.spectrogram_max_db) {
+        min_db_ = std::max(settings.spectrogram_min_db, kMinDisplayDb);
+        max_db_ = std::min(settings.spectrogram_max_db, kMaxDisplayDb);
+    }
+    colours_changed_ = true;
+}
+
+void AnalysisView::store_settings(UserSettings &settings) const {
+    settings.spectrogram_colours = colormap_id(colormap_);
+    settings.spectrogram_min_db = min_db_;
+    settings.spectrogram_max_db = max_db_;
+}
+
 void AnalysisView::draw_toolbar(const LoadedTrack &track) {
     LabelEditor &labels = session_.labels();
     LabelGrid grid = labels.labels().grid;
