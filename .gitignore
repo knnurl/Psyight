@@ -24,6 +24,9 @@ student.weights.*
 sessions/
 recordings/
 
+# UI captures (docs/RESTYLE.md): they show private tracks
+captures/
+
 # Logs and crash dumps (logs/), and the running marker (gui/crash_guard.h)
 logs/
 psyight.running

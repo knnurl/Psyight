@@ -79,7 +79,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/output/discovery.cpp src/output/preflight.cpp
                                src/ml/student.cpp src/analysis/live_analysis.cpp
                                src/audio/capture.cpp src/audio/live_input.cpp
-                               src/io/midi_map.cpp)
+                               src/io/midi_map.cpp src/io/png.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch
@@ -93,7 +93,7 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/project_state.cpp src/gui/rig_view.cpp
                        src/gui/preflight_view.cpp src/gui/tier.cpp
                        src/gui/scoring_view.cpp src/gui/log_view.cpp src/io/midi_input.cpp
-                       src/gui/crash_guard_win32.cpp)
+                       src/gui/crash_guard_win32.cpp src/gui/capture.cpp)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32
@@ -148,7 +148,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/recorder_test.cpp tests/student_data_test.cpp
                              tests/node_firmware_test.cpp tests/playhead_clock_test.cpp
                              tests/golden_test.cpp tests/student_test.cpp tests/live_test.cpp
-                             tests/midi_test.cpp
+                             tests/midi_test.cpp tests/png_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)
