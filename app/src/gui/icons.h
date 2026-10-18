@@ -12,5 +12,11 @@ inline constexpr const char *kIconHalfSpeed = "\xee\x93\xbd"; // snail, U+E4FD.
 inline constexpr const char *kIconVolume = "\xee\x86\xab";    // volume-2, U+E1AB.
 inline constexpr const char *kIconFold = "\xee\x90\xbb";      // panel-top-close, U+E43B.
 inline constexpr const char *kIconUnfold = "\xee\x90\xbd";    // panel-top-open, U+E43D.
+inline constexpr const char *kIconPower = "\xee\x85\x84";     // power, U+E144.
+inline constexpr const char *kIconLeft = "\xee\x81\xb2";      // chevron-left, U+E072.
+inline constexpr const char *kIconRight = "\xee\x81\xb3";     // chevron-right, U+E073.
+inline constexpr const char *kIconRemove = "\xee\x86\xb2";    // x, U+E1B2.
+inline constexpr const char *kIconAdd = "\xee\x85\x81";       // plus, U+E141.
+inline constexpr const char *kIconRename = "\xee\x87\xb9";    // pencil, U+E1F9.
 
 } // namespace psyight

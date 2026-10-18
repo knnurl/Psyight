@@ -46,6 +46,9 @@ struct ThemeTokens {
     ImVec4 section_groove, section_breakdown, section_build, section_drop, section_other;
     ImVec4 section_boundary, section_text, phrase_tick, rest_shade, hat_tick, downbeat_handle;
     ImVec4 preview_bg;
+    // Devices and knobs (the Show tab's rack): the device panel and its title bar, a knob's track,
+    // value arc and pointer, and the modulation ring (where routes move a value right now).
+    ImVec4 device_bg, device_title, knob_track, knob_value, knob_pointer, mod_ring;
     // The spectrogram's default colour table. The bass roll's pitch background is a neutral ramp
     // from pitch_low (quiet) to pitch_high (loud), so the accent-filled notes stand out on it.
     Colormap spectrogram_colormap = Colormap::magma;

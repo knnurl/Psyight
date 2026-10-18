@@ -78,12 +78,23 @@ Live controls (Live input section, once locked):
 - **-10 ms and +10 ms:** nudge the predicted beat. The loop then pulls it back towards the kicks it hears.
 - **Relock:** measure the tempo again from the next kicks, for example after a tempo change the loop has not caught.
 
+## Macros, layers and modulation
+
+The Show tab works like a rack in Ableton Live:
+
+- **Macros:** 8 knobs, saved with the project. They do nothing alone; modulation routes use them as sources, so one knob (or a MIDI knob bound to it) can fade a layer or shift its hue live. The pencil names them.
+- **Layers** (Tune depth, under "Scene"): each layer is a device, bottom layer first. The power button switches it, the knobs set opacity and the effect's settings, the menus its blend mode and strip group. Drag a device's name to reorder; right-click it to move or remove. "+" adds a layer.
+- **Modulation:** each route is a card: source, curve, target and layer, then Hold (free, or sampled once per 16th, beat or bar) and the Amount, Attack and Release knobs. A blue ring on a knob shows where modulation is moving it right now (only for the scene that is playing).
+
+Knobs: drag up or down (Shift for fine), double-click to type, right-click to reset.
+
 ## MIDI controller
 
 In the Show tab, open "MIDI" and choose the controller. For each control you want, press Learn, then move the knob or press the pad. You can bind:
 
 - blackout, hold, automation (back to Show) and each scene, to buttons or pads
 - the brightness cap and the latency offset, to knobs or faders
+- the 8 macros, to knobs or faders
 - the tap test, and "downbeat now" (a pad for the "one")
 
 Bindings are saved with the project, and the controller reconnects on the next start.

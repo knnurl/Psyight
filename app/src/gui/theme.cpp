@@ -59,6 +59,14 @@ void data_tokens(ThemeTokens &t) {
     t.note_slide = t.accent;
     t.selection_fill = with_alpha(t.accent, 0.12f);
     t.selected_outline = mix(t.text, ImVec4(1, 1, 1, 1), 0.6f);
+    // Devices sit a step lighter than the panel, with a frame-coloured title bar; knob value arcs
+    // are neutral (the accent stays for active states), modulation rings take the info blue.
+    t.device_bg = mix(t.panel, t.frame, 0.5f);
+    t.device_title = t.frame;
+    t.knob_track = mix(t.bg, t.panel, 0.4f);
+    t.knob_value = mix(t.text_dim, t.text, 0.55f);
+    t.knob_pointer = t.text;
+    t.mod_ring = t.info;
     t.detection = t.text_dim;
     t.detection_border = with_alpha(t.text_dim, 0.55f);
     t.kick_line = with_alpha(t.text, 0.10f);
@@ -177,6 +185,12 @@ const std::vector<std::pair<const char *, ImVec4 ThemeTokens::*>> &token_names()
         {"note_slide", &ThemeTokens::note_slide},
         {"selection_fill", &ThemeTokens::selection_fill},
         {"selected_outline", &ThemeTokens::selected_outline},
+        {"device_bg", &ThemeTokens::device_bg},
+        {"device_title", &ThemeTokens::device_title},
+        {"knob_track", &ThemeTokens::knob_track},
+        {"knob_value", &ThemeTokens::knob_value},
+        {"knob_pointer", &ThemeTokens::knob_pointer},
+        {"mod_ring", &ThemeTokens::mod_ring},
         {"roll_white_row", &ThemeTokens::roll_white_row},
         {"roll_black_row", &ThemeTokens::roll_black_row},
         {"roll_black_overlay", &ThemeTokens::roll_black_overlay},

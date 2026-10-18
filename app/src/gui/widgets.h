@@ -9,6 +9,11 @@
 //   SetItemTooltip after it work as for the plain widget.
 // - drag_double and drag_int: number fields that drag (double-click or Ctrl+click to type),
 //   clamped to their range.
+// - knob and knob_int: rotary knobs (Ableton style): the label above in the small font, a
+//   270-degree arc (bipolar ranges grow from 0), the value below in the mono font. Drag up or
+//   down (Shift for fine), double-click to type, right-click to reset to the default. With
+//   `modulated`, a thin outer ring runs from the value to where modulation moves it. The format
+//   prints a double ("%.2f", "%.0f px"), also for knob_int.
 #pragma once
 
 #include <imgui.h>
@@ -50,6 +55,25 @@ template <typename Widget> bool mono_field(const char *label, Widget &&widget) {
 
 bool drag_double(const char *label, double *value, float speed, double min, double max,
                  const char *format);
+
+bool knob(const char *label, double *value, double min, double max, const char *format,
+          double default_value, const double *modulated = nullptr);
+bool knob_int(const char *label, int *value, int min, int max, const char *format,
+              int default_value);
+float knob_width(); // Pixels: lay knobs out in columns of this width.
+
+// A device panel (the Show tab's racks): a child window of `size` in the device colour with a
+// title bar strip of device_title_height() at the top. Draw the title row first (compact
+// buttons: push_device_title / pop_device_title), then the body; always pair with end_device.
+void begin_device(const char *id, const ImVec2 &size);
+void end_device();
+float device_title_height();
+float device_padding();   // Inside a device, each side.
+void push_device_title(); // Compact frames for the title row.
+void pop_device_title();
+// An icon-only button in a device title, frameless until hovered.
+bool device_icon_button(const char *icon, const char *id, const char *tooltip);
+float knob_height(); // Pixels, label and value included.
 bool drag_int(const char *label, int *value, float speed, int min, int max,
               const char *format = "%d");
 

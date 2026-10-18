@@ -702,7 +702,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         const std::string scene_label =
             "Scene: " + scenes[static_cast<size_t>(edit_scene_)].name + "###scene";
         if (ImGui::TreeNode(scene_label.c_str())) {
-            draw_scene_editor(scenes);
+            draw_scene_editor(scenes, frame);
             ImGui::TreePop();
         }
         if (scene_edited_) {
@@ -714,26 +714,16 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     if (ImGui::TreeNode("Limiters")) {
         LimiterParams p = project_.project().limiter;
         bool changed = false;
-        float cap = static_cast<float>(p.brightness_cap);
-        ImGui::SetNextItemWidth(8.0f * em);
-        if (mono_field("Brightness cap", [&](const char *id) {
-                return ImGui::SliderFloat(id, &cap, 0.0f, 1.0f, "%.2f");
-            })) {
-            p.brightness_cap = cap;
-            changed = true;
-        }
+        const LimiterParams defaults;
+        changed |=
+            knob("Brightness##cap", &p.brightness_cap, 0.0, 1.0, "%.2f", defaults.brightness_cap);
+        ImGui::SetItemTooltip("Brightness cap: every pixel at most this.");
         if (tier_at_least(Tier::tune)) {
+            ImGui::SameLine();
+            changed |= knob("Power##budget", &p.budget_a, 0.0, 100.0,
+                            p.budget_a <= 0.0 ? "off" : "%.1f A", defaults.budget_a);
+            ImGui::SetItemTooltip("Power budget: the frame is scaled to stay under it (0: off).");
             draw_group_caps();
-        }
-        if (tier_at_least(Tier::tune)) {
-            float budget = static_cast<float>(p.budget_a);
-            ImGui::SetNextItemWidth(8.0f * em);
-            if (mono_field("Power budget (0: off)", [&](const char *id) {
-                    return ImGui::DragFloat(id, &budget, 0.1f, 0.0f, 100.0f, "%.1f A");
-                })) {
-                p.budget_a = budget;
-                changed = true;
-            }
         }
         if (tier_at_least(Tier::engineer)) { // Disabling it is an Engineer action (SPEC 7.7).
             changed |= ImGui::Checkbox("Flash limiter (3 per second)", &p.flash_limiter);
@@ -758,7 +748,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     }
 }
 
-void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
+void PreviewView::draw_scene_editor(std::vector<Scene> &scenes, const ShowFrame &frame) {
     const float em = ImGui::GetFontSize();
     Scene &scene = scenes[static_cast<size_t>(edit_scene_)];
     ImGui::SetNextItemWidth(10.0f * em);
@@ -801,125 +791,8 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
         }
     }
 
-    // Layers, bottom first.
-    int remove = -1;
-    int swap_down = -1;
-    for (size_t i = 0; i < scene.layers.size(); ++i) {
-        Layer &layer = scene.layers[i];
-        ImGui::PushID(static_cast<int>(i));
-        scene_edited_ |= ImGui::Checkbox("##on", &layer.enabled);
-        ImGui::SameLine();
-        const bool open = ImGui::TreeNode(layer.effect->name());
-        ImGui::SameLine(15.5f * em);
-        ImGui::SetNextItemWidth(5.0f * em);
-        scene_edited_ |= mono_field("##opacity", [&](const char *id) {
-            return ImGui::SliderFloat(id, &layer.opacity, 0.0f, 1.0f, "%.2f");
-        });
-        ImGui::SetItemTooltip("Opacity");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(5.0f * em);
-        if (ImGui::BeginCombo("##blend", blend_mode_id(layer.blend))) {
-            for (const BlendMode m : kBlendModes) {
-                if (ImGui::Selectable(blend_mode_id(m), m == layer.blend)) {
-                    layer.blend = m;
-                    scene_edited_ = true;
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("v") && i + 1 < scene.layers.size()) {
-            swap_down = static_cast<int>(i);
-        }
-        ImGui::SetItemTooltip("Move down (earlier, under the layers above).");
-        ImGui::SameLine();
-        if (ImGui::SmallButton("x")) {
-            remove = static_cast<int>(i);
-        }
-        ImGui::SetItemTooltip("Remove this layer and its routes.");
-        if (open) {
-            // Group mask: the rig's group tags.
-            std::vector<std::string> groups;
-            for (const ProjectStrip &strip : project_.project().strips) {
-                for (const std::string &g : strip.spec.groups) {
-                    if (std::find(groups.begin(), groups.end(), g) == groups.end()) {
-                        groups.push_back(g);
-                    }
-                }
-            }
-            ImGui::SetNextItemWidth(8.0f * em);
-            if (ImGui::BeginCombo("Strips", layer.group.empty() ? "All" : layer.group.c_str())) {
-                if (ImGui::Selectable("All", layer.group.empty())) {
-                    layer.group.clear();
-                    scene_edited_ = true;
-                }
-                for (const std::string &g : groups) {
-                    if (ImGui::Selectable(g.c_str(), g == layer.group)) {
-                        layer.group = g;
-                        scene_edited_ = true;
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::SetItemTooltip("Group mask: only the strips tagged with this group (Rig tab).");
-            const std::vector<EffectParamInfo> infos = effect_param_infos(layer.spec.type());
-            bool params_changed = false;
-            for (size_t k = 0; k < infos.size(); ++k) {
-                const EffectParamInfo &info = infos[k];
-                ImGui::SetNextItemWidth(8.0f * em);
-                const std::string label = std::string(info.label) + "##" + info.id;
-                const std::string unit =
-                    info.unit[0] != 0 ? std::string(" ") + info.unit : std::string();
-                if (info.integer) {
-                    int v = static_cast<int>(std::lround(effect_param(layer.spec, k)));
-                    const std::string format = "%d" + unit;
-                    if (mono_field(label.c_str(), [&](const char *id) {
-                            return ImGui::SliderInt(id, &v, static_cast<int>(info.min),
-                                                    static_cast<int>(info.max), format.c_str());
-                        })) {
-                        set_effect_param(layer.spec, k, v);
-                        params_changed = true;
-                    }
-                } else {
-                    float v = static_cast<float>(effect_param(layer.spec, k));
-                    const std::string format = "%.3g" + unit;
-                    if (mono_field(label.c_str(), [&](const char *id) {
-                            return ImGui::SliderFloat(id, &v, static_cast<float>(info.min),
-                                                      static_cast<float>(info.max), format.c_str());
-                        })) {
-                        set_effect_param(layer.spec, k, v);
-                        params_changed = true;
-                    }
-                }
-            }
-            if (params_changed) {
-                layer.effect = make_effect(layer.spec);
-                scene_edited_ = true;
-            }
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
-    }
-    if (swap_down >= 0) {
-        swap_layers(scene, static_cast<size_t>(swap_down), static_cast<size_t>(swap_down) + 1);
-        scene_edited_ = true;
-    }
-    if (remove >= 0) {
-        remove_layer(scene, static_cast<size_t>(remove));
-        scene_edited_ = true;
-    }
-    ImGui::SetNextItemWidth(9.0f * em);
-    if (ImGui::BeginCombo("##add layer", "Add layer")) {
-        for (const EffectType t : kEffectTypes) {
-            const Layer preview_layer = make_layer(default_spec(t), BlendMode::add);
-            if (ImGui::Selectable(preview_layer.effect->name())) {
-                scene.layers.push_back(preview_layer);
-                scene_edited_ = true;
-            }
-        }
-        ImGui::EndCombo();
-    }
-    draw_routes(scene);
+    draw_rack(scene, frame);
+    draw_routes(scene, frame);
 
     // The scene list.
     if (ImGui::Button("Duplicate scene")) {
@@ -954,16 +827,16 @@ void PreviewView::draw_group_caps() {
     if (groups.empty()) {
         return;
     }
-    ImGui::TextDisabled("Caps by group (the lowest wins):");
+    // One knob per group, after the global ones (the lowest cap wins).
     for (const std::string &g : groups) {
         std::vector<GroupCap> &caps = project_.edit().group_caps;
         auto it = std::find_if(caps.begin(), caps.end(),
                                [&g](const GroupCap &c) { return c.group == g; });
-        float cap = it == caps.end() ? 1.0f : static_cast<float>(it->cap);
-        ImGui::SetNextItemWidth(8.0f * ImGui::GetFontSize());
-        if (mono_field(g.c_str(), [&](const char *id) {
-                return ImGui::SliderFloat(id, &cap, 0.0f, 1.0f, "%.2f");
-            })) {
+        double cap = it == caps.end() ? 1.0 : it->cap;
+        ImGui::SameLine();
+        const bool turned = knob(g.c_str(), &cap, 0.0, 1.0, "%.2f", 1.0);
+        ImGui::SetItemTooltip("Cap for the strips tagged %s (the lowest cap wins).", g.c_str());
+        if (turned) {
             if (it == caps.end()) {
                 caps.push_back({g, cap});
             } else {
@@ -1046,16 +919,33 @@ void PreviewView::draw_palettes() {
     ImGui::TreePop();
 }
 
-void PreviewView::draw_routes(Scene &scene) {
-    if (!ImGui::TreeNode("Modulation")) {
-        return;
-    }
-    const float em = ImGui::GetFontSize();
+void PreviewView::draw_routes(Scene &scene, const ShowFrame &frame) {
+    ImGui::SeparatorText("Modulation");
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float row = ImGui::GetFrameHeight() + style.ItemSpacing.y;
+    const float width = 2.0f * device_padding() + 3.0f * knob_width() + 2.0f * style.ItemSpacing.x;
+    // An empty rack is just the add button.
+    const float height = scene.routes.empty() ? ImGui::GetFrameHeight() + 2.0f * device_padding()
+                                              : device_title_height() + 4.0f * row + knob_height() +
+                                                    device_padding();
+    const bool live =
+        frame.mix.to == edit_scene_ && frame.route_values.size() == scene.routes.size();
     int remove = -1;
+    ImGui::BeginChild("##routes", ImVec2(0.0f, height + style.ScrollbarSize + style.ItemSpacing.y),
+                      ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
     for (size_t i = 0; i < scene.routes.size(); ++i) {
         ModRoute &r = scene.routes[i];
+        if (i > 0) {
+            ImGui::SameLine();
+        }
         ImGui::PushID(static_cast<int>(i));
-        ImGui::SetNextItemWidth(8.0f * em);
+        begin_device("##route", ImVec2(width, height));
+        const float full = ImGui::GetContentRegionAvail().x;
+        // Title: the source, and remove.
+        push_device_title();
+        const float remove_width =
+            ImGui::CalcTextSize(kIconRemove).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+        ImGui::SetNextItemWidth(full - remove_width - ImGui::GetStyle().ItemSpacing.x);
         if (ImGui::BeginCombo("##source", source_label(r.source).c_str())) {
             for (const ModSource s : kModSources) {
                 if (ImGui::Selectable(source_label(s).c_str(), s == r.source)) {
@@ -1065,8 +955,16 @@ void PreviewView::draw_routes(Scene &scene) {
             }
             ImGui::EndCombo();
         }
+        ImGui::SetItemTooltip("Source");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(6.0f * em);
+        if (device_icon_button(kIconRemove, "remove", "Remove this route.")) {
+            remove = static_cast<int>(i);
+        }
+        pop_device_title();
+        ImGui::SetCursorPosY(device_title_height());
+        // Curve and invert.
+        const float invert_width = ImGui::CalcTextSize("Inv").x + 2.0f * style.FramePadding.x;
+        ImGui::SetNextItemWidth(full - invert_width - style.ItemSpacing.x);
         if (ImGui::BeginCombo("##curve", mod_curve_name(r.curve))) {
             for (const ModCurve c : kModCurves) {
                 if (ImGui::Selectable(mod_curve_name(c), c == r.curve)) {
@@ -1076,15 +974,15 @@ void PreviewView::draw_routes(Scene &scene) {
             }
             ImGui::EndCombo();
         }
+        ImGui::SetItemTooltip("Curve");
         ImGui::SameLine();
-        scene_edited_ |= ImGui::Checkbox("invert", &r.invert);
-        ImGui::SameLine();
-        if (ImGui::SmallButton("x")) {
-            remove = static_cast<int>(i);
+        if (toggle_button("Inv###invert", r.invert)) {
+            r.invert = !r.invert;
+            scene_edited_ = true;
         }
-        ImGui::SetItemTooltip("Remove this route.");
-        ImGui::Indent();
-        ImGui::SetNextItemWidth(7.0f * em);
+        ImGui::SetItemTooltip("Invert: 1 minus the shaped source.");
+        // Target, and its layer.
+        ImGui::SetNextItemWidth(full);
         if (ImGui::BeginCombo("##target", mod_target_name(r.target))) {
             for (const ModTarget t : kModTargets) {
                 if (ImGui::Selectable(mod_target_name(t), t == r.target)) {
@@ -1095,10 +993,16 @@ void PreviewView::draw_routes(Scene &scene) {
             }
             ImGui::EndCombo();
         }
-        if (r.target != ModTarget::brightness && !scene.layers.empty()) {
+        ImGui::SetItemTooltip("Target");
+        ImGui::SetNextItemWidth(full);
+        if (r.target == ModTarget::brightness || scene.layers.empty()) {
+            ImGui::BeginDisabled();
+            if (ImGui::BeginCombo("##layer", "Whole scene")) {
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
+        } else {
             r.layer = std::clamp(r.layer, 0, static_cast<int>(scene.layers.size()) - 1);
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(8.0f * em);
             if (ImGui::BeginCombo("##layer",
                                   scene.layers[static_cast<size_t>(r.layer)].effect->name())) {
                 for (int k = 0; k < static_cast<int>(scene.layers.size()); ++k) {
@@ -1110,20 +1014,10 @@ void PreviewView::draw_routes(Scene &scene) {
                 }
                 ImGui::EndCombo();
             }
+            ImGui::SetItemTooltip("Layer");
         }
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(6.0f * em);
-        float amount = static_cast<float>(r.amount);
-        const bool hue = r.target == ModTarget::hue_shift;
-        if (mono_field("amount", [&](const char *id) {
-                return ImGui::SliderFloat(id, &amount, hue ? -180.0f : -1.0f, hue ? 180.0f : 1.0f,
-                                          hue ? "%.0f deg" : "%.2f");
-            })) {
-            r.amount = amount;
-            scene_edited_ = true;
-        }
-        // Transforms: hold per grid division, then attack and release smoothing.
-        ImGui::SetNextItemWidth(7.0f * em);
+        // Hold per grid division.
+        ImGui::SetNextItemWidth(full);
         if (ImGui::BeginCombo("##quantise", mod_quantise_name(r.quantise))) {
             for (const ModQuantise q : kModQuantises) {
                 if (ImGui::Selectable(mod_quantise_name(q), q == r.quantise)) {
@@ -1135,36 +1029,275 @@ void PreviewView::draw_routes(Scene &scene) {
         }
         ImGui::SetItemTooltip("Free follows the source; Hold samples it at each 16th, beat or bar "
                               "and keeps it until the next.");
+        // Amount (its ring: what the route adds right now), attack and release.
+        const bool hue = r.target == ModTarget::hue_shift;
+        const double now = live ? r.amount * frame.route_values[i] : 0.0;
+        if (knob("Amount", &r.amount, hue ? -180.0 : -1.0, hue ? 180.0 : 1.0,
+                 hue ? "%+.0f deg" : "%+.2f", hue ? 60.0 : 0.5, live ? &now : nullptr)) {
+            scene_edited_ = true;
+        }
         ImGui::SameLine();
-        const auto smoothing = [&](const char *label, double &seconds, const char *tip) {
-            float ms = static_cast<float>(1e3 * seconds);
-            ImGui::SetNextItemWidth(5.5f * em);
-            if (mono_field(label, [&](const char *id) {
-                    return ImGui::DragFloat(id, &ms, 2.0f, 0.0f, 1e3f * kMaxSmoothingS, "%.0f ms",
-                                            ImGuiSliderFlags_AlwaysClamp);
-                })) {
-                seconds = 1e-3 * ms;
-                scene_edited_ = true;
-            }
-            ImGui::SetItemTooltip("%s", tip);
-        };
-        smoothing("attack", r.attack_s, "Time constant while the value rises; 0: at once.");
+        double attack_ms = 1e3 * r.attack_s;
+        if (knob("Attack", &attack_ms, 0.0, 1e3 * kMaxSmoothingS, "%.0f ms", 0.0)) {
+            r.attack_s = 1e-3 * attack_ms;
+            scene_edited_ = true;
+        }
         ImGui::SameLine();
-        smoothing("release", r.release_s, "Time constant while the value falls; 0: at once.");
-        ImGui::Unindent();
+        double release_ms = 1e3 * r.release_s;
+        if (knob("Release", &release_ms, 0.0, 1e3 * kMaxSmoothingS, "%.0f ms", 0.0)) {
+            r.release_s = 1e-3 * release_ms;
+            scene_edited_ = true;
+        }
+        end_device();
         ImGui::PopID();
     }
+    if (!scene.routes.empty()) {
+        ImGui::SameLine();
+    }
+    begin_device("##add route", ImVec2(knob_width(), height));
+    ImGui::SetCursorPosY(0.5f * (height - ImGui::GetFrameHeight()));
+    if (device_icon_button(kIconAdd, "add route",
+                           "Add a route: source, curve and amount onto a layer's opacity or hue, "
+                           "or the scene's brightness (SPEC 7.4). Routes to one target add up.")) {
+        scene.routes.push_back({});
+        scene_edited_ = true;
+    }
+    end_device();
+    ImGui::EndChild();
     if (remove >= 0) {
         scene.routes.erase(scene.routes.begin() + remove);
         scene_edited_ = true;
     }
-    if (ImGui::Button("Add route")) {
-        scene.routes.push_back({});
+}
+
+void PreviewView::draw_rack(Scene &scene, const ShowFrame &frame) {
+    ImGui::SeparatorText("Layers");
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float height = device_title_height() + ImGui::GetFrameHeight() + style.ItemSpacing.y +
+                         2.0f * knob_height() + style.ItemSpacing.y + device_padding();
+    const bool live =
+        frame.mix.to == edit_scene_ && frame.route_values.size() == scene.routes.size();
+    int remove = -1;
+    int move_from = -1; // A layer dragged (or moved from the menu) to move_to.
+    int move_to = -1;
+    ImGui::BeginChild("##rack", ImVec2(0.0f, height + style.ScrollbarSize + style.ItemSpacing.y),
+                      ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
+    for (size_t i = 0; i < scene.layers.size(); ++i) {
+        if (i > 0) {
+            ImGui::SameLine();
+        }
+        draw_layer_device(scene, i, live ? &frame.route_values : nullptr, height, remove, move_from,
+                          move_to);
+    }
+    if (!scene.layers.empty()) {
+        ImGui::SameLine();
+    }
+    begin_device("##add layer", ImVec2(knob_width(), height));
+    ImGui::SetCursorPosY(0.5f * (height - ImGui::GetFrameHeight()));
+    if (device_icon_button(kIconAdd, "add layer", "Add a layer (on top, at the right).")) {
+        ImGui::OpenPopup("##add layer menu");
+    }
+    if (ImGui::BeginPopup("##add layer menu")) {
+        for (const EffectType t : kEffectTypes) {
+            const Layer layer = make_layer(default_spec(t), BlendMode::add);
+            if (ImGui::Selectable(layer.effect->name())) {
+                scene.layers.push_back(layer);
+                scene_edited_ = true;
+            }
+        }
+        ImGui::EndPopup();
+    }
+    end_device();
+    ImGui::EndChild();
+    if (move_from >= 0 && move_to >= 0 && move_from != move_to) {
+        // Adjacent swaps keep every route on its layer.
+        for (int k = move_from; k != move_to; k += move_to > move_from ? 1 : -1) {
+            const int next = move_to > move_from ? k + 1 : k - 1;
+            swap_layers(scene, static_cast<size_t>(std::min(k, next)),
+                        static_cast<size_t>(std::max(k, next)));
+        }
         scene_edited_ = true;
     }
-    ImGui::SetItemTooltip("Source, curve and amount onto a layer's opacity or hue, or the "
-                          "scene's brightness (SPEC 7.4). Routes to one target add up.");
-    ImGui::TreePop();
+    if (remove >= 0) {
+        remove_layer(scene, static_cast<size_t>(remove));
+        scene_edited_ = true;
+    }
+}
+
+void PreviewView::draw_layer_device(Scene &scene, size_t index,
+                                    const std::vector<double> *route_values, float height,
+                                    int &remove, int &move_from, int &move_to) {
+    Layer &layer = scene.layers[index];
+    const std::vector<EffectParamInfo> infos = effect_param_infos(layer.spec.type());
+    const EffectSpec defaults = default_spec(layer.spec.type());
+    const int knobs = 1 + static_cast<int>(infos.size());
+    const int columns = std::max(3, (knobs + 1) / 2);
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float width = 2.0f * device_padding() + columns * knob_width() +
+                        static_cast<float>(columns - 1) * style.ItemSpacing.x;
+    ImGui::PushID(static_cast<int>(index));
+    begin_device("##device", ImVec2(width, height));
+    const float full = ImGui::GetContentRegionAvail().x;
+
+    // Title: power (the accent when on), the name (drag to reorder; right-click: move or
+    // remove) and remove.
+    push_device_title();
+    ImGui::PushStyleColor(ImGuiCol_Text, layer.enabled ? theme().accent : theme().text_dim);
+    if (device_icon_button(kIconPower, "on",
+                           layer.enabled ? "On. Click to switch the layer off."
+                                         : "Off. Click to switch the layer on.")) {
+        layer.enabled = !layer.enabled;
+        scene_edited_ = true;
+    }
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+    const float icon_button = ImGui::CalcTextSize(kIconRemove).x + 2.0f * style.FramePadding.x;
+    const float name_width = std::max(1.0f, full - ImGui::GetItemRectSize().x - icon_button -
+                                                2.0f * style.ItemSpacing.x);
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("##name", ImVec2(name_width, ImGui::GetFrameHeight()));
+    if (ImGui::BeginDragDropSource()) {
+        const int dragged = static_cast<int>(index);
+        ImGui::SetDragDropPayload("psyight layer", &dragged, sizeof(dragged));
+        ImGui::TextUnformatted(layer.effect->name());
+        ImGui::EndDragDropSource();
+    }
+    ImGui::SetItemTooltip("%s. Drag to reorder; right-click to move or remove.",
+                          layer.effect->name());
+    if (ImGui::BeginPopupContextItem("##layer menu")) {
+        if (ImGui::MenuItem("Move earlier", nullptr, false, index > 0)) {
+            move_from = static_cast<int>(index);
+            move_to = static_cast<int>(index) - 1;
+        }
+        if (ImGui::MenuItem("Move later", nullptr, false, index + 1 < scene.layers.size())) {
+            move_from = static_cast<int>(index);
+            move_to = static_cast<int>(index) + 1;
+        }
+        if (ImGui::MenuItem("Remove")) {
+            remove = static_cast<int>(index);
+        }
+        ImGui::EndPopup();
+    }
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+    ImFont *title_font = theme_font(ThemeFont::ui_medium);
+    draw->PushClipRect(at, ImVec2(at.x + name_width, at.y + ImGui::GetFrameHeight()), true);
+    draw->AddText(title_font, ImGui::GetFontSize(), ImVec2(at.x, at.y + style.FramePadding.y),
+                  to_u32(layer.enabled ? theme().text : theme().text_dim), layer.effect->name());
+    draw->PopClipRect();
+    ImGui::SameLine();
+    if (device_icon_button(kIconRemove, "remove", "Remove this layer and its routes.")) {
+        remove = static_cast<int>(index);
+    }
+    pop_device_title();
+
+    // Blend mode and group mask.
+    ImGui::SetCursorPosY(device_title_height());
+    const float half = 0.5f * (full - style.ItemSpacing.x);
+    ImGui::SetNextItemWidth(half);
+    if (ImGui::BeginCombo("##blend", blend_mode_id(layer.blend))) {
+        for (const BlendMode m : kBlendModes) {
+            if (ImGui::Selectable(blend_mode_id(m), m == layer.blend)) {
+                layer.blend = m;
+                scene_edited_ = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Blend mode");
+    ImGui::SameLine();
+    std::vector<std::string> groups;
+    for (const ProjectStrip &strip : project_.project().strips) {
+        for (const std::string &g : strip.spec.groups) {
+            if (std::find(groups.begin(), groups.end(), g) == groups.end()) {
+                groups.push_back(g);
+            }
+        }
+    }
+    ImGui::SetNextItemWidth(half);
+    if (ImGui::BeginCombo("##strips", layer.group.empty() ? "All strips" : layer.group.c_str())) {
+        if (ImGui::Selectable("All strips", layer.group.empty())) {
+            layer.group.clear();
+            scene_edited_ = true;
+        }
+        for (const std::string &g : groups) {
+            if (ImGui::Selectable(g.c_str(), g == layer.group)) {
+                layer.group = g;
+                scene_edited_ = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Group mask: only the strips tagged with this group (Rig tab).");
+
+    // Knobs: opacity, then the effect's parameters.
+    double opacity = layer.opacity;
+    double modulated = opacity;
+    std::string routes_here;
+    for (size_t r = 0; r < scene.routes.size(); ++r) {
+        const ModRoute &route = scene.routes[r];
+        if (route.layer != static_cast<int>(index) || route.target != ModTarget::opacity) {
+            continue;
+        }
+        if (route_values != nullptr) {
+            modulated += route.amount * (*route_values)[r];
+        }
+        char line[96];
+        std::snprintf(line, sizeof(line), "\n%s, %+.2f", source_label(route.source).c_str(),
+                      route.amount);
+        routes_here += line;
+    }
+    modulated = std::clamp(modulated, 0.0, 1.0);
+    if (knob("Opacity", &opacity, 0.0, 1.0, "%.2f", 1.0,
+             route_values != nullptr && !routes_here.empty() ? &modulated : nullptr)) {
+        layer.opacity = static_cast<float>(opacity);
+        scene_edited_ = true;
+    }
+    if (!routes_here.empty()) {
+        ImGui::SetItemTooltip("Opacity, modulated by:%s", routes_here.c_str());
+    }
+    bool params_changed = false;
+    for (size_t k = 0; k < infos.size(); ++k) {
+        const EffectParamInfo &info = infos[k];
+        if ((k + 1) % static_cast<size_t>(columns) != 0) {
+            ImGui::SameLine();
+        }
+        const std::string label = std::string(info.label) + "##" + info.id;
+        const std::string unit = info.unit[0] != 0 ? std::string(" ") + info.unit : std::string();
+        if (info.integer) {
+            int v = static_cast<int>(std::lround(effect_param(layer.spec, k)));
+            if (knob_int(label.c_str(), &v, static_cast<int>(info.min), static_cast<int>(info.max),
+                         ("%.0f" + unit).c_str(),
+                         static_cast<int>(std::lround(effect_param(defaults, k))))) {
+                set_effect_param(layer.spec, k, v);
+                params_changed = true;
+            }
+        } else {
+            double v = effect_param(layer.spec, k);
+            if (knob(label.c_str(), &v, info.min, info.max, ("%.3g" + unit).c_str(),
+                     effect_param(defaults, k))) {
+                set_effect_param(layer.spec, k, v);
+                params_changed = true;
+            }
+        }
+        if (info.description[0] != '\0') {
+            ImGui::SetItemTooltip("%s. Drag (Shift: fine); double-click to type; right-click "
+                                  "resets.",
+                                  info.description);
+        }
+    }
+    if (params_changed) {
+        layer.effect = make_effect(layer.spec);
+        scene_edited_ = true;
+    }
+    end_device();
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("psyight layer")) {
+            move_from = *static_cast<const int *>(payload->Data);
+            move_to = static_cast<int>(index);
+        }
+        ImGui::EndDragDropTarget();
+    }
+    ImGui::PopID();
 }
 
 std::string PreviewView::source_label(ModSource source) const {
@@ -1174,24 +1307,59 @@ std::string PreviewView::source_label(ModSource source) const {
 }
 
 void PreviewView::draw_macros() {
-    if (!ImGui::TreeNode("Macros")) {
-        return;
+    const ImGuiStyle &style = ImGui::GetStyle();
+    constexpr int kColumns = 4;
+    const float width = 2.0f * device_padding() + kColumns * knob_width() +
+                        static_cast<float>(kColumns - 1) * style.ItemSpacing.x;
+    const float height =
+        device_title_height() + 2.0f * knob_height() + style.ItemSpacing.y + device_padding();
+    begin_device("##macros", ImVec2(width, height));
+    push_device_title();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Macros");
+    const float rename_width = ImGui::CalcTextSize(kIconRename).x + 2.0f * style.FramePadding.x;
+    ImGui::SameLine(ImGui::GetWindowWidth() - device_padding() - rename_width);
+    if (device_icon_button(kIconRename, "rename", "Name the macros.")) {
+        ImGui::OpenPopup("##macro names");
     }
-    const float em = ImGui::GetFontSize();
+    pop_device_title();
+    ImGui::SetCursorPosY(device_title_height());
     for (int i = 0; i < kMacroCount; ++i) {
+        if (i % kColumns != 0) {
+            ImGui::SameLine();
+        }
         ImGui::PushID(i);
-        float value = static_cast<float>(project_.project().macro_values[static_cast<size_t>(i)]);
-        ImGui::SetNextItemWidth(8.0f * em);
-        if (mono_field(macro_name(project_.project(), i).c_str(), [&](const char *id) {
-                return ImGui::SliderFloat(id, &value, 0.0f, 1.0f, "%.2f");
-            })) {
+        double value = project_.project().macro_values[static_cast<size_t>(i)];
+        if (knob(macro_name(project_.project(), i).c_str(), &value, 0.0, 1.0, "%.2f", 0.0)) {
             project_.edit().macro_values[static_cast<size_t>(i)] = value;
             project_.changed();
         }
+        const std::string target = "macro:" + std::to_string(i);
+        if (const MidiBinding *bound = midi_map_.binding_of(target); bound != nullptr) {
+            ImGui::SetItemTooltip("%s: %s. A modulation source.",
+                                  macro_name(project_.project(), i).c_str(),
+                                  describe(*bound).c_str());
+        } else {
+            ImGui::SetItemTooltip("%s: a modulation source. MIDI: learn a knob in the MIDI "
+                                  "section.",
+                                  macro_name(project_.project(), i).c_str());
+        }
         ImGui::PopID();
     }
-    ImGui::TextDisabled("Sources for modulation routes; MIDI learn binds a knob to each.");
-    ImGui::TreePop();
+    if (ImGui::BeginPopup("##macro names")) {
+        for (int i = 0; i < kMacroCount; ++i) {
+            ImGui::PushID(i);
+            ImGui::SetNextItemWidth(10.0f * ImGui::GetFontSize());
+            const std::string hint = "Macro " + std::to_string(i + 1);
+            if (ImGui::InputTextWithHint("##name", hint.c_str(),
+                                         &project_.edit().macro_names[static_cast<size_t>(i)])) {
+                project_.changed();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
+    end_device();
 }
 
 void PreviewView::draw_scene_cards(const ShowFrame &frame) {

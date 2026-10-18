@@ -60,8 +60,13 @@ class PreviewView {
     void apply_midi(const MidiAction &action);
     void draw_controls(const ShowFrame &frame);
     void draw_scene_cards(const ShowFrame &frame);
-    void draw_scene_editor(std::vector<Scene> &scenes);
-    void draw_routes(Scene &scene);
+    void draw_scene_editor(std::vector<Scene> &scenes, const ShowFrame &frame);
+    // The scene's layers as a device chain, bottom layer first (left), as a rack's signal flows.
+    void draw_rack(Scene &scene, const ShowFrame &frame);
+    // One layer's device; route_values: the scene's live route values (it is playing) or null.
+    void draw_layer_device(Scene &scene, size_t index, const std::vector<double> *route_values,
+                           float height, int &remove, int &move_from, int &move_to);
+    void draw_routes(Scene &scene, const ShowFrame &frame); // Modulation routes as cards.
     void draw_macros(); // The 8 macro knobs (modulation sources, MIDI-learnable).
     std::string source_label(ModSource source) const; // Macros by their project names.
     void draw_palettes();

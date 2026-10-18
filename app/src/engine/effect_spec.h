@@ -33,6 +33,7 @@ struct EffectParamInfo {
     double min;
     double max;
     bool integer;
+    const char *description = ""; // The long name, for tooltips (the label is short, for knobs).
 };
 
 std::vector<EffectParamInfo> effect_param_infos(EffectType type);

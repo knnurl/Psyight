@@ -20,10 +20,13 @@ template <typename P> const std::vector<Field<P>> &fields();
 template <> const std::vector<Field<PlasmaParams>> &fields<PlasmaParams>() {
     using P = PlasmaParams;
     static const std::vector<Field<P>> f = {
-        {{"speed_hz", "Drift speed", "Hz", 0.0, 2.0, false}, &P::speed_hz},
-        {{"scale_m", "Spatial period", "m", 0.1, 10.0, false}, &P::scale_m},
-        {{"groove_level", "Level in grooves", "", 0.0, 1.0, false}, &P::groove_level},
-        {{"ambient_level", "Level elsewhere", "", 0.0, 1.0, false}, &P::ambient_level},
+        {{"speed_hz", "Drift", "Hz", 0.0, 2.0, false, "Drift speed of the field"}, &P::speed_hz},
+        {{"scale_m", "Scale", "m", 0.1, 10.0, false, "Spatial period"}, &P::scale_m},
+        {{"groove_level", "Groove", "", 0.0, 1.0, false, "Level in grooves and drops"},
+         &P::groove_level},
+        {{"ambient_level", "Ambient", "", 0.0, 1.0, false,
+          "Level in intros, breakdowns, builds and outros"},
+         &P::ambient_level},
     };
     return f;
 }
@@ -31,9 +34,9 @@ template <> const std::vector<Field<PlasmaParams>> &fields<PlasmaParams>() {
 template <> const std::vector<Field<ShockwaveParams>> &fields<ShockwaveParams>() {
     using P = ShockwaveParams;
     static const std::vector<Field<P>> f = {
-        {{"speed_m_per_s", "Ring speed", "m/s", 0.5, 30.0, false}, &P::speed_m_per_s},
-        {{"width_m", "Ring width", "m", 0.02, 2.0, false}, &P::width_m},
-        {{"decay_s", "Decay", "s", 0.02, 2.0, false}, &P::decay_s},
+        {{"speed_m_per_s", "Speed", "m/s", 0.5, 30.0, false, "Ring speed"}, &P::speed_m_per_s},
+        {{"width_m", "Width", "m", 0.02, 2.0, false, "Ring width"}, &P::width_m},
+        {{"decay_s", "Decay", "s", 0.02, 2.0, false, "Brightness time constant"}, &P::decay_s},
     };
     return f;
 }
@@ -41,14 +44,17 @@ template <> const std::vector<Field<ShockwaveParams>> &fields<ShockwaveParams>()
 template <> const std::vector<Field<ConveyorParams>> &fields<ConveyorParams>() {
     using P = ConveyorParams;
     static const std::vector<Field<P>> f = {
-        {{"segment_pixels", "Segment", "px", 1.0, 100.0, true}, nullptr, &P::segment_pixels},
-        {{"period_segments", "Segments per lit one", "", 2.0, 20.0, true},
+        {{"segment_pixels", "Segment", "px", 1.0, 100.0, true, "Segment length: one step per note"},
+         nullptr,
+         &P::segment_pixels},
+        {{"period_segments", "Spacing", "", 2.0, 20.0, true, "Segments per lit one"},
          nullptr,
          &P::period_segments},
-        {{"hue_per_semitone_deg", "Hue per semitone", "deg", 0.0, 90.0, false},
+        {{"hue_per_semitone_deg", "Hue/semi", "deg", 0.0, 90.0, false, "Hue per semitone"},
          &P::hue_per_semitone_deg},
-        {{"hue_offset_deg", "Hue of MIDI 0", "deg", 0.0, 360.0, false}, &P::hue_offset_deg},
-        {{"release_s", "Release", "s", 0.0, 1.0, false}, &P::release_s},
+        {{"hue_offset_deg", "Hue base", "deg", 0.0, 360.0, false, "Hue of MIDI 0 (C-1)"},
+         &P::hue_offset_deg},
+        {{"release_s", "Release", "s", 0.0, 1.0, false, "Fade after the note ends"}, &P::release_s},
     };
     return f;
 }
@@ -56,8 +62,8 @@ template <> const std::vector<Field<ConveyorParams>> &fields<ConveyorParams>() {
 template <> const std::vector<Field<SparkleParams>> &fields<SparkleParams>() {
     using P = SparkleParams;
     static const std::vector<Field<P>> f = {
-        {{"density", "Share lit per hat", "", 0.0, 0.2, false}, &P::density},
-        {{"decay_s", "Decay", "s", 0.01, 1.0, false}, &P::decay_s},
+        {{"density", "Density", "", 0.0, 0.2, false, "Share of pixels lit per hat"}, &P::density},
+        {{"decay_s", "Decay", "s", 0.01, 1.0, false, "Sparkle time constant"}, &P::decay_s},
     };
     return f;
 }
@@ -65,10 +71,11 @@ template <> const std::vector<Field<SparkleParams>> &fields<SparkleParams>() {
 template <> const std::vector<Field<ShimmerParams>> &fields<ShimmerParams>() {
     using P = ShimmerParams;
     static const std::vector<Field<P>> f = {
-        {{"level", "Level", "", 0.0, 1.0, false}, &P::level},
-        {{"rate_hz", "Twinkle rate", "Hz", 0.0, 20.0, false}, &P::rate_hz},
-        {{"density", "Share of pixels", "", 0.0, 0.2, false}, &P::density},
-        {{"fade_s", "Fade in", "s", 0.0, 0.5, false}, &P::fade_s},
+        {{"level", "Level", "", 0.0, 1.0, false, "Shimmer level"}, &P::level},
+        {{"rate_hz", "Rate", "Hz", 0.0, 20.0, false, "Twinkle rate of each pixel"}, &P::rate_hz},
+        {{"density", "Density", "", 0.0, 0.2, false, "Share of pixels that shimmer"}, &P::density},
+        {{"fade_s", "Fade in", "s", 0.0, 0.5, false, "Fade-in time constant after a note ends"},
+         &P::fade_s},
     };
     return f;
 }
@@ -76,11 +83,14 @@ template <> const std::vector<Field<ShimmerParams>> &fields<ShimmerParams>() {
 template <> const std::vector<Field<BuildParams>> &fields<BuildParams>() {
     using P = BuildParams;
     static const std::vector<Field<P>> f = {
-        {{"wavelength_m", "Ring spacing", "m", 0.05, 5.0, false}, &P::wavelength_m},
-        {{"start_speed_hz", "Start speed", "Hz", 0.0, 5.0, false}, &P::start_speed_hz},
-        {{"speed_ramp", "Speed ramp", "x", 0.0, 10.0, false}, &P::speed_ramp},
-        {{"start_level", "Start level", "", 0.0, 1.0, false}, &P::start_level},
-        {{"end_level", "End level", "", 0.0, 1.0, false}, &P::end_level},
+        {{"wavelength_m", "Spacing", "m", 0.05, 5.0, false, "Ring spacing"}, &P::wavelength_m},
+        {{"start_speed_hz", "Speed", "Hz", 0.0, 5.0, false, "Rings per second at the build start"},
+         &P::start_speed_hz},
+        {{"speed_ramp", "Ramp", "x", 0.0, 10.0, false, "Extra speed at the end, as a multiple"},
+         &P::speed_ramp},
+        {{"start_level", "Start", "", 0.0, 1.0, false, "Level at the build start"},
+         &P::start_level},
+        {{"end_level", "End", "", 0.0, 1.0, false, "Level at the build end"}, &P::end_level},
     };
     return f;
 }
@@ -88,9 +98,10 @@ template <> const std::vector<Field<BuildParams>> &fields<BuildParams>() {
 template <> const std::vector<Field<DropBurstParams>> &fields<DropBurstParams>() {
     using P = DropBurstParams;
     static const std::vector<Field<P>> f = {
-        {{"speed_m_per_s", "Speed", "m/s", 0.5, 30.0, false}, &P::speed_m_per_s},
-        {{"decay_s", "Decay", "s", 0.05, 3.0, false}, &P::decay_s},
-        {{"duration_s", "Duration", "s", 0.1, 5.0, false}, &P::duration_s},
+        {{"speed_m_per_s", "Speed", "m/s", 0.5, 30.0, false, "Burst speed"}, &P::speed_m_per_s},
+        {{"decay_s", "Decay", "s", 0.05, 3.0, false, "Burst time constant"}, &P::decay_s},
+        {{"duration_s", "Duration", "s", 0.1, 5.0, false, "Burst duration after the drop starts"},
+         &P::duration_s},
     };
     return f;
 }
