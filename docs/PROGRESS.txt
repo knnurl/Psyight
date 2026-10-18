@@ -171,6 +171,9 @@ Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure
 - Show tab: Macros (8 sliders for now), and per route a hold choice and attack and release in ms.
 - Tests: macros as sources, hold per beat, attack and release time constants, restart on a time jump, memory determinism, project round trip, the MIDI macro target.
 
+## Rig templates (owner request 2026-10-18: pillars and matrix panel, as generators)
+- engine/rig_templates.*: pillars_strips (count, height, base, spacing or circle radius, density, serpentine) and matrix_strips (rows, width, row spacing, base, density, serpentine). Strips come out ordinary, with group tags pillars/matrix, left/right, top/bottom, even/odd. Rig tab > Templates: the numbers, a summary (strips, pixels, universes, full-white current, the pixel budget) and Replace the rig (confirmation; scenes and settings stay). tests/rig_templates_test.cpp.
+
 ## Show tab device look (owner request 2026-10-18: knobs, device chain, modulation rings; Show tab first)
 - gui/widgets.*: knob and knob_int (270-degree arc, bipolar from 0, label in the small font, value in mono, drag up or down with Shift for fine, double-click to type, right-click to reset, an optional outer ring for modulation), and device panels (begin_device, end_device, compact title row, frameless icon buttons). Theme tokens device_bg, device_title, knob_track, knob_value, knob_pointer, mod_ring (the info blue).
 - Show tab: a Macros device (8 knobs, names via the pencil); layers as a device chain (power icon in the accent when on, name, remove; drag the name to reorder, right-click to move or remove; blend and strip group menus; knobs for opacity and every effect parameter); routes as cards with Amount, Attack and Release knobs; limiters as knobs. Rings: layer opacity and route amounts, for the playing scene.

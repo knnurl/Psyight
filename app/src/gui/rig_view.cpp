@@ -71,6 +71,7 @@ void RigView::draw() {
     }
     ImGui::BeginDisabled(!engineer);
     draw_project();
+    draw_templates();
     ImGui::Separator();
     draw_strips();
     ImGui::Separator();
@@ -103,6 +104,90 @@ void RigView::draw_project() {
     if (!project_.status().empty()) {
         ImGui::TextWrapped("%s", project_.status().c_str());
     }
+}
+
+void RigView::draw_templates() {
+    if (!ImGui::TreeNode("Templates")) {
+        return;
+    }
+    const float em = ImGui::GetFontSize();
+    ImGui::SetNextItemWidth(9.0f * em);
+    ImGui::Combo("##template", &template_, "Pillars\0Matrix panel\0");
+    const float field = 7.0f * em;
+    std::vector<StripSpec> strips;
+    if (template_ == 0) {
+        PillarsTemplate &t = pillars_;
+        ImGui::SetNextItemWidth(field);
+        drag_int("Pillars", &t.count, 0.1f, 1, kMaxTemplateStrips);
+        ImGui::SetNextItemWidth(field);
+        drag_double("Height", &t.height_m, 0.01f, 0.05, 20.0, "%.2f m");
+        ImGui::SetNextItemWidth(field);
+        drag_double("First pixel above the floor", &t.base_m, 0.01f, 0.0, 20.0, "%.2f m");
+        ImGui::Checkbox("Around a circle", &t.circle);
+        ImGui::SetNextItemWidth(field);
+        if (t.circle) {
+            drag_double("Radius", &t.radius_m, 0.01f, 0.1, 50.0, "%.2f m");
+        } else {
+            drag_double("Spacing", &t.spacing_m, 0.01f, 0.05, 50.0, "%.2f m");
+        }
+        ImGui::SetNextItemWidth(field);
+        drag_double("Density", &t.pixels_per_m, 1.0f, 1.0, 1000.0, "%.0f px/m");
+        ImGui::Checkbox("Serpentine (alternate pillars run top to bottom)", &t.serpentine);
+        strips = pillars_strips(t);
+    } else {
+        MatrixTemplate &t = matrix_;
+        ImGui::SetNextItemWidth(field);
+        drag_int("Rows", &t.rows, 0.1f, 1, kMaxTemplateStrips);
+        ImGui::SetNextItemWidth(field);
+        drag_double("Width", &t.width_m, 0.01f, 0.05, 50.0, "%.2f m");
+        ImGui::SetNextItemWidth(field);
+        drag_double("Row spacing", &t.row_spacing_m, 0.001f, 0.005, 5.0, "%.3f m");
+        ImGui::SetNextItemWidth(field);
+        drag_double("Bottom row above the floor", &t.base_m, 0.01f, 0.0, 20.0, "%.2f m");
+        ImGui::SetNextItemWidth(field);
+        drag_double("Density", &t.pixels_per_m, 1.0f, 1.0, 1000.0, "%.0f px/m");
+        ImGui::Checkbox("Serpentine (alternate rows run right to left)", &t.serpentine);
+        strips = matrix_strips(t);
+    }
+
+    // What it would make, against the budgets.
+    const Project &p = project_.project();
+    const ColourOrder order = p.strips.empty() ? ColourOrder::grb : p.strips.front().order;
+    const Rig rig = build_rig(strips);
+    const Patch patch = build_patch(rig, p.first_universe, p.pixels_per_universe,
+                                    std::vector<ColourOrder>(strips.size(), order));
+    const auto pixels = static_cast<int>(rig.pixels.size());
+    mono_text("%zu strips, %d pixels, universes %d to %d, %.1f A at full white", strips.size(),
+              pixels, patch.universes.empty() ? 0 : patch.universes.front(),
+              patch.universes.empty() ? 0 : patch.universes.back(),
+              pixels * 3 * p.limiter.current_per_channel_ma * 1e-3);
+    if (pixels > kPixelBudget) {
+        ImGui::TextColored(theme().warning, "Over the 1,500-pixel budget (SPEC 2.1).");
+    }
+    if (ImGui::Button("Replace the rig...")) {
+        ImGui::OpenPopup("Replace the rig?");
+    }
+    ImGui::SetItemTooltip("The strips are replaced; scenes, palettes, limiters and output stay.");
+    if (ImGui::BeginPopupModal("Replace the rig?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Replace the %zu strips with these %zu?", p.strips.size(), strips.size());
+        ImGui::TextDisabled("Scenes, palettes, limiters and output stay. Group masks use the new "
+                            "tags.");
+        if (ImGui::Button("Replace")) {
+            std::vector<ProjectStrip> made;
+            for (StripSpec &s : strips) {
+                made.push_back({std::move(s), order});
+            }
+            project_.edit().strips = std::move(made);
+            project_.changed();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::TreePop();
 }
 
 void RigView::draw_strips() {
