@@ -74,9 +74,10 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s) {
         ImPlot::SetNextLineStyle(with_alpha(theme().text, alpha), weight);
         ImPlot::PlotInfLines(label, times.data(), static_cast<int>(times.size()));
     };
-    plot_lines("##slots", slots, 0.10f, 1.0f);
-    plot_lines("##beats", beats, 0.30f, 1.0f);
-    plot_lines("##bars", bars, 0.60f, 1.5f);
+    const ThemeTokens &t = theme();
+    plot_lines("##slots", slots, t.grid_slot_alpha, 1.0f);
+    plot_lines("##beats", beats, t.grid_beat_alpha, 1.0f);
+    plot_lines("##bars", bars, t.grid_bar_alpha, 1.5f);
 }
 
 void draw_sections(const std::vector<DetectedSection> &sections,

@@ -62,7 +62,7 @@ void AnalysisView::draw() {
     draw_toolbar(track);
     if (!textures_.built_for(&analysis->spectrogram) || colours_changed_) {
         textures_.build(analysis->spectrogram, analysis->hop_samples, analysis->sample_rate_hz,
-                        min_db_, max_db_, implot_colour_table(theme().spectrogram_colormap));
+                        min_db_, max_db_, colormap_table(colormap_));
         colours_changed_ = false;
     }
 
@@ -167,9 +167,13 @@ void AnalysisView::draw() {
         ImPlot::SetupAxisLimits(ImAxis_Y1, -80.0, 0.0, ImPlotCond_Once);
         ImPlot::SetupLegend(ImPlotLocation_NorthWest, ImPlotLegendFlags_Horizontal);
         const ImPlotRect limits = ImPlot::GetPlotLimits();
-        for (const BandTrack &band : analysis->bands) {
-            plot_series(band.band.name.c_str(), band.energy_db, frame_s, limits.X.Min,
-                        limits.X.Max);
+        const ThemeTokens &t = theme();
+        const ImVec4 band_colours[] = {t.band_sub, t.band_bass, t.band_low_mid, t.band_click,
+                                       t.band_hats};
+        for (size_t i = 0; i < analysis->bands.size(); ++i) {
+            ImPlot::SetNextLineStyle(band_colours[i % std::size(band_colours)]);
+            plot_series(analysis->bands[i].band.name.c_str(), analysis->bands[i].energy_db, frame_s,
+                        limits.X.Min, limits.X.Max);
         }
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         draw_playhead(playhead_s);
@@ -352,12 +356,25 @@ void AnalysisView::draw_toolbar(const LoadedTrack &track) {
         }
     }
     ImGui::SameLine();
+    ImGui::SetNextItemWidth(6.0f * em);
+    if (ImGui::BeginCombo("##colormap", colormap_name(colormap_))) {
+        for (const Colormap map : {Colormap::magma, Colormap::inferno, Colormap::viridis}) {
+            if (ImGui::Selectable(colormap_name(map), map == colormap_)) {
+                colormap_ = map;
+                colours_changed_ = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("The spectrogram's colours.");
+    ImGui::SameLine();
     ImGui::SetNextItemWidth(12.0f * em);
-    if (ImGui::DragFloatRange2("Colour range", &min_db_, &max_db_, 0.5f, kMinDisplayDb,
+    if (ImGui::DragFloatRange2("##colour range", &min_db_, &max_db_, 0.5f, kMinDisplayDb,
                                kMaxDisplayDb, "%.0f dB", "%.0f dB", ImGuiSliderFlags_AlwaysClamp)) {
         max_db_ = std::max(max_db_, min_db_ + 1.0f);
         colours_changed_ = true;
     }
+    ImGui::SetItemTooltip("The spectrogram's colour range (quietest, loudest).");
 }
 
 } // namespace psyight

@@ -11,9 +11,6 @@
 
 namespace psyight {
 
-// 256 colours sampled from an ImPlot colormap (ImPlotColormap_Viridis and so on).
-ColourTable implot_colour_table(int colormap);
-
 class SpectrogramTextures {
   public:
     SpectrogramTextures() = default;

@@ -49,6 +49,40 @@ ImVec4 mix(const ImVec4 &a, const ImVec4 &b, float t) {
 
 ImVec4 dim(ImVec4 c, float f) { return {c.x * f, c.y * f, c.z * f, c.w}; }
 
+// Data panel tokens derived from a mode's base tokens (RESTYLE Phase 2).
+void data_tokens(ThemeTokens &t) {
+    // Notes: the user's are filled with the accent; detections are neutral, about 40% opaque
+    // (the bass roll scales it by confidence); a selected note gets a bright outline.
+    t.note_fill = with_alpha(t.accent, 0.85f);
+    t.note_border = mix(t.accent, t.text, 0.35f);
+    t.note_slide = t.accent;
+    t.selection_fill = with_alpha(t.accent, 0.12f);
+    t.selected_outline = mix(t.text, ImVec4(1, 1, 1, 1), 0.6f);
+    t.detection = t.text_dim;
+    t.detection_border = with_alpha(t.text_dim, 0.55f);
+    t.kick_line = with_alpha(t.text, 0.10f);
+    t.black_key_row = with_alpha(t.bg, 0.5f);
+    // Lanes: the plot background is darker than the panel; white-key rows a little lighter than
+    // it, black-key rows darker; over the pitch background, a light black-key shade.
+    const ImVec4 plot_bg = mix(t.panel, t.bg, 0.7f);
+    t.roll_white_row = mix(plot_bg, t.frame, 0.35f);
+    t.roll_black_row = mix(plot_bg, ImVec4(0, 0, 0, 1), 0.25f);
+    t.roll_black_overlay = ImVec4(0, 0, 0, 0.18f);
+    t.roll_c_line = with_alpha(t.text, 0.28f);
+    t.pitch_low = plot_bg;
+    t.pitch_high = mix(t.text_dim, t.text, 0.5f);
+    t.waveform = with_alpha(t.text_dim, 0.6f);
+    t.waveform_played = with_alpha(mix(t.text_dim, t.text, 0.4f), 0.9f); // Slightly brighter.
+    // Band energy: ImPlot's default line colours, desaturated towards the neutral text so they sit
+    // on the background but stay apart.
+    const ImVec4 deep[5] = {hex("#4C72B0"), hex("#DD8452"), hex("#55A868"), hex("#C44E52"),
+                            hex("#8172B3")};
+    ImVec4 *bands[5] = {&t.band_sub, &t.band_bass, &t.band_low_mid, &t.band_click, &t.band_hats};
+    for (int i = 0; i < 5; ++i) {
+        *bands[i] = mix(deep[i], t.text_dim, 0.35f);
+    }
+}
+
 ThemeTokens desk_tokens() {
     ThemeTokens t;
     t.bg = hex("#1E222A");
@@ -66,16 +100,8 @@ ThemeTokens desk_tokens() {
     t.loop = t.info;
     t.loop_shade = with_alpha(t.info, 0.06f);
     t.view_rect = with_alpha(t.text, 0.25f);
-    t.waveform = t.text_dim;
-    // Data colours as before the restyle; RESTYLE Phase 2 revisits them.
-    t.note_fill = hex("#40BEAAC8");
-    t.note_border = hex("#96F0E1FF");
-    t.note_slide = hex("#96F0E1C8");
-    t.selection_fill = with_alpha(t.accent, 0.12f);
-    t.detection = hex("#EBA032FF");
-    t.detection_border = hex("#FFC46EAA");
-    t.kick_line = hex("#FF785046");
-    t.black_key_row = hex("#FFFFFF0A");
+    data_tokens(t);
+    // Section, region and analysis overlay colours as before the restyle.
     t.region_complete = hex("#50C8781C");
     t.region_incomplete = hex("#C8C8C812");
     t.section_groove = hex("#28968ABE");
@@ -90,13 +116,15 @@ ThemeTokens desk_tokens() {
     t.hat_tick = hex("#FFFFFFC8");
     t.downbeat_handle = t.danger;
     t.preview_bg = hex("#08080CFF");
-    t.spectrogram_colormap = ImPlotColormap_Viridis;
-    t.pitch_colormap = ImPlotColormap_Plasma;
+    t.spectrogram_colormap = Colormap::magma;
+
     return t;
 }
 
 ThemeTokens show_tokens() {
     ThemeTokens t = desk_tokens();
+    const ImVec4 desk_bands[5] = {t.band_sub, t.band_bass, t.band_low_mid, t.band_click,
+                                  t.band_hats};
     t.bg = hex("#121316");
     t.panel = hex("#1A1C20");
     t.frame = hex("#24272C");
@@ -104,35 +132,22 @@ ThemeTokens show_tokens() {
     t.text = hex("#B4B8C0");
     t.text_dim = hex("#6E737C");
     t.accent = hex("#C98A33");
+    data_tokens(t);               // From the Show base tokens.
     constexpr float kDim = 0.75f; // Everything else, dimmer for a dark room.
-    for (ImVec4 *c : {&t.danger,
-                      &t.warning,
-                      &t.success,
-                      &t.info,
-                      &t.note_fill,
-                      &t.note_border,
-                      &t.note_slide,
-                      &t.detection,
-                      &t.detection_border,
-                      &t.kick_line,
-                      &t.region_complete,
-                      &t.section_groove,
-                      &t.section_breakdown,
-                      &t.section_build,
-                      &t.section_drop,
-                      &t.section_other,
-                      &t.section_text,
-                      &t.phrase_tick,
-                      &t.rest_shade,
-                      &t.hat_tick}) {
+    for (ImVec4 *c :
+         {&t.danger, &t.warning, &t.success, &t.info, &t.region_complete, &t.section_groove,
+          &t.section_breakdown, &t.section_build, &t.section_drop, &t.section_other,
+          &t.section_text, &t.phrase_tick, &t.rest_shade, &t.hat_tick}) {
         *c = dim(*c, kDim);
+    }
+    ImVec4 *bands[5] = {&t.band_sub, &t.band_bass, &t.band_low_mid, &t.band_click, &t.band_hats};
+    for (int i = 0; i < 5; ++i) {
+        *bands[i] = dim(desk_bands[i], kDim);
     }
     t.playhead = t.accent;
     t.loop = t.info;
     t.loop_shade = with_alpha(t.info, 0.06f);
     t.view_rect = with_alpha(t.text, 0.2f);
-    t.waveform = t.text_dim;
-    t.selection_fill = with_alpha(t.accent, 0.12f);
     t.downbeat_handle = t.danger;
     return t;
 }
@@ -160,6 +175,17 @@ const std::vector<std::pair<const char *, ImVec4 ThemeTokens::*>> &token_names()
         {"note_border", &ThemeTokens::note_border},
         {"note_slide", &ThemeTokens::note_slide},
         {"selection_fill", &ThemeTokens::selection_fill},
+        {"selected_outline", &ThemeTokens::selected_outline},
+        {"roll_white_row", &ThemeTokens::roll_white_row},
+        {"roll_black_row", &ThemeTokens::roll_black_row},
+        {"roll_black_overlay", &ThemeTokens::roll_black_overlay},
+        {"roll_c_line", &ThemeTokens::roll_c_line},
+        {"waveform_played", &ThemeTokens::waveform_played},
+        {"band_sub", &ThemeTokens::band_sub},
+        {"band_bass", &ThemeTokens::band_bass},
+        {"band_low_mid", &ThemeTokens::band_low_mid},
+        {"band_click", &ThemeTokens::band_click},
+        {"band_hats", &ThemeTokens::band_hats},
         {"detection", &ThemeTokens::detection},
         {"detection_border", &ThemeTokens::detection_border},
         {"kick_line", &ThemeTokens::kick_line},
@@ -178,6 +204,8 @@ const std::vector<std::pair<const char *, ImVec4 ThemeTokens::*>> &token_names()
         {"hat_tick", &ThemeTokens::hat_tick},
         {"downbeat_handle", &ThemeTokens::downbeat_handle},
         {"preview_bg", &ThemeTokens::preview_bg},
+        {"pitch_low", &ThemeTokens::pitch_low},
+        {"pitch_high", &ThemeTokens::pitch_high},
     };
     return names;
 }
@@ -431,6 +459,17 @@ ThemeMode theme_mode() { return state().mode; }
 const ThemeTokens &theme() {
     const State &st = state();
     return st.mode == ThemeMode::show ? st.show : st.desk;
+}
+
+ColourTable pitch_colour_table() {
+    const ThemeTokens &t = theme();
+    ColourTable table{};
+    for (size_t i = 0; i < table.size(); ++i) {
+        ImVec4 c = mix(t.pitch_low, t.pitch_high, static_cast<float>(i) / 255.0f);
+        c.w = 1.0f;
+        table[i] = to_u32(c);
+    }
+    return table;
 }
 
 ImFont *theme_font(ThemeFont font) { return state().fonts[static_cast<size_t>(font)]; }

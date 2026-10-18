@@ -100,8 +100,26 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
                       ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Lock);
     ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, track.duration_s, ImPlotCond_Always);
     ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0, 1.0, ImPlotCond_Always);
-    ImPlot::PlotShaded("##wave", track.overview_time_s.data(), track.overview_min.data(),
-                       track.overview_max.data(), static_cast<int>(track.overview_time_s.size()));
+    // The played part (left of the playhead) a little brighter than the rest.
+    const double played_s = samples_to_seconds(transport.position(), track.sample_rate_hz);
+    const auto played = static_cast<int>(
+        std::upper_bound(track.overview_time_s.begin(), track.overview_time_s.end(), played_s) -
+        track.overview_time_s.begin());
+    const int buckets = static_cast<int>(track.overview_time_s.size());
+    // A shaded plot needs two points or more (ImPlot draws count - 1 segments); the two parts
+    // share the bucket at the playhead so there is no gap between them.
+    if (played >= 2) {
+        ImPlot::SetNextFillStyle(theme().waveform_played);
+        ImPlot::PlotShaded("##played", track.overview_time_s.data(), track.overview_min.data(),
+                           track.overview_max.data(), played);
+    }
+    const int from = std::max(0, played - 1);
+    if (buckets - from >= 2) {
+        ImPlot::SetNextFillStyle(theme().waveform);
+        ImPlot::PlotShaded("##unplayed", track.overview_time_s.data() + from,
+                           track.overview_min.data() + from, track.overview_max.data() + from,
+                           buckets - from);
+    }
 
     LoopRegion loop = session_.loop();
     if (loop.enabled) {
@@ -120,7 +138,7 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
                      theme().view_rect, ImPlotDragToolFlags_NoInputs);
 
     const double playhead_s = samples_to_seconds(transport.position(), track.sample_rate_hz);
-    ImPlot::SetNextLineStyle(theme().playhead, 1.5f);
+    ImPlot::SetNextLineStyle(theme().playhead, 2.0f);
     ImPlot::PlotInfLines("##playhead", &playhead_s, 1);
 
     // Click to seek, unless the click is on a loop handle. (The plot itself becomes the active

@@ -9,6 +9,7 @@
 
 #include "gui/session.h"
 #include "gui/spectrogram_textures.h"
+#include "gui/theme.h"
 
 namespace psyight {
 
@@ -29,6 +30,7 @@ class AnalysisView {
     float min_db_ = -90.0f;
     float max_db_ = -10.0f;
     bool colours_changed_ = false;
+    Colormap colormap_ = theme().spectrogram_colormap; // The spectrogram's colours.
     bool dragging_downbeat_ = false;
     AnalysisSource source_ = AnalysisSource::mix; // For the next re-analysis.
     bool source_chosen_ = false;                  // Until chosen, it follows the loaded analysis.

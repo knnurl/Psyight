@@ -20,6 +20,7 @@
 
 #include "gui/session.h"
 #include "gui/spectrogram_textures.h"
+#include "gui/theme.h"
 #include "io/note_pattern.h"
 
 #include <array>
@@ -99,6 +100,7 @@ class BassRollView {
     float pitch_min_db_ = -80.0f; // Set from the track's own values when it loads.
     float pitch_max_db_ = -20.0f;
     bool pitch_range_changed_ = false;
+    ThemeMode pitch_theme_ = ThemeMode::desk; // The theme the pitch textures were built in.
 };
 
 } // namespace psyight

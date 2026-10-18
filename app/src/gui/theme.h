@@ -18,6 +18,8 @@
 // to ImGui's built-in font and says so in the log.
 #pragma once
 
+#include "gui/colormaps.h"
+
 #include <imgui.h>
 
 #include <filesystem>
@@ -34,15 +36,22 @@ struct ThemeTokens {
     // Data panels.
     ImVec4 playhead;
     ImVec4 loop, loop_shade, view_rect, waveform;
-    ImVec4 note_fill, note_border, note_slide, selection_fill;
+    ImVec4 note_fill, note_border, note_slide, selection_fill, selected_outline;
     ImVec4 detection, detection_border, kick_line, black_key_row;
+    // Bass roll lanes: rows without the pitch background, the black-key shade over it, C rows.
+    ImVec4 roll_white_row, roll_black_row, roll_black_overlay, roll_c_line;
+    ImVec4 waveform_played; // The overview left of the playhead (waveform: the rest).
+    ImVec4 band_sub, band_bass, band_low_mid, band_click, band_hats;
     ImVec4 region_complete, region_incomplete;
     ImVec4 section_groove, section_breakdown, section_build, section_drop, section_other;
     ImVec4 section_boundary, section_text, phrase_tick, rest_shade, hat_tick, downbeat_handle;
     ImVec4 preview_bg;
-    // ImPlot colormaps (ImPlotColormap_*) for the spectrogram and the bass roll's pitch background.
-    int spectrogram_colormap = 0;
-    int pitch_colormap = 0;
+    // The spectrogram's default colour table. The bass roll's pitch background is a neutral ramp
+    // from pitch_low (quiet) to pitch_high (loud), so the accent-filled notes stand out on it.
+    Colormap spectrogram_colormap = Colormap::magma;
+    ImVec4 pitch_low, pitch_high;
+    // Grid line alphas of the time plots: 16ths, beats, bars (bars drawn thicker).
+    float grid_slot_alpha = 0.05f, grid_beat_alpha = 0.12f, grid_bar_alpha = 0.35f;
 };
 
 enum class ThemeFont { ui, ui_medium, mono, plot };
@@ -56,6 +65,7 @@ void apply_psyight_theme(ThemeMode mode);
 ThemeMode theme_mode();
 const ThemeTokens &theme();
 ImFont *theme_font(ThemeFont font); // Null before init_theme (ImGui then uses its default).
+ColourTable pitch_colour_table();   // The pitch background ramp of the current mode.
 inline ImU32 to_u32(const ImVec4 &c) { return ImGui::ColorConvertFloat4ToU32(c); }
 inline ImVec4 with_alpha(ImVec4 c, float alpha) {
     c.w = alpha;

@@ -156,10 +156,14 @@ void BassRollView::draw_roll() {
             analysis->pitch_salience, kPitchRangeLowQuantile, kPitchRangeHighQuantile);
         pitch_range_changed_ = true;
     }
+    if (theme_mode() != pitch_theme_) { // The pitch ramp follows the theme.
+        pitch_theme_ = theme_mode();
+        pitch_range_changed_ = true;
+    }
     if (analysis != nullptr && pitch_range_changed_) {
         salience_textures_.build(analysis->pitch_salience, analysis->hop_samples,
                                  analysis->sample_rate_hz, pitch_min_db_, pitch_max_db_,
-                                 implot_colour_table(theme().pitch_colormap));
+                                 pitch_colour_table());
         pitch_range_changed_ = false;
     }
     ImGui::SameLine();
@@ -200,11 +204,21 @@ void BassRollView::draw_roll() {
             salience_textures_.draw(limits.X.Min, limits.X.Max, kSalienceFirstMidi);
             ImPlot::PushPlotClipRect();
         }
-        for (int midi = kLowestMidi; midi <= kHighestMidi && !show_pitch_; ++midi) {
-            if (is_black_key(midi)) {
-                draw->AddRectFilled(ImPlot::PlotToPixels(limits.X.Min, midi + 1),
-                                    ImPlot::PlotToPixels(limits.X.Max, midi),
-                                    to_u32(theme().black_key_row));
+        // Lanes: without the pitch background, white-key rows lighter and black-key rows darker
+        // than the plot; over it, a light shade on black-key rows. C rows get a line along their
+        // bottom edge.
+        const ThemeTokens &t = theme();
+        for (int midi = kLowestMidi; midi <= kHighestMidi; ++midi) {
+            const ImVec2 top = ImPlot::PlotToPixels(limits.X.Min, midi + 1);
+            const ImVec2 bottom = ImPlot::PlotToPixels(limits.X.Max, midi);
+            if (!show_pitch_) {
+                draw->AddRectFilled(
+                    top, bottom, to_u32(is_black_key(midi) ? t.roll_black_row : t.roll_white_row));
+            } else if (is_black_key(midi)) {
+                draw->AddRectFilled(top, bottom, to_u32(t.roll_black_overlay));
+            }
+            if (midi % 12 == 0) {
+                draw->AddLine(ImVec2(top.x, bottom.y), bottom, to_u32(t.roll_c_line));
             }
         }
         draw_regions();
@@ -276,15 +290,15 @@ void BassRollView::draw_detections() const {
         }
         const ImVec2 top_left = ImPlot::PlotToPixels(note.onset_s, note.pitch_midi + 1);
         const ImVec2 bottom_right = ImPlot::PlotToPixels(note.offset_s, note.pitch_midi);
-        // More opaque when more confident (16% to 82%).
-        const auto alpha =
-            static_cast<float>((40.0 + 170.0 * std::clamp(note.confidence, 0.0, 1.0)) / 255.0);
+        // Neutral, more opaque when more confident (25% to 55%, about 40% on average).
+        const auto alpha = static_cast<float>(0.25 + 0.30 * std::clamp(note.confidence, 0.0, 1.0));
         draw->AddRectFilled(top_left, bottom_right, to_u32(with_alpha(theme().detection, alpha)),
                             2.0f);
         const bool selected = i == selected_detection_;
         draw->AddRect(top_left, bottom_right,
-                      selected ? to_u32(theme().text) : to_u32(theme().detection_border), 2.0f, 0,
-                      selected ? 2.0f : 1.0f);
+                      selected ? to_u32(theme().selected_outline)
+                               : to_u32(theme().detection_border),
+                      2.0f, 0, selected ? 2.0f : 1.0f);
     }
 }
 
@@ -298,8 +312,8 @@ void BassRollView::draw_notes() const {
         draw->AddRectFilled(top_left, bottom_right, to_u32(theme().note_fill), 2.0f);
         const bool selected = is_selected(static_cast<int>(i));
         draw->AddRect(top_left, bottom_right,
-                      selected ? to_u32(theme().accent) : to_u32(theme().note_border), 2.0f, 0,
-                      selected ? 2.0f : 1.0f);
+                      selected ? to_u32(theme().selected_outline) : to_u32(theme().note_border),
+                      2.0f, 0, selected ? 2.0f : 1.0f);
         if (note.slide_in && i > 0) {
             const BassNoteLabel &previous = notes[i - 1];
             draw->AddLine(ImPlot::PlotToPixels(previous.offset_s, previous.midi + 0.5),

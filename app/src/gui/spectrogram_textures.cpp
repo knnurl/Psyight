@@ -20,15 +20,6 @@ constexpr int kMaxTileFrames = 4096;
 
 } // namespace
 
-ColourTable implot_colour_table(int colormap) {
-    ColourTable table{};
-    for (size_t i = 0; i < table.size(); ++i) {
-        table[i] = ImGui::ColorConvertFloat4ToU32(
-            ImPlot::SampleColormap(static_cast<float>(i) / 255.0f, colormap));
-    }
-    return table;
-}
-
 SpectrogramTextures::~SpectrogramTextures() { clear(); }
 
 void SpectrogramTextures::clear() {
