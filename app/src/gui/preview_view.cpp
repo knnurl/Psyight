@@ -4,6 +4,8 @@
 #include "core/paths.h"
 #include "core/playhead_clock.h"
 #include "engine/effect_spec.h"
+#include "gui/icons.h"
+#include "gui/layout.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/widgets.h"
@@ -26,6 +28,7 @@ namespace {
 
 constexpr float kMarginPixels = 12.0f;
 constexpr double kRateWindowS = 1.0;
+constexpr float kSegmentGapPixels = 2.0f; // Between the top bar's mode buttons.
 
 // Node bytes are LED drive levels (gamma applied); the screen wants the frame's values back.
 ImU32 to_imgui(const std::uint8_t *rgb, double gamma) {
@@ -149,16 +152,21 @@ void PreviewView::draw_top_bar() {
         {Ladder::react, "React", "Sends to the network: scenes chosen by hand."},
         {Ladder::show, "Show", "Sends to the network: scenes follow the sections."},
     };
+    // A segmented control; the active step filled with the accent.
     ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
+                        ImVec2(kSegmentGapPixels, ImGui::GetStyle().ItemSpacing.y));
     for (const Step &s : kSteps) {
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_CheckMark, theme().accent); // The active mode.
-        if (ImGui::RadioButton(s.name, ladder_ == s.step)) {
+        if (s.step != Ladder::preflight) {
+            ImGui::SameLine();
+        }
+        if (toggle_button(s.name, ladder_ == s.step)) {
             set_ladder(s.step);
         }
-        ImGui::PopStyleColor();
         ImGui::SetItemTooltip("%s", s.meaning);
     }
+    ImGui::PopStyleVar();
     ImGui::SameLine();
     ImGui::TextDisabled("|");
     ImGui::SameLine();
@@ -205,10 +213,21 @@ void PreviewView::draw_top_bar() {
     }
     // Blackout and Hold: fixed at the right, with hotkeys, no confirmation (SPEC 9.1).
     const ImGuiStyle &style = ImGui::GetStyle();
+    const bool folded = !preview_open_ && !stage_;
+    const float unfold = !folded ? 0.0f
+                                 : ImGui::CalcTextSize(kIconUnfold).x +
+                                       2.0f * style.FramePadding.x + style.ItemSpacing.x;
     const float buttons = ImGui::CalcTextSize("Blackout (B)").x +
                           ImGui::CalcTextSize("Hold (H)").x + 4.0f * style.FramePadding.x +
-                          style.ItemSpacing.x;
+                          style.ItemSpacing.x + unfold;
     ImGui::SameLine(ImGui::GetWindowWidth() - buttons - style.WindowPadding.x);
+    if (folded) {
+        if (ImGui::Button((std::string(kIconUnfold) + "###unfold preview").c_str())) {
+            preview_open_ = true;
+        }
+        ImGui::SetItemTooltip("Unfold the rig preview (View > Rig preview).");
+        ImGui::SameLine();
+    }
     const auto toggle = [this](const char *label, bool &on, const ImVec4 &colour) {
         if (toggle_button(label, on, &colour)) {
             on = !on;
@@ -272,22 +291,26 @@ void PreviewView::sync_config() {
     record_params();
 }
 
-void PreviewView::draw() {
+void PreviewView::draw(bool stage) {
+    stage_ = stage;
     sync_config();
-    ImGui::Begin("Preview");
+    ImGui::Begin("Show");
     const std::shared_ptr<const ShowFrame> frame = show_.latest();
     draw_live();
     draw_midi();
     const bool live = config_.live != nullptr;
     if (!live &&
         (!session_.has_track() || session_.track().track_analysis == nullptr || frame == nullptr)) {
-        ImGui::TextUnformatted(session_.has_track() ? "No analysis (no tempo found)."
-                                                    : "No track loaded.");
+        const char *message =
+            session_.has_track() ? "No analysis (no tempo found)." : "No track loaded.";
+        ImGui::TextUnformatted(message);
         ImGui::End();
+        draw_preview(nullptr, message);
         return;
     }
     if (frame == nullptr) {
         ImGui::End();
+        draw_preview(nullptr, "");
         return;
     }
     const auto now = std::chrono::steady_clock::now();
@@ -302,13 +325,46 @@ void PreviewView::draw() {
     playing_scene_ = std::max(0, frame->mix.to);
 
     draw_controls(*frame);
-    mono_text("%s%s, beat %d of the bar, %.1f A estimated%s",
-              config_.blackout ? "Blackout: "
-              : config_.hold   ? "Hold: "
-                               : "",
-              frame->section.c_str(), frame->beat_in_bar + 1, frame->report.current_a,
-              frame->report.power_scale < 1.0 ? " (power limited)" : "");
-    draw_rig(*frame);
+    ImGui::End();
+    draw_preview(frame.get(), "");
+}
+
+void PreviewView::draw_preview(const ShowFrame *frame, const char *message) {
+    if (stage_) { // Show mode: the large view where the bass roll was, no fold button.
+        ImGui::Begin("Stage");
+    } else if (!preview_open_) {
+        return;
+    } else {
+        ImGui::SetNextWindowClass(&preview_window_class()); // Pinned.
+        ImGui::Begin("Preview");
+    }
+    // The status line, with the fold button at its right.
+    const float right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+    ImGui::AlignTextToFramePadding();
+    if (frame != nullptr) {
+        mono_text("%s%s, beat %d of the bar, %.1f A estimated%s",
+                  config_.blackout ? "Blackout: "
+                  : config_.hold   ? "Hold: "
+                                   : "",
+                  frame->section.c_str(), frame->beat_in_bar + 1, frame->report.current_a,
+                  frame->report.power_scale < 1.0 ? " (power limited)" : "");
+    } else {
+        ImGui::TextDisabled("%s", message);
+    }
+    if (!stage_) {
+        const std::string fold = std::string(kIconFold) + "###fold preview";
+        const float fold_width =
+            ImGui::CalcTextSize(kIconFold).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), right - fold_width));
+        if (ImGui::Button(fold.c_str())) {
+            preview_open_ = false;
+        }
+        ImGui::SetItemTooltip("Fold the rig preview (View > Rig preview, or the button at the "
+                              "top right, brings it back).");
+    }
+    if (frame != nullptr) {
+        draw_rig(*frame);
+    }
     ImGui::End();
 }
 

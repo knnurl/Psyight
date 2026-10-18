@@ -48,6 +48,9 @@ UserSettings load_user_settings(const std::filesystem::path &file) {
     read(root, "show_detections", settings.show_detections);
     read(root, "show_pitch", settings.show_pitch);
     read(root, "snap", settings.snap);
+    read(root, "preview_open", settings.preview_open);
+    read(root, "show_mode_theme", settings.show_mode_theme);
+    read(root, "show_mode_hides_editing", settings.show_mode_hides_editing);
     return settings;
 }
 
@@ -62,6 +65,9 @@ void save_user_settings(const std::filesystem::path &file, const UserSettings &s
         {"show_detections", settings.show_detections},
         {"show_pitch", settings.show_pitch},
         {"snap", settings.snap},
+        {"preview_open", settings.preview_open},
+        {"show_mode_theme", settings.show_mode_theme},
+        {"show_mode_hides_editing", settings.show_mode_hides_editing},
     };
     std::ofstream(file, std::ios::binary) << root.dump(2) << "\n";
 }

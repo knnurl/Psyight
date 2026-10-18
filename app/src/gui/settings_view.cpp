@@ -23,7 +23,7 @@ void help(const char *text) {
 
 } // namespace
 
-void SettingsView::draw(bool *open, bool &reset_layout) {
+void SettingsView::draw(bool *open, bool &reset_layout, UserSettings &prefs) {
     if (!*open) {
         return;
     }
@@ -55,6 +55,13 @@ void SettingsView::draw(bool *open, bool &reset_layout) {
         }
     }
     help("Operate: show controls. Tune: scenes and settings. Engineer: everything.");
+
+    ImGui::SeparatorText("Show mode");
+    ImGui::Checkbox("Switch to the Show theme", &prefs.show_mode_theme);
+    ImGui::Checkbox("Hide the editing panels (analysis, bass roll, note inspector)",
+                    &prefs.show_mode_hides_editing);
+    help("Show mode is React or Show on the top bar. With the editing panels hidden, the rig is "
+         "drawn large in their place. Leaving show mode restores the theme and panels.");
 
     ImGui::SeparatorText("Project");
     std::error_code error;

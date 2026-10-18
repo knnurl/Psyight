@@ -54,7 +54,7 @@ struct ThemeTokens {
     float grid_slot_alpha = 0.05f, grid_beat_alpha = 0.12f, grid_bar_alpha = 0.35f;
 };
 
-enum class ThemeFont { ui, ui_medium, mono, plot };
+enum class ThemeFont { ui, ui_medium, mono, plot, timecode }; // timecode: large mono.
 
 // Loads the fonts and theme.json; call once after ImGui::CreateContext, before the first frame.
 // dpi_scale multiplies every size.

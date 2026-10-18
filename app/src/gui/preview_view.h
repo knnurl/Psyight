@@ -1,12 +1,13 @@
 // Preview (SPEC section 9.4, M3): the rig's pixels drawn at their positions, as the virtual node
 // received them from the show thread (render at the playhead plus the latency offset, limiters,
-// patch, packets), with the scene's layers, palette, limiter settings, output settings and the
-// estimated supply current. File mode: the analysis is known ahead, so the render time may lead
-// the playhead (SPEC 4.3).
-// The panel owns the show thread: it publishes a new config when a setting, the track or the grid
-// changes, and draws the latest frame; neither side waits for the other.
-// It also owns the top bar's show controls (SPEC 9.1 and 9.3): the state ladder (Preflight and
-// Preview keep the network off, Ambient sends the ambient scene only, React sends with scenes
+// patch, packets), and the estimated supply current, in the "Preview" window (pinned top right;
+// it folds away). The show controls (live input, MIDI, scenes, layers, palettes, limiters,
+// output) are in the "Show" window. In show mode the rig may be drawn large in the "Stage" window
+// instead. File mode: the analysis is known ahead, so the render time may
+// lead the playhead (SPEC 4.3). The panel owns the show thread: it publishes a new config when a
+// setting, the track or the grid changes, and draws the latest frame; neither side waits for the
+// other. It also owns the top bar's show controls (SPEC 9.1 and 9.3): the state ladder (Preflight
+// and Preview keep the network off, Ambient sends the ambient scene only, React sends with scenes
 // held by hand, Show runs the section automation) and Blackout (B) and Hold (H), fixed at the
 // right and acting at once. The app starts in Preview. Record writes a session folder
 // (output/recorder.h) under recordings/ in the working directory; it stops by itself when the
@@ -16,6 +17,7 @@
 #include "gui/project_state.h"
 #include "gui/session.h"
 #include "io/midi_input.h"
+#include "io/user_settings.h"
 #include "output/show.h"
 
 #include <chrono>
@@ -30,10 +32,17 @@ class PreviewView {
   public:
     PreviewView(Session &session, ProjectState &project);
 
-    void draw();
+    // The Show window, and the Preview window unless folded. stage (show mode with the editing
+    // panels hidden): the rig drawn large in the "Stage" window, where the bass roll was, instead.
+    void draw(bool stage = false);
     // Inside the main menu bar.
     void draw_top_bar();
     bool sending() const { return config_.send_to_network; }
+    // React or Show on the top bar: the app may switch to its show look (main.cpp).
+    bool performing() const { return ladder_ == Ladder::react || ladder_ == Ladder::show; }
+    bool &preview_open() { return preview_open_; } // View > Rig preview.
+    void apply_settings(const UserSettings &settings) { preview_open_ = settings.preview_open; }
+    void store_settings(UserSettings &settings) const { settings.preview_open = preview_open_; }
 
   private:
     enum class Ladder { preflight, preview, ambient, react, show };
@@ -57,6 +66,7 @@ class PreviewView {
     void draw_group_caps();
     void draw_output(const ShowFrame &frame);
     void draw_rig(const ShowFrame &frame);
+    void draw_preview(const ShowFrame *frame, const char *message);
 
     Session &session_;
     ProjectState &project_;
@@ -67,6 +77,8 @@ class PreviewView {
     int edit_scene_ = 0;        // Whose layers and palette the controls show.
     bool scene_edited_ = false; // A scene changed this frame: the project is told once.
     Ladder ladder_ = Ladder::preview;
+    bool preview_open_ = true;
+    bool stage_ = false;    // The preview is drawn in the Stage window (draw).
     int playing_scene_ = 0; // The automation's current scene, from the latest frame.
     std::shared_ptr<Recorder> recorder_;
     std::string record_status_;

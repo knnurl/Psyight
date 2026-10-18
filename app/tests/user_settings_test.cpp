@@ -25,6 +25,9 @@ TEST_CASE("user settings: defaults without a file, kept across runs") {
     changed.show_detections = false;
     changed.show_pitch = false;
     changed.snap = false;
+    changed.preview_open = false;
+    changed.show_mode_theme = false;
+    changed.show_mode_hides_editing = false;
     save_user_settings(file, changed);
     CHECK(load_user_settings(file) == changed);
     std::filesystem::remove(file);

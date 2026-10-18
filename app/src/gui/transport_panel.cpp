@@ -1,5 +1,7 @@
 #include "gui/transport_panel.h"
 
+#include "gui/icons.h"
+#include "gui/layout.h"
 #include "gui/theme.h"
 #include "gui/widgets.h"
 
@@ -9,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 namespace psyight {
 
@@ -18,7 +21,12 @@ constexpr float kMinVolumeDb = -60.0f; // The bottom of the slider mutes.
 constexpr float kMaxVolumeDb = 6.0f;
 constexpr double kDefaultLoopLengthS = 6.0; // Four bars at 160 BPM.
 constexpr float kHandleGrabPixels = 6.0f;
-constexpr float kAuditionSpeed = 0.5f; // Labelling audition: 16ths at 160 BPM become 188 ms.
+constexpr float kAuditionSpeed = 0.5f;    // Labelling audition: 16ths at 160 BPM become 188 ms.
+constexpr float kControlsWidthEm = 22.0f; // The controls beside the overview.
+constexpr float kVolumeWidthEm = 6.0f;
+
+// An icon button's label with a stable ID (the icon may change).
+std::string icon_label(const char *icon, const char *id) { return std::string(icon) + "###" + id; }
 
 std::string format_time(double seconds) {
     const int total_ms = static_cast<int>(std::lround(std::max(0.0, seconds) * 1000.0));
@@ -40,6 +48,7 @@ void TransportPanel::apply_settings(const UserSettings &settings) {
 
 void TransportPanel::draw() {
     Transport &transport = session_.transport();
+    ImGui::SetNextWindowClass(&transport_window_class()); // A pinned strip without a tab.
     ImGui::Begin("Transport");
     if (!session_.has_track()) {
         ImGui::TextUnformatted(session_.status().empty()
@@ -54,48 +63,75 @@ void TransportPanel::draw() {
         transport.set_gain(volume_to_gain(volume_db_));
     }
     LoopRegion loop = session_.loop();
+    const float em = ImGui::GetFontSize();
 
+    // The controls, two rows, beside the overview (RESTYLE Phase 4).
+    ImGui::BeginGroup();
+    ImGui::PushClipRect(ImGui::GetCursorScreenPos(),
+                        ImVec2(ImGui::GetCursorScreenPos().x + kControlsWidthEm * em, 1e9f), true);
+    // Row 1: play, loop, half speed, the playhead time.
     const bool playing = transport.playing();
     const ImGuiIO &io = ImGui::GetIO();
-    const bool play_clicked = primary_button(playing ? "Pause###play" : "Play###play");
-    ImGui::SetItemTooltip("Space");
+    const bool play_clicked =
+        primary_button(icon_label(playing ? kIconPause : kIconPlay, "play").c_str());
+    ImGui::SetItemTooltip(playing ? "Pause (Space)" : "Play (Space)");
     if (play_clicked || (ImGui::IsKeyPressed(ImGuiKey_Space, false) && !io.WantTextInput)) {
         playing ? transport.pause() : transport.play();
     }
     ImGui::SameLine();
     const double position_s = samples_to_seconds(transport.position(), track.sample_rate_hz);
-    ImGui::AlignTextToFramePadding();
-    mono_text("%s / %s", format_time(position_s).c_str(), format_time(track.duration_s).c_str());
-    ImGui::SameLine();
-    ImGui::TextUnformatted(track.name.c_str());
-    if (!session_.status().empty()) {
-        ImGui::TextUnformatted(session_.status().c_str());
-    }
-
-    if (ImGui::Checkbox("Loop", &loop.enabled)) {
+    if (toggle_button(icon_label(kIconLoop, "loop").c_str(), loop.enabled)) {
+        loop.enabled = !loop.enabled;
         if (loop.enabled && loop.end_s <= loop.start_s) {
             loop.start_s = position_s;
             loop.end_s = std::min(track.duration_s, position_s + kDefaultLoopLengthS);
         }
         session_.set_loop(loop);
     }
+    ImGui::SetItemTooltip("Loop. Drag its ends on the waveform.");
+    ImGui::SameLine();
+    const bool half_speed = transport.speed() < 1.0f;
+    if (toggle_button(icon_label(kIconHalfSpeed, "half speed").c_str(), half_speed)) {
+        transport.set_speed(half_speed ? 1.0f : kAuditionSpeed);
+    }
+    ImGui::SetItemTooltip("Half speed, pitch kept (for labelling).");
+    ImGui::SameLine();
+    ImGui::PushFont(theme_font(ThemeFont::timecode));
+    ImGui::TextUnformatted(format_time(position_s).c_str());
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    mono_text("/ %s", format_time(track.duration_s).c_str());
+
+    // Row 2: volume, the loop, the track and the session's status.
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s", kIconVolume);
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::SetNextItemWidth(kVolumeWidthEm * em);
+    if (mono_field("##volume", [&](const char *id) {
+            return ImGui::DragFloat(id, &volume_db_, 0.2f, kMinVolumeDb, kMaxVolumeDb,
+                                    volume_db_ <= kMinVolumeDb ? "Muted" : "%.1f dB",
+                                    ImGuiSliderFlags_AlwaysClamp);
+        })) {
+        transport.set_gain(volume_to_gain(volume_db_));
+    }
+    ImGui::SetItemTooltip("Volume. Drag, or double-click to type; the bottom mutes.");
     if (loop.enabled) {
         ImGui::SameLine();
         mono_text("%s to %s", format_time(loop.start_s).c_str(), format_time(loop.end_s).c_str());
     }
     ImGui::SameLine();
-    bool half_speed = transport.speed() < 1.0f;
-    if (ImGui::Checkbox("Half speed (pitch kept)", &half_speed)) {
-        transport.set_speed(half_speed ? kAuditionSpeed : 1.0f);
+    ImGui::TextUnformatted(track.name.c_str());
+    ImGui::SetItemTooltip("%s", track.name.c_str());
+    if (!session_.status().empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", session_.status().c_str());
+        ImGui::SetItemTooltip("%s", session_.status().c_str());
     }
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(10.0f * ImGui::GetFontSize());
-    if (mono_field("Volume", [&](const char *id) {
-            return ImGui::SliderFloat(id, &volume_db_, kMinVolumeDb, kMaxVolumeDb, "%.1f dB");
-        })) {
-        transport.set_gain(volume_to_gain(volume_db_));
-    }
+    ImGui::PopClipRect();
+    ImGui::EndGroup();
 
+    ImGui::SameLine(kControlsWidthEm * em + ImGui::GetStyle().WindowPadding.x);
     draw_overview(track);
     ImGui::End();
 }

@@ -23,6 +23,7 @@ namespace {
 constexpr float kBaseFontPx = 16.0f;
 constexpr float kMonoFontPx = 15.0f; // JetBrains Mono at 15 px sits level with Inter at 16.
 constexpr float kPlotFontPx = 13.0f;
+constexpr float kTimecodeFontPx = 24.0f;            // The transport's playhead time.
 const ImWchar kLucideRange[] = {0xE038, 0xE63A, 0}; // Every Lucide 0.460 icon.
 
 // "#RRGGBB" or "#RRGGBBAA".
@@ -216,7 +217,7 @@ struct State {
     ThemeMode mode = ThemeMode::desk;
     ThemeTokens desk = desk_tokens();
     ThemeTokens show = show_tokens();
-    std::array<ImFont *, 4> fonts{};
+    std::array<ImFont *, 5> fonts{};
 };
 
 State &state() {
@@ -297,7 +298,7 @@ void load_fonts(float dpi) {
             ImFontConfig fallback;
             fallback.SizePixels = 13.0f * dpi;
             ImFont *f = io.Fonts->AddFontDefault(&fallback);
-            state().fonts = {f, f, f, f};
+            state().fonts = {f, f, f, f, f};
             return;
         }
     }
@@ -321,6 +322,8 @@ void load_fonts(float dpi) {
     st.fonts[static_cast<size_t>(ThemeFont::mono)] =
         add("JetBrainsMono-Regular.ttf", kMonoFontPx, false);
     st.fonts[static_cast<size_t>(ThemeFont::plot)] = add("Inter-Regular.ttf", kPlotFontPx, false);
+    st.fonts[static_cast<size_t>(ThemeFont::timecode)] =
+        add("JetBrainsMono-Regular.ttf", kTimecodeFontPx, false);
     io.FontDefault = st.fonts[static_cast<size_t>(ThemeFont::ui)];
 }
 

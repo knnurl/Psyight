@@ -16,6 +16,10 @@ The top bar has three parts:
 
 The app always starts in Preview, so nothing reaches the lights until you step up the ladder.
 
+The window: the transport (play, loop, half speed, time, volume, the track's waveform) is at the top left, above the analysis and the bass roll. The rig preview is pinned at the top right; its button folds it away and the button at the far right of the top bar (or View > Rig preview) brings it back. Below it are the note inspector and scoring, then the Show tab (live input, MIDI, scenes, limiters, output) with the log, rig and preflight. View > Reset layout puts everything back.
+
+**Show mode:** React and Show switch the app to the dark Show theme and hide the editing panels; the rig is then drawn large where the bass roll was. Leaving them restores the theme and panels. File > Settings turns either change off.
+
 ## Before the show: Preflight
 
 Open the Preflight tab. Every line should be green; read every amber line:
@@ -35,7 +39,7 @@ Open the Preflight tab. Every line should be green; read every amber line:
 
 **From files** (prepared tracks, best accuracy): drop a WAV, FLAC or MP3 onto the window and press Space to play. The whole track is analysed first, from its Demucs stems when they exist, so events are known ahead and nothing lags.
 
-**Live** (a DJ set, unknown music): in the Preview tab, open "Live input", choose a source and press Start.
+**Live** (a DJ set, unknown music): in the Show tab, open "Live input", choose a source and press Start.
 
 - **Loopback:** whatever this computer plays (DJ software on the same laptop).
 - **An input device:** the mixer's booth output into an audio interface. A virtual cable (for example "Line 1 (Virtual Audio Cable)") also works: route the DJ software to it.
@@ -51,7 +55,7 @@ The second line shows the analysis delay (about 15 ms), the load, the input leve
 
 ## Latency: make the lights land on the beat
 
-The lights should flash when the audience hears the kick, not when the computer does. Set the latency offset (Preview tab, in ms) one of three ways:
+The lights should flash when the audience hears the kick, not when the computer does. Set the latency offset (Show tab, in ms) one of three ways:
 
 - **By distance:** about 2.9 ms for every metre from the speakers to the audience.
 - **By the tap test** (live mode, once locked): stand where the audience stands, and tap "Tap (T)", or the T key with the Preview focused, on the kick at least 8 times. "Use as latency offset" applies the result. The network and node add a little more, so finish by eye.
@@ -76,7 +80,7 @@ Live controls (Live input section, once locked):
 
 ## MIDI controller
 
-In the Preview tab, open "MIDI" and choose the controller. For each control you want, press Learn, then move the knob or press the pad. You can bind:
+In the Show tab, open "MIDI" and choose the controller. For each control you want, press Learn, then move the knob or press the pad. You can bind:
 
 - blackout, hold, automation (back to Show) and each scene, to buttons or pads
 - the brightness cap and the latency offset, to knobs or faders

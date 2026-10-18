@@ -179,7 +179,8 @@ int main() {
         psyight::SettingsView settings_view(project);
         psyight::RecentFiles recent;
         // The operator's preferences: loaded at start, saved when they change (not in capture
-        // mode, which always renders the defaults).
+        // mode, which always renders the defaults). prefs holds the ones main and the settings
+        // window own (show mode); the views keep theirs.
         psyight::UserSettings settings;
         if (!capture) {
             settings = psyight::load_user_settings(kSettingsFile);
@@ -194,7 +195,13 @@ int main() {
             transport_panel.apply_settings(settings);
             analysis_view.apply_settings(settings);
             bass_roll_view.apply_settings(settings);
+            preview_view.apply_settings(settings);
         }
+        psyight::UserSettings prefs = settings;
+        // Show mode (React or Show on the top bar): the Show theme and the editing panels hidden,
+        // as the settings say; leaving it restores the theme from before.
+        bool show_mode = false;
+        psyight::ThemeMode theme_before_show = psyight::theme_mode();
         std::filesystem::path recent_path; // The track last added to the recent list.
         bool show_settings = false;
         bool open_requested = false;
@@ -301,6 +308,7 @@ int main() {
                 }
                 if (ImGui::BeginMenu("View")) {
                     ImGui::MenuItem("Reset layout", nullptr, &reset_layout);
+                    ImGui::MenuItem("Rig preview", nullptr, &preview_view.preview_open());
                     if (ImGui::BeginMenu("Theme")) {
                         const psyight::ThemeMode mode = psyight::theme_mode();
                         if (ImGui::MenuItem("Desk", nullptr, mode == psyight::ThemeMode::desk)) {
@@ -321,7 +329,7 @@ int main() {
                 ImGui::EndMainMenuBar();
             }
             // Bump the version when panels are added, so saved layouts get the new default once.
-            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v6");
+            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v7");
             if (reset_layout || ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
                 psyight::apply_default_layout(dockspace_id); // First run, or View > Reset layout.
                 reset_layout = false;
@@ -333,32 +341,49 @@ int main() {
                 recent_path = session.track().path; // Loaded (from the menu, a drop or the
                 recent.add(recent_path);            // command line): first in the recent list.
             }
+            if (preview_view.performing() != show_mode) {
+                show_mode = preview_view.performing();
+                if (show_mode) {
+                    theme_before_show = psyight::theme_mode();
+                }
+                if (prefs.show_mode_theme) {
+                    psyight::apply_psyight_theme(show_mode ? psyight::ThemeMode::show
+                                                           : theme_before_show);
+                }
+            }
             transport_panel.draw();
-            analysis_view.draw();
-            bass_roll_view.draw_roll();
-            bass_roll_view.draw_inspector();
+            if (!(show_mode && prefs.show_mode_hides_editing)) {
+                analysis_view.draw();
+                bass_roll_view.draw_roll();
+                bass_roll_view.draw_inspector();
+            }
             scoring_view.draw();
+            // Before the log: the Show tab comes first in its group.
+            preview_view.draw(show_mode && prefs.show_mode_hides_editing);
             log_view.draw();
-            preview_view.draw();
             rig_view.draw();
             preflight_view.draw();
-            if (focus_preview) { // Show the preview's tab, not the rig's, after a new layout.
-                ImGui::SetWindowFocus("Preview");
+            if (focus_preview) { // Show the show controls' tab, not the rig's, after a new layout.
+                ImGui::SetWindowFocus("Show");
                 focus_preview = false;
             }
             handle_shortcuts(session);
             if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
                 open_requested = true;
             }
-            settings_view.draw(&show_settings, reset_layout);
+            settings_view.draw(&show_settings, reset_layout, prefs);
             project.autosave();
             if (!capture && !ImGui::IsAnyItemActive()) { // Not on every step of a drag.
-                psyight::UserSettings now = settings;
-                now.theme = psyight::theme_mode() == psyight::ThemeMode::show ? "show" : "desk";
+                psyight::UserSettings now = prefs;
+                // In show mode the theme to keep is the one show mode will restore.
+                const psyight::ThemeMode kept_theme =
+                    show_mode && prefs.show_mode_theme ? theme_before_show : psyight::theme_mode();
+                now.theme = kept_theme == psyight::ThemeMode::show ? "show" : "desk";
                 now.interface_depth = tier_id(psyight::current_tier());
                 transport_panel.store_settings(now);
                 analysis_view.store_settings(now);
                 bass_roll_view.store_settings(now);
+                preview_view.store_settings(now);
                 if (now != settings) {
                     settings = now;
                     psyight::save_user_settings(kSettingsFile, settings);
