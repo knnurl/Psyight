@@ -120,6 +120,7 @@ Run these from `app/` in an x64 Visual Studio 2022 developer shell: the "x64 Nat
 - Build: `cmake --build --preset windows-msvc-release`
 - Test: `ctest --preset windows-msvc-release`
 - Run: `build\windows-msvc\release\psyight.exe`
+- Package: `cmake --build --preset windows-msvc-release --target package` writes `build\windows-msvc\Psyight-<version>-win64.zip`: the app, fonts, the Visual C++ runtime DLLs beside it, licence notices, `packaging\README.txt` and the operator guide. Unzip and run `psyight.exe` on any Windows 10 or 11 x64 machine; nothing else to install.
 
 ## Repository layout (target)
 
