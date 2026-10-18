@@ -153,19 +153,8 @@ Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_
         analysis.bass = std::move(notes.value());
     }
 
-    Result<std::vector<DetectedSection>> sections =
-        detect_sections(analysis.mix_features, analysis.beats, options.sections);
-    if (!sections) {
-        return sections.error();
-    }
-    analysis.sections = std::move(sections.value());
-    analysis.phrase_starts_s =
-        phrase_starts(analysis.grid, analysis.sections,
-                      static_cast<int>(std::lround(options.beats.bars_per_phrase)),
-                      analysis.beats.phrase_bar_offset, analysis.duration_s);
-
     // Hats from the beat source (mix or drums); the residual from the mix unless the "other" stem
-    // gave it above.
+    // gave it above. Before the sections: builds use its flatness.
     Result<ResidualFeatures> hats = analyse_residual(beat_features, options.residual);
     if (!hats) {
         return hats.error();
@@ -175,6 +164,18 @@ Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_
     } else {
         analysis.residual = std::move(hats.value());
     }
+
+    Result<std::vector<DetectedSection>> sections = detect_sections(
+        analysis.mix_features, analysis.beats, options.sections, &analysis.residual);
+    if (!sections) {
+        return sections.error();
+    }
+    analysis.sections = std::move(sections.value());
+    analysis.phrase_starts_s =
+        phrase_starts(analysis.grid, analysis.sections,
+                      static_cast<int>(std::lround(options.beats.bars_per_phrase)),
+                      analysis.beats.phrase_bar_offset, analysis.duration_s);
+
     analysis.aggregates =
         aggregate_bass(analysis.bass.notes, analysis.grid, analysis.duration_s,
                        static_cast<int>(std::lround(options.beats.bars_per_phrase)),

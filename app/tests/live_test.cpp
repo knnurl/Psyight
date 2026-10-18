@@ -231,6 +231,29 @@ TEST_CASE("live beat: breakdowns, drops, downbeats and the run rule") {
     CHECK(rig.state.section_start_s == doctest::Approx(beat_s(132)).epsilon(1e-3));
 }
 
+TEST_CASE("live beat: a flatness riser in a breakdown is a build; flat texture is not") {
+    const double period = 0.4;
+    const auto beat_s = [&](int b) { return 1.0 + b * period; };
+    const auto breakdown_with = [&](auto flatness_at) {
+        BeatRig rig;
+        for (int b = 0; b < 32; ++b) {
+            rig.kick(beat_s(b));
+        }
+        REQUIRE(rig.state.locked);
+        for (int b = 32; b < 72; ++b) { // Ten bars without a kick.
+            rig.state.residual_flatness = flatness_at(b);
+            rig.advance_to(beat_s(b + 1));
+        }
+        return rig.state.section;
+    };
+    // Tonal for six bars, then a riser climbing to 0.15 over the last four.
+    CHECK(breakdown_with([](int b) { return b < 56 ? 0.01 : 0.01 + 0.14 * (b - 56) / 16.0; }) ==
+          LiveSection::build);
+    // Noisy from the start and fading: texture, not a riser.
+    CHECK(breakdown_with([](int b) { return 0.12 - 0.1 * (b - 32) / 40.0; }) ==
+          LiveSection::breakdown);
+}
+
 TEST_CASE("live inputs: bass, hats and residual from the state") {
     LiveState s;
     s.bass_notes = 3;

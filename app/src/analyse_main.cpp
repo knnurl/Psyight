@@ -1,6 +1,6 @@
 // psyight_analyse: the file-mode analysis of a track without labels, as a report.
 //
-//   psyight_analyse [--kicks] [--tempo] [--stems] <audio> [more audio...]
+//   psyight_analyse [--kicks] [--tempo] [--bars] [--stems] <audio> [more audio...]
 //
 // Runs the front end, the beat tracker and bass tracker v0 on the automatic grid, and prints
 // tempo, grid, downbeat and phrase (with confidences), kick coverage of the beats, and bass note
@@ -10,7 +10,9 @@
 // the grid's beats against its offbeats (in psytrance kicks sit on beats, hats on offbeats), to
 // check its thresholds without kick labels. --tempo prints the tempo of each minute alone, which
 // shows tempo changes (DJ mixes) and unstable estimates. --stems analyses the offline Demucs stems
-// (kicks and beats from drums, notes from bass) instead of the mix.
+// (kicks and beats from drums, notes from bass) instead of the mix. --bars prints what the section
+// rules see per bar (kick state, hats level, the residual's flatness and centroid) with the
+// detected section, to check the breakdown, build and drop rules.
 
 #include "analysis/bass_tracker.h"
 #include "analysis/beat_tracker.h"
@@ -171,8 +173,29 @@ void print_local_tempo(const FrontEndResult &f) {
     std::printf("\n");
 }
 
+// One line per bar: what the section rules see, and the section the bar landed in.
+void print_section_bars(const TrackAnalysis &a) {
+    const Result<std::vector<SectionBar>> bars = section_bars(a.mix_features, a.beats, &a.residual);
+    if (!bars) {
+        return;
+    }
+    std::printf("  bars: index, start s, kicked beats, hats dB, flatness, centroid Hz, section\n");
+    for (size_t m = 0; m < bars.value().size(); ++m) {
+        const SectionBar &bar = bars.value()[m];
+        const char *label = "";
+        for (const DetectedSection &s : a.sections) {
+            if (bar.start_s + 1e-3 >= s.start_s && bar.start_s < s.end_s) {
+                label = s.label.c_str();
+            }
+        }
+        std::printf("  %4zu %7.1f %c%d %6.1f %5.3f %6.0f %s\n", m, bar.start_s,
+                    bar.kick ? 'K' : '.', bar.kick_beats, bar.high_db, bar.flatness,
+                    bar.centroid_hz, label);
+    }
+}
+
 int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions &options,
-            bool kick_features, bool local_tempo) {
+            bool kick_features, bool local_tempo, bool bar_table) {
     const auto start = std::chrono::steady_clock::now();
     const Result<TrackAnalysis> analysis = analyse_track(audio_path, options);
     if (!analysis) {
@@ -294,6 +317,9 @@ int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions 
     if (local_tempo) {
         print_local_tempo(features);
     }
+    if (bar_table) {
+        print_section_bars(a);
+    }
     if (kick_features) {
         print_kick_features(features, grid);
         // Kicks per beat, one bar per group from the first grid beat: K kick, . none.
@@ -323,6 +349,7 @@ int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions 
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
+    bool bar_table = false;
     TrackAnalysisOptions options;
     std::vector<std::wstring> paths;
     for (int i = 1; i < argc; ++i) {
@@ -330,6 +357,8 @@ int wmain(int argc, wchar_t **argv) {
             kick_features = true;
         } else if (std::wcscmp(argv[i], L"--tempo") == 0) {
             local_tempo = true;
+        } else if (std::wcscmp(argv[i], L"--bars") == 0) {
+            bar_table = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
             options.source = AnalysisSource::stems;
         } else {
@@ -337,14 +366,14 @@ int wmain(int argc, wchar_t **argv) {
         }
     }
     if (paths.empty()) {
-        std::fprintf(
-            stderr,
-            "usage: psyight_analyse [--kicks] [--tempo] [--stems] <audio> [more audio...]\n");
+        std::fprintf(stderr,
+                     "usage: psyight_analyse [--kicks] [--tempo] [--bars] [--stems] <audio> [more "
+                     "audio...]\n");
         return 2;
     }
     int status = 0;
     for (const std::wstring &path : paths) {
-        status = std::max(status, analyse(path, options, kick_features, local_tempo));
+        status = std::max(status, analyse(path, options, kick_features, local_tempo, bar_table));
     }
     return status;
 }

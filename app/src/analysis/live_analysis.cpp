@@ -413,6 +413,10 @@ void LiveBeat::reset() {
     off_grid_kicks_ = 0;
     in_lock_kicks_ = 0;
     breakdown_floor_ = 1.0;
+    flatness_slow_ = 0.0;
+    level_slow_ = 0.0;
+    flatness_floor_ = 1.0;
+    last_update_s_ = -1.0;
     drop_end_beat_ = 0;
 }
 
@@ -559,6 +563,13 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
 }
 
 void LiveBeat::update(LiveState &s, double t_s) {
+    if (last_update_s_ >= 0.0 && t_s > last_update_s_) {
+        const double alpha =
+            1.0 - std::exp(-(t_s - last_update_s_) / params_.build_flatness_smoothing_s);
+        flatness_slow_ += alpha * (s.residual_flatness - flatness_slow_);
+        level_slow_ += alpha * (s.residual_level - level_slow_);
+    }
+    last_update_s_ = t_s;
     if (!s.tempo_known) {
         return;
     }
@@ -569,10 +580,14 @@ void LiveBeat::update(LiveState &s, double t_s) {
         since_kick_beats >= 4.0 * params_.breakdown_bars) {
         // The breakdown began on the beat after the last kick of a run.
         set_section(s, LiveSection::breakdown, time_of(s, s.last_run_beat + 1));
-        breakdown_floor_ = s.residual_level;
+        breakdown_floor_ = level_slow_;
+        flatness_floor_ = flatness_slow_;
     } else if (section == LiveSection::breakdown) {
-        breakdown_floor_ = std::min(breakdown_floor_, s.residual_level);
-        if (s.residual_level - breakdown_floor_ >= params_.build_rise) {
+        breakdown_floor_ = std::min(breakdown_floor_, level_slow_);
+        flatness_floor_ = std::min(flatness_floor_, flatness_slow_);
+        const bool riser = flatness_slow_ >= params_.build_min_flatness &&
+                           flatness_slow_ >= params_.build_flatness_ratio * flatness_floor_;
+        if (riser || level_slow_ - breakdown_floor_ >= params_.build_rise) {
             set_section(s, LiveSection::build, t_s);
         }
     } else if (section == LiveSection::drop && now_beat >= static_cast<double>(drop_end_beat_)) {

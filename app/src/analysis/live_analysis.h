@@ -26,8 +26,11 @@
 // between the means of beats k..k+3 and k-4..k-1 (known a bar late); each bar phase keeps a slowly
 // forgetting mean of its novelty (clipped at 3 times the overall mean), and the best phase becomes
 // the downbeat when it leads the next by downbeat_margin. Sections: breakdown after breakdown_bars
-// bars without a kick, build when the residual activity rises in a breakdown, drop when the kick
-// returns after drop_after_bars bars, groove otherwise; phrases restart at section starts.
+// bars without a kick, build when the residual activity rises build_rise in a breakdown or a riser
+// lifts the residual's flatness build_flatness_ratio times above its lowest since the breakdown
+// began, and to build_min_flatness at least (file mode's rule, causally); both rules read 1 s
+// averages, as the 50 ms ones fluctuate past the thresholds. Drop when the kick returns after
+// drop_after_bars bars, groove otherwise; phrases restart at section starts.
 //
 // Latency, measured from the audio a decision describes: the student's lookahead plus one frame
 // for kicks and hats, plus three for bass onsets (latency_s), plus up to one hop of buffering. The
@@ -68,6 +71,9 @@ struct LiveParams {
     int phrase_bars = 8;
     double build_rise =
         6.0 / 90.0; // Residual activity rise (6 dB) that turns a breakdown into a build.
+    double build_flatness_ratio = 2.5; // Riser: flatness over its breakdown floor.
+    double build_min_flatness = 0.03;
+    double build_flatness_smoothing_s = 1.0; // The flatness average the riser rule reads.
     double residual_smoothing_s = 0.05;
     double kick_threshold = 0.5;
     double hat_threshold = 0.5;
@@ -163,6 +169,10 @@ class LiveBeat {
     int off_grid_kicks_ = 0;
     int in_lock_kicks_ = 0;
     double breakdown_floor_ = 1.0; // Lowest residual activity since the breakdown began.
+    double flatness_slow_ = 0.0;   // The residual's flatness, averaged over about a second.
+    double level_slow_ = 0.0;      // The residual's activity, averaged likewise.
+    double flatness_floor_ = 1.0;  // Lowest flatness_slow_ since the breakdown began.
+    double last_update_s_ = -1.0;
     long long drop_end_beat_ = 0;
 };
 

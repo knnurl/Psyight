@@ -91,6 +91,74 @@ TEST_CASE("sections: intro, groove, breakdown, build, drop and outro of a synthe
     }
 }
 
+TEST_CASE("sections: a flatness riser marks the build, not hats entering mid-breakdown") {
+    // 40 bars of rolling bass at 150 BPM. Kicks in bars 4 to 11 and 28 to 35. In the breakdown
+    // (bars 12 to 27) hats enter at bar 16, a white noise riser climbs in bars 22 to 25, and
+    // bars 26 and 27 are a gap before the drop.
+    constexpr double kBpm = 150.0;
+    synth::SynthParams params;
+    params.bpm = kBpm;
+    params.bars = 40;
+    synth::SynthParams bass_params = params;
+    bass_params.kick = false;
+    synth::SynthOutput mix =
+        synth::render(bass_params, synth::make_pattern(synth::Pattern::rolling, 40, 29, 0.7));
+    synth::SynthParams kick_params = params;
+    kick_params.bass_level = 0.0;
+    const synth::SynthOutput kicks = synth::render(kick_params, {});
+    synth::SynthParams hat_params = kick_params;
+    hat_params.kick = false;
+    hat_params.hats = true;
+    const synth::SynthOutput hats = synth::render(hat_params, {});
+    const double downbeat_s = mix.labels.downbeats.front().t_s;
+    const double bar_s = 4.0 * 60.0 / kBpm;
+    std::uint32_t noise = 12345;
+    for (size_t i = 0; i < mix.samples.size(); ++i) {
+        const double bar = (static_cast<double>(i) / kSampleRateHz - downbeat_s) / bar_s;
+        if ((bar >= 4.0 && bar < 12.0) || (bar >= 28.0 && bar < 36.0)) {
+            mix.samples[i] += kicks.samples[i];
+        }
+        if (bar >= 16.0) {
+            mix.samples[i] += hats.samples[i];
+        }
+        if (bar >= 22.0 && bar < 26.0) {
+            noise = noise * 1664525u + 1013904223u; // Deterministic white noise.
+            const double white = static_cast<double>(noise) / 4294967296.0 * 2.0 - 1.0;
+            const double gain_db = -50.0 + 40.0 * (bar - 22.0) / 4.0; // -50 to -10 dB.
+            mix.samples[i] += static_cast<float>(white * std::pow(10.0, gain_db / 20.0));
+        }
+    }
+    const Result<FrontEndResult> features = analyse_front_end(mix.samples, kSampleRateHz, {});
+    REQUIRE(features.ok());
+    const Result<BeatTrackResult> beats = track_beats(features.value(), {});
+    REQUIRE(beats.ok());
+    const Result<ResidualFeatures> residual = analyse_residual(features.value(), {});
+    REQUIRE(residual.ok());
+    const auto build_bar = [&](const ResidualFeatures *with) {
+        const Result<std::vector<DetectedSection>> found =
+            detect_sections(features.value(), beats.value(), {}, with);
+        REQUIRE(found.ok());
+        std::string summary;
+        double start_bar = -1.0;
+        for (const DetectedSection &s : found.value()) {
+            const double bar = (s.start_s - downbeat_s) / bar_s;
+            summary += s.label + "@" + std::to_string(bar) + " ";
+            if (s.label == "build") {
+                start_bar = bar;
+                CHECK(s.end_s == doctest::Approx(downbeat_s + 28.0 * bar_s).epsilon(0.001));
+            }
+        }
+        CAPTURE(summary);
+        CHECK(start_bar >= 0.0);
+        return start_bar;
+    };
+    const double riser = build_bar(&residual.value());
+    CHECK(riser >= 21.0);
+    CHECK(riser <= 24.0);
+    const double hats_only = build_bar(nullptr); // The high-band rule: hats entering at bar 16.
+    CHECK(hats_only <= 17.0);
+}
+
 TEST_CASE("sections: phrases restart at section changes") {
     // 150 BPM: a bar is 1.6 s. Sections start at bars 0, 4, 12 and 13 of a 40-bar track.
     const Grid grid{150.0, seconds_to_samples(0.5, kSampleRateHz), kSampleRateHz};

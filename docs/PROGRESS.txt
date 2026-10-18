@@ -159,6 +159,11 @@ Done 2026-10-17: the student retrained on 441 tracks (96 channels, 40k steps; ru
 4-hour soak done (docs/results/M6.md): 59.92 fps, 264 late frames only while builds and training shared the machine, no dropped samples, memory flat, locked throughout.
 Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure, a venue dry run (M6 exit).
 
+## Builds from risers (owner request 2026-10-18)
+- File mode (analysis/sections.*): a riser rule on the residual's per-bar spectral flatness, the high-band rule as fallback (SPEC 6.6). psyight_analyse --bars prints per bar: kick state, hats dB, flatness, centroid, section. Builds on the reference tracks (stems), before then after: OculusDrift unchanged (182-184, 234-240 s); Hall of Purity 181-203 becomes 195-203, 49-54 starts 2 s earlier, the rest unchanged; Hagios gains 135-140, 508-515, 719-724, 780-788, 884-896, 937-940 and moves a few starts by 1 to 5 s. Owner to check by ear: no section labels exist (the label sections were drafted from detection).
+- Live mode: the same riser idea causally, and both build rules on 1 s averages. psyight_live_check: OculusDrift builds at 183, 204, 237 (file 234), 393 s, down from 26, 29, 183, 201, 230, 378 s; Hall of Purity about half as many.
+- Not fixed, seen on the way: Hall of Purity and Hagios flip between breakdown and groove or drop every few bars (the kick state per bar), in both modes.
+
 ## UI restyle (docs/RESTYLE.md; phases stop for the owner's approval)
 - Phase 0 (754831d): `psyight --capture <out.png> --theme <desk|show> --audio <file> --time <s> --frames 60`, deterministic (byte-identical PNGs), offscreen 1920x1080 at DPI 1.0, default layout, no ini. Baseline: data\OculusDrift.mp3 at 120 s; captures in captures/ (gitignored).
 - Phase 1: theme module (gui/theme.*), fonts in assets/fonts (copied beside the exe at build), View > Theme (Desk, Show), F12 style editor, theme.json overrides beside the exe. Frame time median 3.21 ms (baseline 3.28).
