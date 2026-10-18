@@ -29,6 +29,7 @@ namespace {
 constexpr float kMarginPixels = 12.0f;
 constexpr double kRateWindowS = 1.0;
 constexpr float kSegmentGapPixels = 2.0f; // Between the top bar's mode buttons.
+constexpr double kPi = 3.14159265358979323846;
 
 // Node bytes are LED drive levels (gamma applied); the screen wants the frame's values back.
 ImU32 to_imgui(const std::uint8_t *rgb, double gamma) {
@@ -259,7 +260,32 @@ void PreviewView::draw_top_bar() {
             config_.hold = !config_.hold;
             dirty_ = true;
         }
+        // 1 to 9 pick scenes, 0 returns to the sections (not in Ambient: one scene only).
+        if (ladder_ != Ladder::ambient) {
+            if (ImGui::IsKeyPressed(ImGuiKey_0, false)) {
+                pick_scene(-1);
+            }
+            for (int k = 0; k < 9; ++k) {
+                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + k), false) &&
+                    k < static_cast<int>(config_.scenes.size())) {
+                    pick_scene(k);
+                }
+            }
+        }
     }
+}
+
+void PreviewView::pick_scene(int scene) {
+    config_.manual_scene = scene;
+    if (scene >= 0) {
+        edit_scene_ = scene;
+        if (ladder_ == Ladder::show) {
+            ladder_ = Ladder::react; // A scene held by hand.
+        }
+    } else if (ladder_ == Ladder::react) {
+        ladder_ = Ladder::show;
+    }
+    dirty_ = true;
 }
 
 void PreviewView::sync_config() {
@@ -1566,14 +1592,17 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
         }
         ImGui::PushID(i);
         if (ImGui::Button(name.c_str())) {
-            config_.manual_scene = i;
-            edit_scene_ = i;
-            if (ladder_ == Ladder::show) {
-                ladder_ = Ladder::react; // A scene held by hand.
-            }
-            dirty_ = true;
+            pick_scene(i);
         }
         ImGui::PopID();
+        if (frame.queued_scene == i) { // Waiting for its launch: a pulsing outline.
+            const float pulse =
+                0.5f + 0.5f * static_cast<float>(std::sin(ImGui::GetTime() * 2.0 * kPi * 2.0));
+            ImGui::GetWindowDrawList()->AddRect(
+                ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                to_u32(with_alpha(theme().accent, 0.4f + 0.6f * pulse)),
+                ImGui::GetStyle().FrameRounding, 0, 2.0f);
+        }
         if (playing) {
             pop_filled_button();
         } else if (fading_out) {
@@ -1583,22 +1612,40 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
         for (const std::string &s : config_.scenes[static_cast<size_t>(i)].sections) {
             tags += (tags.empty() ? "" : ", ") + s;
         }
-        ImGui::SetItemTooltip("For: %s. Click to hold this scene.",
-                              tags.empty() ? "manual use only" : tags.c_str());
+        ImGui::SetItemTooltip("For: %s. Click (or press %d) to hold this scene.",
+                              tags.empty() ? "manual use only" : tags.c_str(), i + 1);
     }
     bool automatic = !manual;
     if (ImGui::Checkbox("Auto (by section)", &automatic)) {
-        config_.manual_scene = automatic ? -1 : std::max(0, frame.mix.to);
-        if (ladder_ == Ladder::react && automatic) {
-            ladder_ = Ladder::show;
-        } else if (ladder_ == Ladder::show && !automatic) {
-            ladder_ = Ladder::react;
-        }
-        dirty_ = true;
+        pick_scene(automatic ? -1 : std::max(0, frame.mix.to));
     }
-    ImGui::EndDisabled();
     ImGui::SetItemTooltip("Scenes follow the sections; clicking a scene holds it until this is "
-                          "ticked again.");
+                          "ticked again (or 0 is pressed).");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(7.0f * ImGui::GetFontSize());
+    const SceneLaunch launch = project_.project().automation.launch;
+    if (ImGui::BeginCombo("##launch", scene_launch_name(launch))) {
+        for (const SceneLaunch l : kSceneLaunches) {
+            if (ImGui::Selectable(scene_launch_name(l), l == launch)) {
+                project_.edit().automation.launch = l;
+                project_.changed();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("When a scene you pick (or the return to Auto) takes over. Keys 1 to 9 "
+                          "pick scenes, 0 returns to the sections.");
+    ImGui::EndDisabled();
+    if (frame.queued_scene != SceneLauncher::kNoneQueued) {
+        ImGui::SameLine();
+        ImGui::TextColored(
+            theme().accent, "%s at the %s",
+            frame.queued_scene < 0 ? "Auto"
+            : frame.queued_scene < static_cast<int>(config_.scenes.size())
+                ? config_.scenes[static_cast<size_t>(frame.queued_scene)].name.c_str()
+                : "?",
+            launch == SceneLaunch::phrase ? "next phrase" : "next bar");
+    }
     if (frame.mix.from >= 0) {
         ImGui::SameLine();
         mono_text("crossfade %.0f%%", 100.0 * frame.mix.to_weight);

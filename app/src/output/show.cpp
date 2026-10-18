@@ -48,6 +48,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     if (std::abs(t_s - last_t_s_) > kSeekResetS) {
         limiters_.reset();
         modulation_.clear();
+        launcher_.reset();
     }
     last_t_s_ = t_s;
     const bool testing = config.test.kind != TestPatternKind::off;
@@ -82,13 +83,17 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         if (config.live != nullptr) {
             const LiveState state = config.live->state();
             inputs = inputs_at(state, t_s);
-            out.mix =
-                automate_live(config.scenes, state, inputs, config.automation, config.manual_scene);
+            const int manual =
+                launcher_.update(config.manual_scene, inputs, config.automation.launch);
+            out.mix = automate_live(config.scenes, state, inputs, config.automation, manual);
         } else {
             inputs = inputs_at(*config.analysis, config.grid, t_s);
+            const int manual =
+                launcher_.update(config.manual_scene, inputs, config.automation.launch);
             out.mix = automate(config.scenes, *config.analysis, config.grid, inputs,
-                               config.automation, config.manual_scene);
+                               config.automation, manual);
         }
+        out.queued_scene = launcher_.queued();
         inputs.macros = config.macros;
         out.section = inputs.section;
         out.beat_in_bar = inputs.beat_in_bar;

@@ -76,6 +76,9 @@ struct ShowFrame {
     // modulation rings; empty during blackout and hold.
     std::vector<double> route_values;
     double test_clock_s = 0.0; // The test pattern's clock (preflight shows the colour step).
+    // A manual scene waiting for its launch (-1: the return to the section rules), or
+    // SceneLauncher::kNoneQueued.
+    int queued_scene = SceneLauncher::kNoneQueued;
     int beat_in_bar = 0;
     std::vector<std::uint8_t> node_rgb; // What the virtual node latched (gamma-encoded bytes).
     VirtualNodeStats node;
@@ -95,7 +98,8 @@ class ShowRenderer {
 
     std::uint64_t config_version_ = ~std::uint64_t{0};
     Limiters limiters_;
-    ModMemory modulation_; // The routes' memory (holding, smoothing); cleared on a seek.
+    ModMemory modulation_;   // The routes' memory (holding, smoothing); cleared on a seek.
+    SceneLauncher launcher_; // When a scene chosen by hand takes over.
     // The test pattern's clock: frames since it started (it runs while the transport is stopped).
     TestPatternKind test_kind_ = TestPatternKind::off;
     std::int64_t test_frames_ = 0;

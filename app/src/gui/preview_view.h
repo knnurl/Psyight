@@ -69,6 +69,9 @@ class PreviewView {
     void apply_midi(const MidiAction &action);
     void draw_controls(const ShowFrame &frame);
     void draw_scene_cards(const ShowFrame &frame);
+    // A scene picked by hand (cards, keys 1 to 9): held, launched as the project's launch setting
+    // says; React while held. -1 (key 0, Auto): back to the section rules (Show).
+    void pick_scene(int scene);
     void draw_scene_editor(std::vector<Scene> &scenes, const ShowFrame &frame);
     // The scene's layers as a device chain, bottom layer first (left), as a rack's signal flows.
     void draw_rack(Scene &scene, const ShowFrame &frame);

@@ -146,6 +146,69 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
     return mix;
 }
 
+const char *scene_launch_id(SceneLaunch launch) {
+    switch (launch) {
+    case SceneLaunch::now:
+        return "now";
+    case SceneLaunch::bar:
+        return "bar";
+    case SceneLaunch::phrase:
+        return "phrase";
+    }
+    return "bar";
+}
+
+const char *scene_launch_name(SceneLaunch launch) {
+    switch (launch) {
+    case SceneLaunch::now:
+        return "Now";
+    case SceneLaunch::bar:
+        return "Next bar";
+    case SceneLaunch::phrase:
+        return "Next phrase";
+    }
+    return "Next bar";
+}
+
+std::optional<SceneLaunch> scene_launch_from_id(const std::string &id) {
+    for (const SceneLaunch l : kSceneLaunches) {
+        if (id == scene_launch_id(l)) {
+            return l;
+        }
+    }
+    return std::nullopt;
+}
+
+int SceneLauncher::update(int requested, const EngineInputs &inputs, SceneLaunch launch) {
+    if (!started_) {
+        started_ = true;
+        active_ = requested;
+        waiting_ = false;
+        t_s_ = inputs.t_s;
+        return active_;
+    }
+    const bool moving = inputs.t_s != t_s_;
+    t_s_ = inputs.t_s;
+    if (requested == active_) {
+        waiting_ = false;
+        return active_;
+    }
+    if (!waiting_ || target_ != requested) {
+        waiting_ = true;
+        target_ = requested;
+        bar_ = inputs.bar_index;
+        phrase_ = inputs.phrase_index;
+    }
+    const bool go = launch == SceneLaunch::now || !moving ||
+                    (launch == SceneLaunch::bar && inputs.bar_index != bar_) ||
+                    (launch == SceneLaunch::phrase && inputs.phrase_index != phrase_);
+    if (go) {
+        active_ = requested;
+        waiting_ = false;
+    }
+    return active_;
+}
+
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
                  std::uint64_t seed, ModMemory *memory) {

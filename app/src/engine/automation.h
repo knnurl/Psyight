@@ -10,8 +10,9 @@
 //   entering anything else crossfades over crossfade_beats, at most half the section.
 // - The palette shifts by one every palette_every_phrases phrases (counted over the track),
 //   slewed over palette_slew_beats as an RGB crossfade (not a hue-path slew).
-// - A manual scene overrides the section rules until released (immediately in v0; SPEC asks for
-//   a cut on the next downbeat or a crossfade).
+// - A manual scene overrides the section rules until released. SceneLauncher (below) makes a
+//   newly chosen scene, or the return to the rules, wait for the next bar or phrase (SPEC 7.6:
+//   a cut on the next downbeat), as AutomationParams::launch says.
 #pragma once
 
 #include "analysis/track_analysis.h"
@@ -19,15 +20,51 @@
 #include "engine/inputs.h"
 #include "engine/scene.h"
 
+#include <array>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace psyight {
+
+// When a scene chosen by hand (or the return to the section rules) takes over.
+enum class SceneLaunch { now, bar, phrase };
+inline constexpr std::array<SceneLaunch, 3> kSceneLaunches = {SceneLaunch::now, SceneLaunch::bar,
+                                                              SceneLaunch::phrase};
+const char *scene_launch_id(SceneLaunch launch);   // "now", "bar", "phrase" (files).
+const char *scene_launch_name(SceneLaunch launch); // "Now", "Next bar", "Next phrase".
+std::optional<SceneLaunch> scene_launch_from_id(const std::string &id);
 
 struct AutomationParams {
     double crossfade_beats = 4.0;
     int palette_every_phrases = 2; // 0 keeps each scene's own palette.
     double palette_slew_beats = 4.0;
+    SceneLaunch launch = SceneLaunch::bar;
+};
+
+// Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
+// the section rules) waits until the bar (or the phrase) changes, then takes over; with
+// SceneLaunch::now, or while the render time stands still (the transport stopped), it takes over
+// at once. Deterministic for the same sequence of requests and inputs.
+class SceneLauncher {
+  public:
+    // The manual scene in effect this frame (-1: the section rules).
+    int update(int requested, const EngineInputs &inputs, SceneLaunch launch);
+    // The request still waiting: a scene, -1 for the rules, or kNoneQueued.
+    int queued() const { return waiting_ ? target_ : kNoneQueued; }
+    void reset() { started_ = false; } // After a seek: the next request takes over at once.
+
+    static constexpr int kNoneQueued = -2;
+
+  private:
+    bool started_ = false;
+    int active_ = -1;
+    bool waiting_ = false;
+    int target_ = -1;
+    long long bar_ = 0; // When the request came.
+    int phrase_ = -1;
+    double t_s_ = 0.0; // The last frame's render time.
 };
 
 struct SceneMix {
