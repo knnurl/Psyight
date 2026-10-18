@@ -154,6 +154,8 @@ int main() {
         std::optional<psyight::CrashGuard> crash_guard; // Log file, dumps, unclean-exit marker.
         if (!capture) {
             crash_guard.emplace();
+        } else {
+            psyight::install_crash_handler("logs"); // A crash still leaves its stack.
         }
         psyight::Session session;
         psyight::TransportPanel transport_panel(session);
