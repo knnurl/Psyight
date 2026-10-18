@@ -97,7 +97,7 @@ The Show tab works like a rack in Ableton Live:
 - **Layers** (Tune depth, under "Scene"): each layer is a device, bottom layer first. The power button switches it, the knobs set opacity and the effect's settings, the menus its blend mode and strip group. Drag a device's name to reorder; right-click it to move or remove. "+" adds a layer.
 - **Modulation:** each route is a card: source, curve, target (opacity, hue shift, the scene's brightness, or any of a layer's settings, such as Drift or Speed) and layer, then Hold (free, or sampled once per 16th, beat or bar) and the Amount, Attack and Release knobs. A blue ring on a knob shows where modulation is moving it right now (only for the scene that is playing).
 
-Knobs: drag up or down (Shift for fine), double-click to type, right-click to reset.
+Knobs: drag up or down (Shift for fine), double-click to type. Right-click a knob for its menu: Reset to default; on layer knobs, Modulate with (pick a source: a route appears), Map to macro (that macro then sweeps the knob from where it is to the top) and Remove modulation; on the macros and the brightness cap, Learn MIDI (then move a control on the controller) and Forget.
 
 **Presets** (Tune depth):
 

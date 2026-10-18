@@ -730,6 +730,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         LimiterParams p = project_.project().limiter;
         bool changed = false;
         const LimiterParams defaults;
+        set_knob_menu([&] { midi_menu("brightness"); });
         changed |=
             knob("Brightness##cap", &p.brightness_cap, 0.0, 1.0, "%.2f", defaults.brightness_cap);
         ImGui::SetItemTooltip("Brightness cap: every pixel at most this.");
@@ -1168,6 +1169,99 @@ void PreviewView::draw_rack(Scene &scene, const ShowFrame &frame) {
         remove_layer(scene, static_cast<size_t>(remove));
         scene_edited_ = true;
     }
+    // Knob menus: routes removed (highest index first) and added.
+    std::sort(routes_to_remove_.rbegin(), routes_to_remove_.rend());
+    for (const int r : routes_to_remove_) {
+        if (r >= 0 && r < static_cast<int>(scene.routes.size())) {
+            scene.routes.erase(scene.routes.begin() + r);
+            scene_edited_ = true;
+        }
+    }
+    routes_to_remove_.clear();
+    for (const ModRoute &r : routes_to_add_) {
+        scene.routes.push_back(r);
+        scene_edited_ = true;
+    }
+    routes_to_add_.clear();
+}
+
+void PreviewView::modulation_menu(const Scene &scene, int layer, ModTarget target,
+                                  const char *param, double value, double min, double max) {
+    ImGui::Separator();
+    const auto made = [&](ModSource source, double amount) {
+        ModRoute r;
+        r.source = source;
+        r.target = target;
+        r.layer = layer;
+        r.param = param;
+        r.amount = amount;
+        return r;
+    };
+    if (ImGui::BeginMenu("Modulate with")) {
+        for (const ModSource s : kModSources) {
+            if (ImGui::MenuItem(source_label(s).c_str())) {
+                routes_to_add_.push_back(made(s, target == ModTarget::setting ? 0.25 : 0.5));
+            }
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Map to macro")) {
+        // The macro sweeps from the knob's value (macro at 0) to its top (at 1); a knob already
+        // at the top sweeps down to the bottom instead.
+        const double amount = macro_mapping_amount(value, min, max);
+        for (int i = 0; i < kMacroCount; ++i) {
+            if (ImGui::MenuItem(macro_name(project_.project(), i).c_str())) {
+                routes_to_add_.push_back(
+                    made(static_cast<ModSource>(static_cast<int>(ModSource::macro_1) + i), amount));
+            }
+        }
+        ImGui::TextDisabled("The macro sweeps this knob from here to the top.");
+        ImGui::EndMenu();
+    }
+    std::vector<int> here;
+    for (size_t r = 0; r < scene.routes.size(); ++r) {
+        const ModRoute &route = scene.routes[r];
+        if (route.layer == layer && route.target == target &&
+            (target != ModTarget::setting || route.param == param)) {
+            here.push_back(static_cast<int>(r));
+        }
+    }
+    if (!here.empty() && ImGui::BeginMenu("Remove modulation")) {
+        for (const int r : here) {
+            const ModRoute &route = scene.routes[static_cast<size_t>(r)];
+            char label[96];
+            std::snprintf(label, sizeof(label), "%s, %+.2f##%d", source_label(route.source).c_str(),
+                          route.amount, r);
+            if (ImGui::MenuItem(label)) {
+                routes_to_remove_.push_back(r);
+            }
+        }
+        ImGui::EndMenu();
+    }
+}
+
+void PreviewView::midi_menu(const std::string &target) {
+    ImGui::Separator();
+    const bool learning = midi_map_.learning() == target;
+    if (ImGui::MenuItem(learning ? "Cancel MIDI learn" : "Learn MIDI")) {
+        if (learning) {
+            midi_map_.cancel_learn();
+        } else {
+            midi_map_.learn(target);
+        }
+    }
+    if (const MidiBinding *bound = midi_map_.binding_of(target); bound != nullptr) {
+        if (ImGui::MenuItem(("Forget " + describe(*bound)).c_str())) {
+            midi_map_.clear(target);
+            project_.edit().midi = midi_map_.bindings;
+            project_.changed();
+        }
+    }
+    if (!midi_in_.is_open()) {
+        ImGui::TextDisabled("No MIDI controller open (MIDI section).");
+    } else if (learning) {
+        ImGui::TextDisabled("Move a control on the controller.");
+    }
 }
 
 void PreviewView::draw_layer_device(Scene &scene, size_t index,
@@ -1293,6 +1387,9 @@ void PreviewView::draw_layer_device(Scene &scene, size_t index,
         routes_here += line;
     }
     modulated = std::clamp(modulated, 0.0, 1.0);
+    set_knob_menu([&] {
+        modulation_menu(scene, static_cast<int>(index), ModTarget::opacity, "", opacity, 0.0, 1.0);
+    });
     if (knob("Opacity", &opacity, 0.0, 1.0, "%.2f", 1.0,
              route_values != nullptr && !routes_here.empty() ? &modulated : nullptr)) {
         layer.opacity = static_cast<float>(opacity);
@@ -1335,6 +1432,10 @@ void PreviewView::draw_layer_device(Scene &scene, size_t index,
         }
         const std::string label = std::string(info.label) + "##" + info.id;
         const std::string unit = info.unit[0] != 0 ? std::string(" ") + info.unit : std::string();
+        set_knob_menu([&] {
+            modulation_menu(scene, static_cast<int>(index), ModTarget::setting, info.id,
+                            effect_param(layer.spec, k), info.min, info.max);
+        });
         if (info.integer) {
             int v = static_cast<int>(std::lround(effect_param(layer.spec, k)));
             if (knob_int(label.c_str(), &v, static_cast<int>(info.min), static_cast<int>(info.max),
@@ -1357,7 +1458,7 @@ void PreviewView::draw_layer_device(Scene &scene, size_t index,
                                   setting_routes[k].c_str());
         } else if (info.description[0] != '\0') {
             ImGui::SetItemTooltip("%s. Drag (Shift: fine); double-click to type; right-click "
-                                  "resets.",
+                                  "for reset and modulation.",
                                   info.description);
         }
     }
@@ -1406,18 +1507,21 @@ void PreviewView::draw_macros() {
         }
         ImGui::PushID(i);
         double value = project_.project().macro_values[static_cast<size_t>(i)];
+        const std::string target = "macro:" + std::to_string(i);
+        set_knob_menu([&] { midi_menu(target); });
         if (knob(macro_name(project_.project(), i).c_str(), &value, 0.0, 1.0, "%.2f", 0.0)) {
             project_.edit().macro_values[static_cast<size_t>(i)] = value;
             project_.changed();
         }
-        const std::string target = "macro:" + std::to_string(i);
-        if (const MidiBinding *bound = midi_map_.binding_of(target); bound != nullptr) {
+        if (midi_map_.learning() == target) {
+            ImGui::SetItemTooltip("Learning: move a control on the controller.");
+        } else if (const MidiBinding *bound = midi_map_.binding_of(target); bound != nullptr) {
             ImGui::SetItemTooltip("%s: %s. A modulation source.",
                                   macro_name(project_.project(), i).c_str(),
                                   describe(*bound).c_str());
         } else {
-            ImGui::SetItemTooltip("%s: a modulation source. MIDI: learn a knob in the MIDI "
-                                  "section.",
+            ImGui::SetItemTooltip("%s: a modulation source. Right-click to learn a MIDI knob "
+                                  "for it.",
                                   macro_name(project_.project(), i).c_str());
         }
         ImGui::PopID();

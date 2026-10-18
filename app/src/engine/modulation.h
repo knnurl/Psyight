@@ -108,6 +108,11 @@ double route_value(const ModRoute &route, const EngineInputs &in, std::uint64_t 
 // for the same render time returns the same value.
 double step_route(const ModRoute &route, ModRouteState &state, const EngineInputs &in,
                   std::uint64_t seed);
+// "Map to macro": the amount (a fraction of the range) that makes a macro sweep a value from
+// where it is (macro at 0) to the top of its range (at 1); a value already at the top sweeps
+// down to the bottom instead.
+double macro_mapping_amount(double value, double min, double max);
+
 // The division index a quantised route holds for (0 when off).
 long long mod_division(ModQuantise quantise, const EngineInputs &in);
 

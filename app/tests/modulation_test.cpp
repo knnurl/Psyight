@@ -86,6 +86,13 @@ TEST_CASE("modulation: macros are sources") {
     CHECK(mod_source_from_id("macro_5") == ModSource::macro_5);
 }
 
+TEST_CASE("modulation: mapping a macro sweeps from the value to the top") {
+    CHECK(macro_mapping_amount(0.25, 0.0, 1.0) == doctest::Approx(0.75));
+    CHECK(macro_mapping_amount(0.5, 0.0, 2.0) == doctest::Approx(0.75)); // A fraction of range.
+    CHECK(macro_mapping_amount(1.0, 0.0, 1.0) == doctest::Approx(-1.0)); // At the top: down.
+    CHECK(macro_mapping_amount(1.0, 1.0, 1.0) == 0.0);
+}
+
 TEST_CASE("modulation: hold per beat samples at the division's first frame") {
     ModRoute route;
     route.source = ModSource::beat_phase;

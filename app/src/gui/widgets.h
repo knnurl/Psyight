@@ -11,12 +11,15 @@
 //   clamped to their range.
 // - knob and knob_int: rotary knobs (Ableton style): the label above in the small font, a
 //   270-degree arc (bipolar ranges grow from 0), the value below in the mono font. Drag up or
-//   down (Shift for fine), double-click to type, right-click to reset to the default. With
+//   down (Shift for fine), double-click to type, right-click for a menu: Reset to default, then
+//   the caller's items (set_knob_menu, just before the knob). With
 //   `modulated`, a thin outer ring runs from the value to where modulation moves it. The format
 //   prints a double ("%.2f", "%.0f px"), also for knob_int.
 #pragma once
 
 #include <imgui.h>
+
+#include <functional>
 
 namespace psyight {
 
@@ -60,6 +63,9 @@ bool knob(const char *label, double *value, double min, double max, const char *
           double default_value, const double *modulated = nullptr);
 bool knob_int(const char *label, int *value, int min, int max, const char *format,
               int default_value, const double *modulated = nullptr);
+// Items the next knob's right-click menu shows after Reset (drawn inside the menu, while the knob
+// is drawn). Applies to the next knob only.
+void set_knob_menu(std::function<void()> items);
 float knob_width(); // Pixels: lay knobs out in columns of this width.
 
 // A device panel (the Show tab's racks): a child window of `size` in the device colour with a

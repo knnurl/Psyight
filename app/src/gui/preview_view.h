@@ -76,6 +76,12 @@ class PreviewView {
     void draw_layer_device(Scene &scene, size_t index, const std::vector<double> *route_values,
                            float height, int &remove, int &move_from, int &move_to);
     void draw_routes(Scene &scene, const ShowFrame &frame); // Modulation routes as cards.
+    // Knob menus (right-click): modulate a layer's opacity or setting (a source, a macro mapped
+    // from the knob's value to its top, or removing a route), and MIDI learn for a target. Route
+    // changes are queued and applied after the device chain.
+    void modulation_menu(const Scene &scene, int layer, ModTarget target, const char *param,
+                         double value, double min, double max);
+    void midi_menu(const std::string &target);
     void draw_macros(); // The 8 macro knobs (modulation sources, MIDI-learnable).
     // Presets (engine/presets.h, io/presets.h). The user's are rescanned when a menu opens. A
     // scene preset is applied after the scene editor (which holds references into the scenes).
@@ -103,6 +109,8 @@ class PreviewView {
     std::filesystem::path presets_dir_ = "presets"; // Beside the project (the working directory).
     UserPresets user_presets_;
     std::optional<ScenePreset> pending_scene_;
+    std::vector<ModRoute> routes_to_add_; // From knob menus, applied after the device chain.
+    std::vector<int> routes_to_remove_;
     bool pending_scene_replace_ = true;
     std::optional<ShowPack> pending_pack_;
     std::string preset_name_;

@@ -112,6 +112,15 @@ double route_value(const ModRoute &route, const EngineInputs &in, std::uint64_t 
     return shaped(source_value(route.source, in, seed), route.curve, route.invert);
 }
 
+double macro_mapping_amount(double value, double min, double max) {
+    const double range = max - min;
+    if (range <= 0.0) {
+        return 0.0;
+    }
+    const double up = (max - std::clamp(value, min, max)) / range;
+    return up >= 0.01 ? up : -(std::clamp(value, min, max) - min) / range;
+}
+
 long long mod_division(ModQuantise quantise, const EngineInputs &in) {
     switch (quantise) {
     case ModQuantise::off:

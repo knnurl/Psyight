@@ -15,8 +15,8 @@ Last updated: 2026-10-18. Written so another agent can pick up without the origi
 Order, with status. Each batch: build, tests, capture check where visual, docs, commit, push, then the next.
 1. Analysis cache: deferred by the owner (2026-10-18, "leave the caching for later"); do it after batch 11. Note for then: the display spectrogram alone is about 80 MB per 400 s track as raw floats, so decide what to cache (or quantise) first, and measure where the 21 s goes.
 2. Preflight test patterns: chase along each strip (direction and order), RGB colour-order check, identify a universe, all-on at the power budget. [done: output/test_patterns.*, ShowConfig::test, Preflight > Test patterns; only in Preflight or Preview, "Send to the lights" reaches the node while the show output stays off; stepping up the ladder stops it. Not recorded for replay: a recording made during a test pattern would not replay identically.]
-3. Knob right-click menu: Modulate with (makes a route on that knob), Learn MIDI, Reset. [in progress]
-4. Quantised scene launch (next downbeat or phrase, SPEC 7.6) and number keys 1 to 9 for scenes.
+3. Knob right-click menu: Modulate with (makes a route on that knob), Learn MIDI, Reset. [done: set_knob_menu in gui/widgets; layer opacity and effect settings: Modulate with, Map to macro (macro_mapping_amount: from the value to the top), Remove modulation; macros and the brightness cap: Learn MIDI, Forget.]
+4. Quantised scene launch (next downbeat or phrase, SPEC 7.6) and number keys 1 to 9 for scenes. [in progress]
 5. Perform view: full-screen live page (scene grid, big macro knobs, Blackout and Hold, beat and lock, preview).
 6. Status chips and a single fault banner in the top bar (SPEC 9.3).
 7. Undo for show edits (scenes, rig, modulation), Ctrl+Z and Ctrl+Y.

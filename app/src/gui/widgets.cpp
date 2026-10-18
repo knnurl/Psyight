@@ -27,6 +27,8 @@ constexpr float kKnobRingMarginEm = 0.3f; // Above the knob, for the modulation 
 constexpr float kDeviceRounding = 4.0f;
 constexpr float kDeviceTitlePaddingY = 2.0f;
 
+std::function<void()> g_knob_menu; // The next knob's extra menu items (set_knob_menu).
+
 float knob_fraction(double value, double min, double max) {
     return max > min ? static_cast<float>(std::clamp((value - min) / (max - min), 0.0, 1.0)) : 0.0f;
 }
@@ -104,9 +106,21 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
             }
         }
     }
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && *value != default_value) {
-        *value = default_value;
-        changed = true;
+    // The right-click menu: Reset, then the caller's items.
+    const std::function<void()> menu = std::move(g_knob_menu);
+    g_knob_menu = nullptr;
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        ImGui::OpenPopup("##knob menu");
+    }
+    if (ImGui::BeginPopup("##knob menu")) {
+        if (ImGui::MenuItem("Reset to default", nullptr, false, *value != default_value)) {
+            *value = default_value;
+            changed = true;
+        }
+        if (menu) {
+            menu();
+        }
+        ImGui::EndPopup();
     }
 
     // Drawing.
@@ -150,7 +164,7 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
     }
     draw->PopClipRect();
     if (hovered && !active && !typing) {
-        ImGui::SetTooltip("%.*s. Drag (Shift: fine); double-click to type; right-click resets.",
+        ImGui::SetTooltip("%.*s. Drag (Shift: fine); double-click to type; right-click for more.",
                           static_cast<int>(label_end - label), label);
     }
     ImGui::PopID();
@@ -232,6 +246,8 @@ bool knob_int(const char *label, int *value, int min, int max, const char *forma
     *value = static_cast<int>(std::lround(v));
     return true;
 }
+
+void set_knob_menu(std::function<void()> items) { g_knob_menu = std::move(items); }
 
 float knob_width() { return kKnobWidthEm * ImGui::GetFontSize(); }
 
