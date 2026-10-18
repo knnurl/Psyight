@@ -27,6 +27,10 @@ Order, with status. Each batch: build, tests, capture check where visual, docs, 
 
 All eleven batches are done except 1 (the analysis cache), deferred by the owner.
 
+## Next (owner, 2026-10-18)
+- Plan in docs/PLAN_SECTIONS_EFFECTS.md: stable sections first (measure fragmentation, kick-state hysteresis, phrase-grid boundaries, energy levels, live dwell, automation on phrase boundaries), then more effects (spatial mapping, spread, triggers, trails; chase, wave, noise, particles, fire, spiral, bass bars, strobe accents; section choreography). Waiting for the owner's answers to its questions.
+- Node hardware: the owner will decide later between the F767 and a wired ESP32 running WLED (discussed 2026-10-18).
+
 ## Owner's labelling state (2026-10-16)
 - `data/OculusDrift.mp3.labels.json`: grid **150 BPM** (not 160), first downbeat 16.042 s, one region 93.242 to 154.465 s, **marked complete**: 452 notes, all E1 (MIDI 28), on the grid, gate 1.0 (rolling K-B-B-B, 100 ms slots).
 - The grid was 25 ms early against the detected kicks; with the owner's approval the grid, region and all 475 notes were shifted +25.0 ms on 2026-10-16 (now kick minus beat: median 0.0 ms). Original kept as `data/OculusDrift.mp3.labels.before-shift.json`. Do not edit the owner's labels without asking.
