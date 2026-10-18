@@ -207,6 +207,33 @@ Result<void> Session::save_labels() {
     return saved;
 }
 
+std::shared_ptr<const SectionTimeline> Session::edited_sections() {
+    const Labels &l = labels_.labels();
+    if (!has_track() || track_->track_analysis == nullptr || !l.sections_edited ||
+        l.sections.empty()) {
+        timeline_.reset();
+        return nullptr;
+    }
+    const Grid g = grid();
+    if (timeline_ != nullptr && timeline_from_ == l.sections && timeline_bpm_ == g.bpm &&
+        timeline_downbeat_ == g.first_downbeat &&
+        timeline_analysis_ == track_->track_analysis.get()) {
+        return timeline_;
+    }
+    std::vector<std::pair<double, std::string>> starts;
+    for (const SectionLabel &s : l.sections) {
+        starts.emplace_back(s.start_s, s.label);
+    }
+    const TrackAnalysis &analysis = *track_->track_analysis;
+    timeline_ = std::make_shared<const SectionTimeline>(section_timeline(
+        analysis, g, sections_from_starts(std::move(starts), analysis.duration_s)));
+    timeline_from_ = l.sections;
+    timeline_bpm_ = g.bpm;
+    timeline_downbeat_ = g.first_downbeat;
+    timeline_analysis_ = track_->track_analysis.get();
+    return timeline_;
+}
+
 std::filesystem::path Session::labels_path() const { return labels_path_for(track_->path); }
 
 double Session::playhead_s() const {

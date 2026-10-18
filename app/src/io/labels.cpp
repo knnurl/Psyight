@@ -104,6 +104,7 @@ Result<Labels> parse_labels_json(std::string_view json_text) {
                     {item.at("start_s").get<double>(), item.at("label").get<std::string>()});
             }
         }
+        labels.sections_edited = optional_field(root, "sections_edited", false);
         return labels;
     } catch (const json::exception &e) {
         return Error{std::string("invalid labels JSON: ") + e.what()};
@@ -143,6 +144,7 @@ Result<std::string> to_labels_json(const Labels &labels) {
              {{"bpm", finite(labels.grid.bpm, "bpm")},
               {"first_downbeat_s", finite(labels.grid.first_downbeat_s, "first_downbeat_s")}}},
             {"regions", regions},
+            {"sections_edited", labels.sections_edited},
             {"kicks", events_to_json(labels.kicks)},
             {"bass_notes", notes},
             {"beats", events_to_json(labels.beats)},

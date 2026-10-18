@@ -36,6 +36,13 @@ class AnalysisView {
     bool colours_changed_ = false;
     Colormap colormap_ = theme().spectrogram_colormap; // The spectrogram's colours.
     bool dragging_downbeat_ = false;
+    // Sections by hand (the labels): boundaries dragged on the spectrogram, the strip's
+    // right-click menu (label, split, merge, back to the detection).
+    void draw_section_menu(const LoadedTrack &track);
+    double snap_to_bar(double t_s) const; // Unless Alt is held.
+    bool dragging_section_ = false;
+    bool open_section_menu_ = false;
+    double section_menu_s_ = 0.0;
     FieldGesture field_gesture_;                  // The grid fields: one undo step per drag.
     AnalysisSource source_ = AnalysisSource::mix; // For the next re-analysis.
     bool source_chosen_ = false;                  // Until chosen, it follows the loaded analysis.

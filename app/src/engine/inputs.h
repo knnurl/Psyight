@@ -11,6 +11,7 @@
 #include <array>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace psyight {
 
@@ -61,7 +62,20 @@ struct EngineInputs {
     std::array<double, kMacroCount> macros{};
 };
 
-EngineInputs inputs_at(const TrackAnalysis &analysis, const Grid &grid, double t_s);
+// Sections and phrase starts in place of the analysis's (sections edited by hand, from the
+// labels); null: the analysis's own.
+struct SectionTimeline {
+    std::vector<DetectedSection> sections;
+    std::vector<double> phrase_starts_s;
+};
+
+EngineInputs inputs_at(const TrackAnalysis &analysis, const Grid &grid, double t_s,
+                       const SectionTimeline *timeline = nullptr);
+
+// The timeline for sections edited by hand: them, and the phrases restarting at each (phrases of
+// the default length from the analysis's phrase offset, on `grid`).
+SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid,
+                                 std::vector<DetectedSection> sections);
 
 // Live mode (SPEC 4.3): from the latest causal state, at render time t_s on the capture clock.
 // The beat, bar, phrase and slot come from the loop's prediction, so they carry no analysis

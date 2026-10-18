@@ -62,6 +62,8 @@ struct ShowConfig {
     // A test pattern (preflight) replaces the scenes while on; with test.send it goes to the
     // network even when send_to_network is off.
     TestPattern test;
+    // Sections edited by hand (the labels), in place of the analysis's; null: the detection.
+    std::shared_ptr<const SectionTimeline> sections;
 };
 
 struct ShowFrame {

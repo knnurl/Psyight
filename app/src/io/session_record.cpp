@@ -84,6 +84,14 @@ Result<SessionMeta> parse_meta_json(std::string_view text) {
     }
 }
 
+static json sections_json(const std::vector<DetectedSection> &sections) {
+    json out = json::array();
+    for (const DetectedSection &s : sections) {
+        out.push_back({{"start_s", s.start_s}, {"end_s", s.end_s}, {"label", s.label}});
+    }
+    return out;
+}
+
 Result<std::string> params_line(std::uint64_t version, const Project &project,
                                 const RuntimeState &runtime) {
     const Result<std::string> project_text = to_project_json(project);
@@ -98,7 +106,8 @@ Result<std::string> params_line(std::uint64_t version, const Project &project,
              {{"manual_scene", runtime.manual_scene},
               {"blackout", runtime.blackout},
               {"hold", runtime.hold},
-              {"grid", grid_json(runtime.grid)}}},
+              {"grid", grid_json(runtime.grid)},
+              {"sections", sections_json(runtime.sections)}}},
         };
         return line.dump() + "\n";
     } catch (const json::exception &e) {
@@ -133,6 +142,16 @@ Result<std::vector<ParamsEntry>> parse_params_jsonl(std::string_view text) {
             e.runtime.blackout = r.at("blackout").get<bool>();
             e.runtime.hold = r.at("hold").get<bool>();
             e.runtime.grid = parse_grid(r.at("grid"));
+            if (const auto sections = r.find("sections"); sections != r.end()) {
+                for (const json &s : sections->get_ref<const json::array_t &>()) {
+                    DetectedSection d;
+                    d.start_s = s.at("start_s").get<double>();
+                    d.end_s = s.at("end_s").get<double>();
+                    d.label = s.at("label").get<std::string>();
+                    d.confidence = 1.0;
+                    e.runtime.sections.push_back(std::move(d));
+                }
+            }
             out.push_back(std::move(e));
         } catch (const json::exception &e) {
             return Error{std::string("invalid session params: ") + e.what()};

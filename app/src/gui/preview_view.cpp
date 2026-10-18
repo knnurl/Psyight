@@ -147,6 +147,9 @@ void PreviewView::record_params() {
     runtime.blackout = config_.blackout;
     runtime.hold = config_.hold;
     runtime.grid = config_.grid;
+    if (config_.sections != nullptr) {
+        runtime.sections = config_.sections->sections;
+    }
     Result<std::string> line = params_line(config_.version, project_.project(), runtime);
     if (line) {
         recorder_->push_params(std::make_shared<const std::string>(std::move(line.value())));
@@ -298,6 +301,8 @@ void PreviewView::sync_config() {
                                : session_.has_track() ? session_.track().sample_rate_hz
                                                       : 48000;
     dirty_ |= live != config_.live;
+    std::shared_ptr<const SectionTimeline> sections = session_.edited_sections();
+    dirty_ |= sections != config_.sections;
     dirty_ |= analysis != config_.analysis || grid.bpm != config_.grid.bpm ||
               grid.first_downbeat != config_.grid.first_downbeat ||
               sample_rate_hz != config_.sample_rate_hz || project_.version() != project_version_;
@@ -309,6 +314,7 @@ void PreviewView::sync_config() {
     }
     config_.analysis = std::move(analysis);
     config_.live = std::move(live);
+    config_.sections = std::move(sections);
     config_.grid = grid;
     config_.sample_rate_hz = sample_rate_hz;
     const Project &p = project_.project();
@@ -2282,7 +2288,7 @@ std::vector<std::uint8_t> PreviewView::audition_bytes(const ShowFrame &frame) co
         live = config_.live->state();
         inputs = inputs_at(*live, frame.t_s);
     } else {
-        inputs = inputs_at(*config_.analysis, config_.grid, frame.t_s);
+        inputs = inputs_at(*config_.analysis, config_.grid, frame.t_s, config_.sections.get());
     }
     inputs.macros = config_.macros;
     Frame out;
@@ -2304,7 +2310,7 @@ std::vector<std::uint8_t> PreviewView::audition_bytes(const ShowFrame &frame) co
     case BrowserTab::shows: {
         const SceneMix mix = live ? automate_live(a.show.scenes, *live, inputs, a.show.automation)
                                   : automate(a.show.scenes, *config_.analysis, config_.grid, inputs,
-                                             a.show.automation);
+                                             a.show.automation, -1, config_.sections.get());
         out = render_mix(a.show.scenes, mix, config_.rig, inputs, a.show.palettes, config_.seed);
         break;
     }

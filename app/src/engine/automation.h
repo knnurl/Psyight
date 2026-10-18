@@ -84,9 +84,10 @@ int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, 
 int scene_for_section(const std::vector<Scene> &scenes,
                       const std::vector<DetectedSection> &sections, size_t index);
 
+// timeline: hand-edited sections in place of the analysis's (null: its own), as inputs_at.
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
-                  const EngineInputs &inputs, const AutomationParams &params,
-                  int manual_scene = -1);
+                  const EngineInputs &inputs, const AutomationParams &params, int manual_scene = -1,
+                  const SectionTimeline *timeline = nullptr);
 
 // Live mode: the same rules from the live state's section history; the phrase start for the
 // palette slew comes from the predicted beat.

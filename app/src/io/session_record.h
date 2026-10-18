@@ -8,6 +8,8 @@
 // recomputed deterministically from the track and recorded grid).
 #pragma once
 
+#include "analysis/sections.h"
+
 #include "analysis/track_analysis.h"
 #include "core/result.h"
 #include "core/timebase.h"
@@ -35,7 +37,8 @@ struct RuntimeState {
     int manual_scene = -1;
     bool blackout = false;
     bool hold = false;
-    Grid grid; // The show's grid (the labels' grid in the app).
+    Grid grid;                             // The show's grid (the labels' grid in the app).
+    std::vector<DetectedSection> sections; // Edited by hand; empty: the detection.
 };
 
 struct ParamsEntry {

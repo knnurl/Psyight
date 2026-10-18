@@ -65,6 +65,9 @@ struct Labels {
     std::vector<LabelEvent> beats;
     std::vector<LabelEvent> downbeats;
     std::vector<SectionLabel> sections;
+    // The sections were edited by hand: the show follows them instead of the detection. (Drafted
+    // sections, never edited, leave it false.)
+    bool sections_edited = false;
 
     bool operator==(const Labels &) const = default;
 };

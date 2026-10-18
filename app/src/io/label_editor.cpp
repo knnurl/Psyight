@@ -176,6 +176,17 @@ void LabelEditor::set_grid(const LabelGrid &grid) {
     labels_.grid = grid;
 }
 
+void LabelEditor::set_sections(std::vector<SectionLabel> sections, bool edited) {
+    std::sort(sections.begin(), sections.end(),
+              [](const SectionLabel &a, const SectionLabel &b) { return a.start_s < b.start_s; });
+    if (sections == labels_.sections && edited == labels_.sections_edited) {
+        return;
+    }
+    before_edit();
+    labels_.sections = std::move(sections);
+    labels_.sections_edited = edited;
+}
+
 double LabelEditor::shift_all(double delta_s) {
     double earliest_s = std::numeric_limits<double>::infinity();
     for (const BassNoteLabel &n : labels_.bass_notes) {

@@ -72,6 +72,10 @@ Live mode needs the trained model in `data/m4/` and pauses the file. Its status 
 
 The second line shows the analysis delay (about 15 ms), the load, the input level and any dropped samples. Dropped samples mean the computer is overloaded: close other programs.
 
+## Correcting sections
+
+The show picks scenes by section (groove, breakdown, build, drop). When the detection gets one wrong on a prepared track, right-click the section strip along the top of the spectrogram and choose "Edit the sections by hand". Then drag a boundary to move it (it snaps to bars; hold Alt for free), and right-click a section to change its label, split it at a bar, or merge it with the one before. The show follows your sections from then on; "Follow the detection again" switches back. The edits are saved with the track's labels and undo with Ctrl+Z.
+
 ## Latency: make the lights land on the beat
 
 The lights should flash when the audience hears the kick, not when the computer does. Set the latency offset (Show tab, in ms) one of three ways:

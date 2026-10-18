@@ -76,6 +76,10 @@ int replay(const std::filesystem::path &folder) {
         c->blackout = e.runtime.blackout;
         c->hold = e.runtime.hold;
         c->macros = e.project.macro_values;
+        if (!e.runtime.sections.empty()) {
+            c->sections = std::make_shared<const SectionTimeline>(
+                section_timeline(*analysis, c->grid, e.runtime.sections));
+        }
         configs[e.version] = c;
     }
 

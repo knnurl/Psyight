@@ -8,6 +8,8 @@
 // audio (SPEC 6.9). The show always uses the DSP analysis.
 #pragma once
 
+#include "engine/inputs.h"
+
 #include "analysis/front_end.h"
 #include "analysis/track_analysis.h"
 #include "audio/live_input.h"
@@ -83,6 +85,9 @@ class Session {
 
     // Labels for the loaded track; the manual grid lives in labels().grid.
     LabelEditor &labels() { return labels_; }
+    // The sections edited by hand (the labels, when sections_edited), as the engine's timeline on
+    // the labels' grid; null: the show follows the detection. Rebuilt when they change.
+    std::shared_ptr<const SectionTimeline> edited_sections();
     Grid grid() const; // The labels' grid on the sample clock.
     std::filesystem::path labels_path() const;
     // Also clears the dirty flag. Refused while an existing labels file could not be read, so a
@@ -128,6 +133,11 @@ class Session {
     std::string loading_name_;
     std::string status_;
     LabelEditor labels_;
+    std::shared_ptr<const SectionTimeline> timeline_; // edited_sections(), and what it was from:
+    std::vector<SectionLabel> timeline_from_;
+    double timeline_bpm_ = 0.0;
+    SampleIndex timeline_downbeat_ = 0;
+    const TrackAnalysis *timeline_analysis_ = nullptr;
     bool labels_file_unreadable_ = false;
     LoopRegion loop_;
     double expected_view_min_s_ = 0.0; // The view as update() set it, to detect user changes.

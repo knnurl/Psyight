@@ -58,8 +58,13 @@ int scene_for_section(const std::vector<Scene> &scenes,
 }
 
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
-                  const EngineInputs &inputs, const AutomationParams &params, int manual_scene) {
+                  const EngineInputs &inputs, const AutomationParams &params, int manual_scene,
+                  const SectionTimeline *timeline) {
     SceneMix mix;
+    const std::vector<double> &phrase_starts =
+        timeline != nullptr ? timeline->phrase_starts_s : analysis.phrase_starts_s;
+    const std::vector<DetectedSection> &sections =
+        timeline != nullptr ? timeline->sections : analysis.sections;
     const double beat_s = grid.bpm > 0.0 ? 60.0 / grid.bpm : 0.5;
 
     // Palette rotation by phrase.
@@ -68,7 +73,8 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         mix.palette_shift = inputs.phrase_index / n;
         mix.palette_shift_from = mix.palette_shift;
         const auto phrase = static_cast<size_t>(inputs.phrase_index);
-        const double since_s = inputs.t_s - analysis.phrase_starts_s[phrase];
+        const double since_s =
+            phrase < phrase_starts.size() ? inputs.t_s - phrase_starts[phrase] : 0.0;
         const double slew_s = params.palette_slew_beats * beat_s;
         if (inputs.phrase_index % n == 0 && inputs.phrase_index > 0 && since_s < slew_s) {
             mix.palette_shift_from = mix.palette_shift - 1;
@@ -88,11 +94,11 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         return mix;
     }
     const auto index = static_cast<size_t>(inputs.section_index);
-    mix.to = scene_for_section(scenes, analysis.sections, index);
+    mix.to = scene_for_section(scenes, sections, index);
     if (index == 0 || cuts_into(inputs.section)) {
         return mix;
     }
-    const int previous = scene_for_section(scenes, analysis.sections, index - 1);
+    const int previous = scene_for_section(scenes, sections, index - 1);
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
     if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
         mix.from = previous;

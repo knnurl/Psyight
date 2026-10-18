@@ -134,13 +134,49 @@ void AnalysisView::draw() {
         const ImPlotRect limits = ImPlot::GetPlotLimits();
         textures_.draw(limits.X.Min, limits.X.Max);
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
-        if (track.track_analysis != nullptr) {
+        // Sections: edited by hand (the labels) when they are, else the detection.
+        const std::shared_ptr<const SectionTimeline> edited = session_.edited_sections();
+        if (edited != nullptr) {
+            draw_sections(edited->sections, edited->phrase_starts_s, limits.X.Min, limits.X.Max);
+        } else if (track.track_analysis != nullptr) {
             draw_sections(track.track_analysis->sections, track.track_analysis->phrase_starts_s,
                           limits.X.Min, limits.X.Max);
         }
         draw_playhead(playhead_s);
-        // Dragging the downbeat is one undoable gesture from press to release.
         LabelEditor &labels = session_.labels();
+        // Edited sections: their boundaries drag (snapped to bars, Alt for free), one undoable
+        // gesture each.
+        std::vector<double> section_handles;
+        if (labels.labels().sections_edited) {
+            std::vector<SectionLabel> sections = labels.labels().sections;
+            for (size_t i = 1; i < sections.size(); ++i) {
+                double t = sections[i].start_s;
+                section_handles.push_back(t);
+                if (ImPlot::DragLineX(static_cast<int>(100 + i), &t, theme().section_boundary,
+                                      2.0f)) {
+                    if (!dragging_section_) {
+                        labels.begin_gesture();
+                        dragging_section_ = true;
+                    }
+                    const double lo = sections[i - 1].start_s + 0.1;
+                    const double hi =
+                        i + 1 < sections.size() ? sections[i + 1].start_s - 0.1 : track.duration_s;
+                    sections[i].start_s = std::clamp(snap_to_bar(t), lo, std::max(lo, hi));
+                    labels.set_sections(sections, true);
+                }
+            }
+        }
+        if (dragging_section_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            labels.end_gesture();
+            dragging_section_ = false;
+        }
+        // Right-click on the section strip (the band along the top): its menu, after the plot.
+        if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right) &&
+            ImGui::GetMousePos().y < ImPlot::GetPlotPos().y + ImGui::GetTextLineHeight() + 2.0f) {
+            open_section_menu_ = true;
+            section_menu_s_ = ImPlot::GetPlotMousePos().x;
+        }
+        // Dragging the downbeat is one undoable gesture from press to release.
         LabelGrid label_grid = labels.labels().grid;
         if (ImPlot::DragLineX(1, &label_grid.first_downbeat_s, theme().downbeat_handle, 2.0f)) {
             if (!dragging_downbeat_) {
@@ -157,9 +193,11 @@ void AnalysisView::draw() {
         }
         std::vector<double> handles = draw_loop(session_, true, 10);
         handles.push_back(label_grid.first_downbeat_s);
+        handles.insert(handles.end(), section_handles.begin(), section_handles.end());
         seek_on_click(session_, handles);
         end_plot();
     }
+    draw_section_menu(track);
     open_[1] = ImGui::CollapsingHeader("Band energy", ImGuiTreeNodeFlags_DefaultOpen);
     if (open_[1] && begin_plot("##band energy", ImVec2(-1, height(1)), ImPlotFlags_None)) {
         setup_time_axis(session_.view);
@@ -295,6 +333,101 @@ void AnalysisView::store_settings(UserSettings &settings) const {
     settings.spectrogram_colours = colormap_id(colormap_);
     settings.spectrogram_min_db = min_db_;
     settings.spectrogram_max_db = max_db_;
+}
+
+double AnalysisView::snap_to_bar(double t_s) const {
+    const Grid grid = session_.grid();
+    if (ImGui::GetIO().KeyAlt || grid.bpm <= 0.0) {
+        return t_s;
+    }
+    const double bar_s = 4.0 * 60.0 / grid.bpm;
+    const double first_s = samples_to_seconds(grid.first_downbeat, grid.sample_rate_hz);
+    return first_s + std::round((t_s - first_s) / bar_s) * bar_s;
+}
+
+void AnalysisView::draw_section_menu(const LoadedTrack &track) {
+    if (open_section_menu_) {
+        ImGui::OpenPopup("##section menu");
+        open_section_menu_ = false;
+    }
+    if (!ImGui::BeginPopup("##section menu")) {
+        return;
+    }
+    LabelEditor &labels = session_.labels();
+    const Labels &l = labels.labels();
+    // The detection's sections, as label starts.
+    const auto detected = [&] {
+        std::vector<SectionLabel> out;
+        if (track.track_analysis != nullptr) {
+            for (const DetectedSection &s : track.track_analysis->sections) {
+                out.push_back({s.start_s, s.label});
+            }
+        }
+        return out;
+    };
+    if (!l.sections_edited) {
+        ImGui::TextDisabled("The show follows the detected sections.");
+        if (l.sections.empty()) {
+            if (ImGui::MenuItem("Edit the sections by hand")) {
+                labels.set_sections(detected(), true);
+            }
+        } else if (ImGui::BeginMenu("Edit the sections by hand")) {
+            if (ImGui::MenuItem("Start from the detection")) {
+                labels.set_sections(detected(), true);
+            }
+            char from_labels[64];
+            std::snprintf(from_labels, sizeof(from_labels), "Start from the labels' %zu sections",
+                          l.sections.size());
+            if (ImGui::MenuItem(from_labels)) {
+                labels.set_sections(l.sections, true);
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::TextDisabled("Edits are labels: saved with them, undoable.");
+        ImGui::EndPopup();
+        return;
+    }
+    // Edited: the section under the click.
+    std::vector<SectionLabel> sections = l.sections;
+    int index = -1;
+    for (size_t i = 0; i < sections.size(); ++i) {
+        if (sections[i].start_s <= section_menu_s_ || i == 0) {
+            index = static_cast<int>(i);
+        }
+    }
+    if (index >= 0) {
+        SectionLabel &here = sections[static_cast<size_t>(index)];
+        ImGui::TextDisabled("%s, from %.1f s", here.label.c_str(), here.start_s);
+        if (ImGui::BeginMenu("Label")) {
+            for (const char *name : {"intro", "groove", "breakdown", "build", "drop", "outro"}) {
+                if (ImGui::MenuItem(name, nullptr, here.label == name)) {
+                    here.label = name;
+                    labels.set_sections(sections, true);
+                }
+            }
+            ImGui::EndMenu();
+        }
+        const double split_s = snap_to_bar(section_menu_s_);
+        char split[64];
+        std::snprintf(split, sizeof(split), "Split here (%.1f s)", split_s);
+        const bool can_split = split_s > here.start_s + 0.1 &&
+                               (static_cast<size_t>(index) + 1 >= sections.size() ||
+                                split_s < sections[static_cast<size_t>(index) + 1].start_s - 0.1);
+        if (ImGui::MenuItem(split, nullptr, false, can_split)) {
+            sections.insert(sections.begin() + index + 1, {split_s, here.label});
+            labels.set_sections(sections, true);
+        }
+        if (ImGui::MenuItem("Merge with the one before", nullptr, false, index > 0)) {
+            sections.erase(sections.begin() + index);
+            labels.set_sections(sections, true);
+        }
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Follow the detection again")) {
+        labels.set_sections(l.sections, false); // The edits stay in the labels, unused.
+    }
+    ImGui::TextDisabled("Drag a boundary to move it (snapped to bars; Alt: free).");
+    ImGui::EndPopup();
 }
 
 void AnalysisView::draw_toolbar(const LoadedTrack &track) {

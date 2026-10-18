@@ -29,6 +29,7 @@
 #include "core/result.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace psyight {
@@ -71,6 +72,12 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &featu
                                                      const BeatTrackResult &beats,
                                                      const SectionParams &params,
                                                      const ResidualFeatures *residual = nullptr);
+
+// Sections from their starts (hand-edited ones): sorted by start, each running to the next start
+// and the last to duration_s, with full confidence. Starts at or past duration_s are dropped; the
+// first section is stretched back to 0 s.
+std::vector<DetectedSection>
+sections_from_starts(std::vector<std::pair<double, std::string>> starts, double duration_s);
 
 // Phrase starts (SPEC 6.5): every bars_per_phrase bars from the phrase offset (bars after the
 // grid's first downbeat), restarting the count at every section start after the first. Times in

@@ -17,9 +17,24 @@ long long last_at_or_before(const std::vector<T> &values, double t, Key key) {
 
 } // namespace
 
-EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s) {
+SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid,
+                                 std::vector<DetectedSection> sections) {
+    SectionTimeline timeline;
+    timeline.phrase_starts_s = phrase_starts(
+        grid, sections, static_cast<int>(std::lround(BeatTrackerParams{}.bars_per_phrase)),
+        analysis.beats.phrase_bar_offset, analysis.duration_s);
+    timeline.sections = std::move(sections);
+    return timeline;
+}
+
+EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
+                       const SectionTimeline *timeline) {
     EngineInputs in;
     in.t_s = t_s;
+    const std::vector<double> &phrase_starts =
+        timeline != nullptr ? timeline->phrase_starts_s : a.phrase_starts_s;
+    const std::vector<DetectedSection> &sections =
+        timeline != nullptr ? timeline->sections : a.sections;
 
     // Grid.
     const double slot = grid.slot_position(seconds_to_samples(t_s, grid.sample_rate_hz));
@@ -33,11 +48,11 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s) {
     in.slot_phase = slot - std::floor(slot);
 
     // Phrase.
-    const long long phrase = last_at_or_before(a.phrase_starts_s, t_s, [](double x) { return x; });
+    const long long phrase = last_at_or_before(phrase_starts, t_s, [](double x) { return x; });
     if (phrase >= 0) {
-        const double start = a.phrase_starts_s[static_cast<size_t>(phrase)];
-        const double end = static_cast<size_t>(phrase + 1) < a.phrase_starts_s.size()
-                               ? a.phrase_starts_s[static_cast<size_t>(phrase + 1)]
+        const double start = phrase_starts[static_cast<size_t>(phrase)];
+        const double end = static_cast<size_t>(phrase + 1) < phrase_starts.size()
+                               ? phrase_starts[static_cast<size_t>(phrase + 1)]
                                : a.duration_s;
         in.phrase_index = static_cast<int>(phrase);
         in.phrase_phase = end > start ? std::clamp((t_s - start) / (end - start), 0.0, 1.0) : 0.0;
@@ -73,8 +88,8 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s) {
     }
 
     // Section.
-    for (size_t i = 0; i < a.sections.size(); ++i) {
-        const DetectedSection &section = a.sections[i];
+    for (size_t i = 0; i < sections.size(); ++i) {
+        const DetectedSection &section = sections[i];
         if (t_s >= section.start_s && t_s < section.end_s) {
             in.section = section.label;
             in.section_index = static_cast<int>(i);

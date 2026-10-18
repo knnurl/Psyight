@@ -239,6 +239,25 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
     return sections;
 }
 
+std::vector<DetectedSection>
+sections_from_starts(std::vector<std::pair<double, std::string>> starts, double duration_s) {
+    std::sort(starts.begin(), starts.end(),
+              [](const auto &a, const auto &b) { return a.first < b.first; });
+    std::erase_if(starts, [&](const auto &s) { return s.first >= duration_s; });
+    std::vector<DetectedSection> sections;
+    for (size_t i = 0; i < starts.size(); ++i) {
+        DetectedSection s;
+        s.start_s = i == 0 ? 0.0 : starts[i].first;
+        s.end_s = i + 1 < starts.size() ? starts[i + 1].first : duration_s;
+        s.label = starts[i].second;
+        s.confidence = 1.0;
+        if (s.end_s > s.start_s) {
+            sections.push_back(std::move(s));
+        }
+    }
+    return sections;
+}
+
 std::vector<double> phrase_starts(const Grid &grid, const std::vector<DetectedSection> &sections,
                                   int bars_per_phrase, int phrase_bar_offset, double duration_s) {
     std::vector<double> starts;
