@@ -24,6 +24,9 @@ The window: the transport (play, loop, half speed, time, volume, the track's wav
 
 ## Setting up the rig
 
+**Setup assistant** (File > Setup assistant; it opens by itself the first time, with no project file): five steps, in any order: the rig from a template, the output and the node, test patterns on the real strips, the latency from the speaker distance, and what preflight still flags.
+
+
 Hover the rig preview to see each strip's name and an arrow at its first pixel (where its data comes in); the strip under the mouse is outlined, and its row lights up in the Rig tab (and hovering a row there outlines the strip).
 
 

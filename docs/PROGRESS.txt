@@ -21,8 +21,8 @@ Order, with status. Each batch: build, tests, capture check where visual, docs, 
 6. Status chips and a single fault banner in the top bar (SPEC 9.3). [done, as a status bar along the bottom (the top bar is full): gui/status_bar.*; the banner names the worst preflight failure or counts warnings and opens Preflight; chips for tempo or live lock, delay, audio device, detections, test pattern, sending and fps, nodes, REC. PreflightView::update runs the checks every frame.]
 7. Undo for show edits (scenes, rig, modulation), Ctrl+Z and Ctrl+Y. [done: core/undo_history.h (snapshots; changes within 0.5 s merge), ProjectState::undo and redo (load clears, reset is undoable); Ctrl+Z and Ctrl+Y go to show edits while a show panel has the focus (Show, Rig, Preview, Stage, Perform, Settings), else to the labels; the Edit menu lists both; MIDI bindings follow the project.]
 8. Preview helpers: strip direction arrows and names; hovering a strip highlights it in the Rig tab. [done: on hover, each strip's name and an arrow at its first pixel (labels on the inner side, kept inside); the strip under the mouse outlined with a tooltip and its Rig row highlighted; a hovered Rig row outlines the strip in the preview.]
-9. Setup assistant: rig template, output and node discovery, latency (tap test), test patterns, in one guided pass. [in progress]
-10. Preset browser with search and audition on the preview.
+9. Setup assistant: rig template, output and node discovery, latency (tap test), test patterns, in one guided pass. [done: gui/setup_assistant.*, File > Setup assistant, opened by itself when no project file exists; steps Rig (templates), Output (output settings, node discovery), Test patterns, Latency (speaker distance: -2.9 ms a metre), Check (preflight problems); reuses the panels' own controls.]
+10. Preset browser with search and audition on the preview. [in progress]
 11. Edit sections by hand: drag boundaries on the spectrogram's section strip.
 
 ## Owner's labelling state (2026-10-16)

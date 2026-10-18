@@ -150,6 +150,31 @@ void PreflightView::draw() {
     ImGui::End();
 }
 
+void PreflightView::draw_discovery() {
+    ImGui::BeginDisabled(discovery_.valid() || interfaces_.empty());
+    if (ImGui::Button(discovery_.valid() ? "Discovering..." : "Discover Art-Net nodes")) {
+        discovery_ = std::async(std::launch::async, discover, interfaces_);
+    }
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Broadcasts an ArtPoll on each network interface and lists the nodes "
+                          "that answer within a second.");
+    if (!discovery_error_.empty()) {
+        ImGui::TextColored(level_colour(CheckLevel::warn), "Discovery: %s",
+                           discovery_error_.c_str());
+    }
+    if (!nodes_.has_value()) {
+        ImGui::TextDisabled("Not run yet.");
+    } else if (nodes_->empty()) {
+        ImGui::TextColored(level_colour(CheckLevel::warn),
+                           "No node answered: check the cable, the node's power and that this "
+                           "computer is on the show network.");
+    } else {
+        for (const ArtNode &n : *nodes_) {
+            mono_text("%s  %s", ipv4_text(n.ip).c_str(), n.short_name.c_str());
+        }
+    }
+}
+
 void PreflightView::draw_test_patterns() {
     if (!ImGui::CollapsingHeader("Test patterns", ImGuiTreeNodeFlags_DefaultOpen)) {
         return;

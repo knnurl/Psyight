@@ -19,6 +19,7 @@ class RigView {
     explicit RigView(ProjectState &project) : project_(project) {}
 
     void draw();
+    void draw_template_controls(); // Also in the setup assistant.
     // The strip whose row is hovered (-1: none), and the one to highlight (hovered in the preview).
     int hovered_strip() const { return hovered_strip_; }
     void set_highlighted_strip(int strip) { highlighted_strip_ = strip; }

@@ -108,9 +108,13 @@ void RigView::draw_project() {
 }
 
 void RigView::draw_templates() {
-    if (!ImGui::TreeNode("Templates")) {
-        return;
+    if (ImGui::TreeNode("Templates")) {
+        draw_template_controls();
+        ImGui::TreePop();
     }
+}
+
+void RigView::draw_template_controls() {
     const float em = ImGui::GetFontSize();
     ImGui::SetNextItemWidth(9.0f * em);
     ImGui::Combo("##template", &template_, "Pillars\0Matrix panel\0");
@@ -188,7 +192,6 @@ void RigView::draw_templates() {
         }
         ImGui::EndPopup();
     }
-    ImGui::TreePop();
 }
 
 void RigView::draw_strips() {

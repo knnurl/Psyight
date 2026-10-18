@@ -17,6 +17,7 @@
 #include "gui/scoring_view.h"
 #include "gui/session.h"
 #include "gui/settings_view.h"
+#include "gui/setup_assistant.h"
 #include "gui/status_bar.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
@@ -274,6 +275,10 @@ int main() {
         psyight::RigView rig_view(project);
         psyight::PreflightView preflight_view(session, project, preview_view);
         psyight::SettingsView settings_view(project);
+        psyight::SetupAssistant assistant(project, rig_view, preview_view, preflight_view);
+        if (!capture && !std::filesystem::exists(project.path())) {
+            assistant.open(); // No project yet: a first setup.
+        }
         psyight::RecentFiles recent;
         // The operator's preferences: loaded at start, saved when they change (not in capture
         // mode, which always renders the defaults). prefs holds the ones main and the settings
@@ -386,6 +391,9 @@ int main() {
                     }
                     ImGui::Separator();
                     ImGui::MenuItem("Settings...", nullptr, &show_settings);
+                    if (ImGui::MenuItem("Setup assistant...")) {
+                        assistant.open();
+                    }
                     ImGui::Separator();
                     if (ImGui::MenuItem("Exit", "Alt+F4")) {
                         glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -491,6 +499,7 @@ int main() {
                 open_requested = true;
             }
             settings_view.draw(&show_settings, reset_layout, prefs);
+            assistant.draw();
             if (ImGui::IsKeyPressed(ImGuiKey_F11, false)) {
                 perform = !perform;
             }

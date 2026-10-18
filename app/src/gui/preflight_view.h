@@ -27,12 +27,13 @@ class PreflightView {
 
     void update(); // Once a frame, before the status bar: the checks (shown or not).
     void draw();
+    // Also in the setup assistant.
+    void draw_test_patterns();
+    void draw_discovery(); // The discovery button and the nodes that answered.
     const std::vector<PreflightCheck> &checks() const { return checks_; }
     const std::optional<std::vector<ArtNode>> &nodes() const { return nodes_; }
 
   private:
-    void draw_test_patterns();
-
     Session &session_;
     ProjectState &project_;
     PreviewView &preview_;

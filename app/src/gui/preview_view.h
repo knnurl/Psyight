@@ -42,6 +42,7 @@ class PreviewView {
     // the rig large with the beat and section, big scene buttons, the macros, Blackout and Hold.
     // Esc (or its button) clears *open.
     void draw_perform(bool *open);
+    void draw_output(const ShowFrame &frame); // Also in the setup assistant.
     // Inside the main menu bar.
     void draw_top_bar();
     bool sending() const { return config_.send_to_network; }
@@ -106,7 +107,6 @@ class PreviewView {
     std::string source_label(ModSource source) const; // Macros by their project names.
     void draw_palettes();
     void draw_group_caps();
-    void draw_output(const ShowFrame &frame);
     void draw_rig(const ShowFrame &frame);
     void draw_preview(const ShowFrame *frame, const char *message);
 
