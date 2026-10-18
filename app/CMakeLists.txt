@@ -138,6 +138,32 @@ target_link_libraries(psyight_soak PRIVATE psyight_options psyight_lib psapi)
 add_executable(psyight_replay src/replay_main.cpp)
 target_link_libraries(psyight_replay PRIVATE psyight_options psyight_lib)
 
+# Packaging: cmake --build --preset windows-msvc-release --target package writes
+# build/windows-msvc/Psyight-<version>-win64.zip: the app, its fonts, the Visual C++ runtime DLLs
+# beside it (Microsoft allows app-local copies), the licence notices of every library linked into
+# it, a README and the operator guide. Windows 10 and 11 carry the Universal CRT itself.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+set(CMAKE_INSTALL_UCRT_LIBRARIES OFF)
+include(InstallRequiredSystemLibraries)
+install(TARGETS psyight RUNTIME DESTINATION .)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../assets/fonts DESTINATION assets)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/README.txt
+              ${CMAKE_CURRENT_SOURCE_DIR}/../docs/OPERATOR_GUIDE.md
+        DESTINATION .)
+foreach(port fmt glfw3 imgui implot miniaudio nlohmann-json pffft rtmidi spdlog)
+    install(FILES ${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/${port}/copyright
+            DESTINATION licenses RENAME ${port}.txt)
+endforeach()
+install(FILES third_party/signalsmith-stretch-1.4.0/LICENSE.txt
+        DESTINATION licenses RENAME signalsmith-stretch.txt)
+install(FILES third_party/signalsmith-linear-0.6.4/LICENSE.txt
+        DESTINATION licenses RENAME signalsmith-linear.txt)
+set(CPACK_GENERATOR ZIP)
+set(CPACK_PACKAGE_NAME Psyight)
+set(CPACK_PACKAGE_FILE_NAME "Psyight-${PROJECT_VERSION}-win64")
+set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
+include(CPack)
+
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp tests/core_test.cpp
                              tests/audio_test.cpp tests/front_end_test.cpp
