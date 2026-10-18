@@ -43,6 +43,11 @@ class PreviewView {
     // Esc (or its button) clears *open.
     void draw_perform(bool *open);
     void draw_output(const ShowFrame &frame); // Also in the setup assistant.
+    // The preset browser (View > Browser): search the scene presets, palettes and show packs,
+    // built-in and the user's; hovering or selecting one auditions it on the rig preview only
+    // (rendered here at the show's render time; the lights keep the show); the selected one can
+    // be loaded. Clears the audition when closed.
+    void draw_browser(bool *open);
     // Inside the main menu bar.
     void draw_top_bar();
     bool sending() const { return config_.send_to_network; }
@@ -109,6 +114,8 @@ class PreviewView {
     void draw_group_caps();
     void draw_rig(const ShowFrame &frame);
     void draw_preview(const ShowFrame *frame, const char *message);
+    // The audition's frame as node bytes (rig order), or empty when nothing is auditioned.
+    std::vector<std::uint8_t> audition_bytes(const ShowFrame &frame) const;
 
     Session &session_;
     ProjectState &project_;
@@ -126,6 +133,20 @@ class PreviewView {
     UserPresets user_presets_;
     std::optional<ScenePreset> pending_scene_;
     std::vector<ModRoute> routes_to_add_; // From knob menus, applied after the device chain.
+    // The preset browser.
+    enum class BrowserTab { scenes, palettes, shows };
+    struct Audition {
+        BrowserTab kind = BrowserTab::scenes;
+        ScenePreset scene;
+        Palette palette;
+        ShowPack show;
+        std::string name;
+    };
+    std::optional<Audition> audition_;
+    BrowserTab browser_tab_ = BrowserTab::scenes;
+    std::string browser_search_;
+    std::string browser_selected_; // "<tab>:<name>", or empty.
+    bool browser_scanned_ = false;
     std::vector<int> routes_to_remove_;
     bool pending_scene_replace_ = true;
     std::optional<ShowPack> pending_pack_;

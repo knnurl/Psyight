@@ -118,6 +118,8 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 
 **Undo:** Ctrl+Z and Ctrl+Y undo and redo show edits (scenes, layers, modulation, macros, palettes, the rig, settings) while the Show, Rig or Preview panel has the focus, and label edits elsewhere. A knob drag undoes in one step. The Edit menu lists both.
 
+**Browser** (View > Browser, or Ctrl+B): search every preset; hover one (or click to select it) to see it on the rig preview while the lights keep the show, then load it from the bottom of the browser.
+
 Your presets are JSON files in the `presets` folder beside the project (`scenes`, `palettes`, `shows`), easy to copy to another machine.
 
 ## MIDI controller

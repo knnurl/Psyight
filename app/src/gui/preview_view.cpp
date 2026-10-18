@@ -17,6 +17,7 @@
 #include <imgui_stdlib.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -384,7 +385,10 @@ void PreviewView::draw_preview(const ShowFrame *frame, const char *message) {
     // The status line, with the fold button at its right.
     const float right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
     ImGui::AlignTextToFramePadding();
-    if (frame != nullptr) {
+    if (audition_) {
+        ImGui::TextColored(theme().accent, "Auditioning %s (the lights keep the show)",
+                           audition_->name.c_str());
+    } else if (frame != nullptr) {
         mono_text("%s%s, beat %d of the bar, %.1f A estimated%s",
                   config_.blackout ? "Blackout: "
                   : config_.hold   ? "Hold: "
@@ -406,7 +410,13 @@ void PreviewView::draw_preview(const ShowFrame *frame, const char *message) {
                               "top right, brings it back).");
     }
     if (frame != nullptr) {
-        draw_rig(*frame);
+        if (std::vector<std::uint8_t> bytes = audition_bytes(*frame); !bytes.empty()) {
+            ShowFrame shown = *frame;
+            shown.node_rgb = std::move(bytes);
+            draw_rig(shown);
+        } else {
+            draw_rig(*frame);
+        }
     }
     ImGui::End();
 }
@@ -2259,6 +2269,258 @@ void PreviewView::draw_palette_library() {
         }
         ImGui::EndPopup();
     }
+}
+
+std::vector<std::uint8_t> PreviewView::audition_bytes(const ShowFrame &frame) const {
+    if (!audition_ || (config_.analysis == nullptr && config_.live == nullptr)) {
+        return {};
+    }
+    // The engine inputs at the show's render time, as the show thread had them.
+    EngineInputs inputs;
+    std::optional<LiveState> live;
+    if (config_.live != nullptr) {
+        live = config_.live->state();
+        inputs = inputs_at(*live, frame.t_s);
+    } else {
+        inputs = inputs_at(*config_.analysis, config_.grid, frame.t_s);
+    }
+    inputs.macros = config_.macros;
+    Frame out;
+    const Audition &a = *audition_;
+    switch (a.kind) {
+    case BrowserTab::scenes:
+        out = render_scene(a.scene.scene, config_.rig, inputs, a.palette, config_.seed);
+        break;
+    case BrowserTab::palettes: {
+        if (config_.scenes.empty()) {
+            return {};
+        }
+        const int playing =
+            std::clamp(frame.mix.to, 0, static_cast<int>(config_.scenes.size()) - 1);
+        out = render_scene(config_.scenes[static_cast<size_t>(playing)], config_.rig, inputs,
+                           a.palette, config_.seed);
+        break;
+    }
+    case BrowserTab::shows: {
+        const SceneMix mix = live ? automate_live(a.show.scenes, *live, inputs, a.show.automation)
+                                  : automate(a.show.scenes, *config_.analysis, config_.grid, inputs,
+                                             a.show.automation);
+        out = render_mix(a.show.scenes, mix, config_.rig, inputs, a.show.palettes, config_.seed);
+        break;
+    }
+    }
+    const double cap = std::clamp(config_.limiter.brightness_cap, 0.0, 1.0);
+    for (Rgb &c : out) {
+        c = scaled(c, cap);
+    }
+    return to_bytes(out, config_.limiter.gamma);
+}
+
+void PreviewView::draw_browser(bool *open) {
+    if (!*open) {
+        audition_.reset();
+        browser_scanned_ = false;
+        return;
+    }
+    if (!browser_scanned_) {
+        user_presets_ = load_user_presets(presets_dir_);
+        browser_scanned_ = true;
+    }
+    const float em = ImGui::GetFontSize();
+    ImGui::SetNextWindowSize(ImVec2(28.0f * em, 30.0f * em), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Browser", open)) {
+        audition_.reset();
+        ImGui::End();
+        return;
+    }
+    ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Rescan").x -
+                            3.0f * ImGui::GetStyle().FramePadding.x);
+    ImGui::InputTextWithHint("##search", "Search presets", &browser_search_);
+    ImGui::SameLine();
+    if (ImGui::Button("Rescan")) {
+        user_presets_ = load_user_presets(presets_dir_);
+    }
+    ImGui::SetItemTooltip("Read the presets folder again (%s).",
+                          path_to_utf8(presets_dir_).c_str());
+    const auto lower = [](std::string text) {
+        for (char &c : text) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        return text;
+    };
+    const std::string needle = lower(browser_search_);
+    const auto matches = [&](const std::string &name, const std::string &description) {
+        return needle.empty() || lower(name).find(needle) != std::string::npos ||
+               lower(description).find(needle) != std::string::npos;
+    };
+    std::optional<Audition> hovered;
+    std::optional<Audition> selected;
+    const auto row = [&](const std::string &key, const std::string &name,
+                         const std::string &description, bool yours, const Audition &audition) {
+        ImGui::PushID(key.c_str());
+        const bool is_selected = browser_selected_ == key;
+        if (ImGui::Selectable("##row", is_selected, 0,
+                              ImVec2(0.0f, 2.0f * ImGui::GetTextLineHeight()))) {
+            browser_selected_ = is_selected ? std::string() : key;
+        }
+        if (ImGui::IsItemHovered()) {
+            hovered = audition;
+        }
+        if (browser_selected_ == key) {
+            selected = audition;
+        }
+        ImGui::SameLine(ImGui::GetStyle().ItemSpacing.x);
+        ImGui::BeginGroup();
+        ImGui::TextUnformatted(name.c_str());
+        if (yours) {
+            ImGui::SameLine();
+            ImGui::TextColored(theme().info, "yours");
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text, theme().text_dim);
+        ImGui::TextUnformatted(description.empty() ? " " : description.c_str());
+        ImGui::PopStyleColor();
+        ImGui::EndGroup();
+        ImGui::PopID();
+    };
+    if (ImGui::BeginTabBar("##browser tabs")) {
+        const auto tab = [&](const char *label, BrowserTab which) {
+            if (ImGui::BeginTabItem(label)) {
+                if (browser_tab_ != which) {
+                    browser_tab_ = which;
+                    browser_selected_.clear();
+                }
+                ImGui::EndTabItem();
+            }
+        };
+        tab("Scenes", BrowserTab::scenes);
+        tab("Palettes", BrowserTab::palettes);
+        tab("Show packs", BrowserTab::shows);
+        ImGui::EndTabBar();
+    }
+    const float footer = 2.0f * ImGui::GetFrameHeightWithSpacing();
+    ImGui::BeginChild("##list", ImVec2(0.0f, -footer));
+    switch (browser_tab_) {
+    case BrowserTab::scenes: {
+        const auto list = [&](const std::vector<ScenePreset> &presets, bool yours) {
+            for (const ScenePreset &p : presets) {
+                if (matches(p.name, p.description)) {
+                    Audition a;
+                    a.kind = BrowserTab::scenes;
+                    a.scene = p;
+                    a.palette = p.palette;
+                    a.name = p.name;
+                    row(std::string(yours ? "u" : "b") + "s:" + p.name, p.name, p.description,
+                        yours, a);
+                }
+            }
+        };
+        list(builtin_scene_presets(), false);
+        list(user_presets_.scenes, true);
+        break;
+    }
+    case BrowserTab::palettes: {
+        const auto list = [&](const std::vector<Palette> &palettes, bool yours) {
+            for (const Palette &p : palettes) {
+                if (matches(p.name, "")) {
+                    Audition a;
+                    a.kind = BrowserTab::palettes;
+                    a.palette = p;
+                    a.name = p.name;
+                    row(std::string(yours ? "u" : "b") + "p:" + p.name, p.name,
+                        "On the playing scene.", yours, a);
+                }
+            }
+        };
+        list(builtin_palettes(), false);
+        list(user_presets_.palettes, true);
+        break;
+    }
+    case BrowserTab::shows: {
+        const auto list = [&](const std::vector<ShowPack> &packs, bool yours) {
+            for (const ShowPack &p : packs) {
+                if (matches(p.name, p.description)) {
+                    Audition a;
+                    a.kind = BrowserTab::shows;
+                    a.show = p;
+                    a.name = p.name;
+                    row(std::string(yours ? "u" : "b") + "w:" + p.name, p.name, p.description,
+                        yours, a);
+                }
+            }
+        };
+        list(builtin_show_packs(), false);
+        list(user_presets_.shows, true);
+        break;
+    }
+    }
+    ImGui::EndChild();
+
+    // The selected preset: its actions.
+    ImGui::Separator();
+    if (!selected) {
+        ImGui::TextDisabled("Hover a preset to see it on the preview; click to select it.");
+    } else if (selected->kind == BrowserTab::scenes) {
+        const std::string scene =
+            edit_scene_ < static_cast<int>(project_.project().scenes.size())
+                ? project_.project().scenes[static_cast<size_t>(edit_scene_)].name
+                : std::string("the scene");
+        if (primary_button(("Replace " + scene).c_str())) {
+            pending_scene_ = selected->scene;
+            pending_scene_replace_ = true;
+            apply_pending_scene_preset();
+            project_.changed();
+            scene_edited_ = false;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add as a new scene")) {
+            pending_scene_ = selected->scene;
+            pending_scene_replace_ = false;
+            apply_pending_scene_preset();
+            project_.changed();
+            scene_edited_ = false;
+        }
+    } else if (selected->kind == BrowserTab::palettes) {
+        if (primary_button("Add to the project")) {
+            add_palette(project_.edit(), selected->palette);
+            project_.changed();
+            preset_status_ = "Added the palette " + selected->palette.name + ".";
+        }
+    } else {
+        if (primary_button("Load this show pack...")) {
+            pending_pack_ = selected->show;
+            ImGui::OpenPopup("Load show pack?##browser");
+        }
+    }
+    if (ImGui::BeginPopupModal("Load show pack?##browser", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (pending_pack_) {
+            ImGui::Text("Replace the scenes, palettes and automation with %s?",
+                        pending_pack_->name.c_str());
+            ImGui::TextDisabled("Macro values, the rig, limiters and output stay.");
+            if (primary_button("Load")) {
+                apply_show_pack(project_.edit(), *pending_pack_);
+                project_.changed();
+                edit_scene_ = 0;
+                config_.manual_scene = -1;
+                dirty_ = true;
+                preset_status_ = "Loaded " + pending_pack_->name + ".";
+                pending_pack_.reset();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+        }
+        if (ImGui::Button("Cancel")) {
+            pending_pack_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    if (!preset_status_.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", preset_status_.c_str());
+    }
+    audition_ = hovered ? hovered : selected;
+    ImGui::End();
 }
 
 } // namespace psyight

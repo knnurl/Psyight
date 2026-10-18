@@ -307,6 +307,7 @@ int main() {
         std::filesystem::path recent_path; // The track last added to the recent list.
         bool show_settings = false;
         bool perform = false; // The Perform view (F11) over the workspace.
+        bool browser = false; // The preset browser (View > Browser, Ctrl+B).
         bool open_requested = false;
         glfwSetWindowUserPointer(window, &session);
         glfwSetDropCallback(window, on_files_dropped);
@@ -428,6 +429,7 @@ int main() {
                     ImGui::MenuItem("Reset layout", nullptr, &reset_layout);
                     ImGui::MenuItem("Rig preview", nullptr, &preview_view.preview_open());
                     ImGui::MenuItem("Perform view", "F11", &perform);
+                    ImGui::MenuItem("Browser", "Ctrl+B", &browser);
                     if (ImGui::BeginMenu("Theme")) {
                         const psyight::ThemeMode mode = psyight::theme_mode();
                         if (ImGui::MenuItem("Desk", nullptr, mode == psyight::ThemeMode::desk)) {
@@ -500,6 +502,10 @@ int main() {
             }
             settings_view.draw(&show_settings, reset_layout, prefs);
             assistant.draw();
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_B, ImGuiInputFlags_RouteGlobal)) {
+                browser = !browser;
+            }
+            preview_view.draw_browser(&browser);
             if (ImGui::IsKeyPressed(ImGuiKey_F11, false)) {
                 perform = !perform;
             }
