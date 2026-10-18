@@ -7,6 +7,7 @@
 
 #include <array>
 
+#include "gui/field_gesture.h"
 #include "gui/session.h"
 #include "gui/spectrogram_textures.h"
 #include "gui/theme.h"
@@ -35,6 +36,7 @@ class AnalysisView {
     bool colours_changed_ = false;
     Colormap colormap_ = theme().spectrogram_colormap; // The spectrogram's colours.
     bool dragging_downbeat_ = false;
+    FieldGesture field_gesture_;                  // The grid fields: one undo step per drag.
     AnalysisSource source_ = AnalysisSource::mix; // For the next re-analysis.
     bool source_chosen_ = false;                  // Until chosen, it follows the loaded analysis.
     // Which of the spectrogram, band energy, flux and residual plots are unfolded.

@@ -3,6 +3,7 @@
 #include "analysis/bass_tracker.h"
 #include "core/pitch.h"
 #include "gui/theme.h"
+#include "gui/widgets.h"
 
 #include <imgui.h>
 #include <implot.h>
@@ -69,7 +70,7 @@ void cell(const char *format, double value) {
     if (std::isnan(value)) {
         ImGui::TextDisabled("n/a");
     } else {
-        ImGui::Text(format, value);
+        mono_text(format, value);
     }
 }
 
@@ -78,11 +79,11 @@ void score_row(const char *name, const NoteScore &s) {
     ImGui::TableNextColumn();
     ImGui::TextUnformatted(name);
     ImGui::TableNextColumn();
-    ImGui::Text("%d", s.reference_count);
+    mono_text("%d", s.reference_count);
     ImGui::TableNextColumn();
-    ImGui::Text("%d", s.estimate_count);
+    mono_text("%d", s.estimate_count);
     ImGui::TableNextColumn();
-    ImGui::Text("%d", s.matched_count);
+    mono_text("%d", s.matched_count);
     ImGui::TableNextColumn();
     cell("%.3f", s.onset_precision);
     ImGui::TableNextColumn();
@@ -98,7 +99,7 @@ void score_row(const char *name, const NoteScore &s) {
     ImGui::TableNextColumn();
     cell("%.3f", s.pitch_accuracy);
     ImGui::TableNextColumn();
-    ImGui::Text("%d", s.octave_error_count);
+    mono_text("%d", s.octave_error_count);
     ImGui::TableNextColumn();
     cell("%.3f", s.gate_ratio_mae);
 }

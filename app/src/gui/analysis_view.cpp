@@ -2,6 +2,7 @@
 
 #include "gui/theme.h"
 #include "gui/time_plot.h"
+#include "gui/widgets.h"
 
 #include <imgui.h>
 #include <implot.h>
@@ -298,16 +299,21 @@ void AnalysisView::store_settings(UserSettings &settings) const {
 
 void AnalysisView::draw_toolbar(const LoadedTrack &track) {
     LabelEditor &labels = session_.labels();
+    field_gesture_.update(labels);
     LabelGrid grid = labels.labels().grid;
     const float em = ImGui::GetFontSize();
     ImGui::SetNextItemWidth(7.0f * em);
-    if (ImGui::InputDouble("BPM", &grid.bpm, 0.01, 1.0, "%.2f")) {
+    if (drag_double("##bpm", &grid.bpm, 0.01f, kMinBpm, kMaxBpm, "%.2f BPM")) {
+        field_gesture_.before_edit(labels);
         grid.bpm = std::clamp(grid.bpm, kMinBpm, kMaxBpm);
         labels.set_grid(grid);
     }
+    ImGui::SetItemTooltip("The grid's tempo. Drag, or double-click to type.");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(8.0f * em);
-    if (ImGui::InputDouble("First downbeat (s)", &grid.first_downbeat_s, 0.001, 0.01, "%.3f")) {
+    ImGui::SetNextItemWidth(7.0f * em);
+    if (drag_double("First downbeat", &grid.first_downbeat_s, 0.001f, 0.0, track.duration_s,
+                    "%.3f s")) {
+        field_gesture_.before_edit(labels);
         grid.first_downbeat_s = std::clamp(grid.first_downbeat_s, 0.0, track.duration_s);
         labels.set_grid(grid);
     }
@@ -368,7 +374,9 @@ void AnalysisView::draw_toolbar(const LoadedTrack &track) {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(8.0f * em);
     float window_s = static_cast<float>(session_.view.window_s);
-    if (ImGui::SliderFloat("Window", &window_s, 2.0f, 30.0f, "%.0f s")) {
+    if (mono_field("Window", [&](const char *id) {
+            return ImGui::SliderFloat(id, &window_s, 2.0f, 30.0f, "%.0f s");
+        })) {
         session_.view.window_s = window_s;
         if (!session_.view.follow_playhead) {
             session_.view.max_s = session_.view.min_s + window_s;
@@ -388,8 +396,11 @@ void AnalysisView::draw_toolbar(const LoadedTrack &track) {
     ImGui::SetItemTooltip("The spectrogram's colours.");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(12.0f * em);
-    if (ImGui::DragFloatRange2("##colour range", &min_db_, &max_db_, 0.5f, kMinDisplayDb,
-                               kMaxDisplayDb, "%.0f dB", "%.0f dB", ImGuiSliderFlags_AlwaysClamp)) {
+    if (mono_field("##colour range", [&](const char *id) {
+            return ImGui::DragFloatRange2(id, &min_db_, &max_db_, 0.5f, kMinDisplayDb,
+                                          kMaxDisplayDb, "%.0f dB", "%.0f dB",
+                                          ImGuiSliderFlags_AlwaysClamp);
+        })) {
         max_db_ = std::max(max_db_, min_db_ + 1.0f);
         colours_changed_ = true;
     }

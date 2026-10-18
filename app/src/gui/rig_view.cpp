@@ -3,6 +3,7 @@
 #include "core/paths.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
+#include "gui/widgets.h"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -89,7 +90,7 @@ void RigView::draw_project() {
         (void)project_.load(); // The status line shows the outcome.
     }
     ImGui::SameLine();
-    if (ImGui::Button(project_.dirty() ? "Save*" : "Save")) {
+    if (primary_button(project_.dirty() ? "Save *###save" : "Save###save")) {
         (void)project_.save();
     }
     ImGui::SetItemTooltip("Also saved on exit when changed.");
@@ -152,13 +153,17 @@ void RigView::draw_strips() {
             ImGui::TableNextColumn();
             ImGui::SetNextItemWidth(-1.0f);
             float density = static_cast<float>(s.spec.pixels_per_m);
-            if (ImGui::DragFloat("##ppm", &density, 1.0f, 1.0f, 1000.0f, "%.0f")) {
+            if (mono_field("##ppm", [&](const char *id) {
+                    return ImGui::DragFloat(id, &density, 1.0f, 1.0f, 1000.0f, "%.0f");
+                })) {
                 s.spec.pixels_per_m = std::clamp(static_cast<double>(density), 1.0, 1000.0);
                 changed = true;
             }
             ImGui::TableNextColumn();
             ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::DragInt("##count", &s.spec.count, 1.0f, 0, 10000)) {
+            if (mono_field("##count", [&](const char *id) {
+                    return ImGui::DragInt(id, &s.spec.count, 1.0f, 0, 10000);
+                })) {
                 s.spec.count = std::clamp(s.spec.count, 0, 10000);
                 changed = true;
             }
@@ -232,22 +237,24 @@ void RigView::draw_patch() {
     const Patch &patch = project_.patch();
     int per_universe = p.pixels_per_universe;
     ImGui::SetNextItemWidth(6.0f * em);
-    if (ImGui::InputInt("Pixels per universe", &per_universe)) {
+    // Typed or stepped, not dragged: a drag would sweep the live patch through every value.
+    if (mono_field("Pixels per universe",
+                   [&](const char *id) { return ImGui::InputInt(id, &per_universe); })) {
         project_.edit().pixels_per_universe = std::clamp(per_universe, 1, 170);
         project_.changed();
     }
     ImGui::SetItemTooltip("170 RGB pixels use 510 of a universe's 512 channels (SPEC 8).");
     const auto pixels = static_cast<int>(rig.pixels.size());
-    ImGui::Text("%d pixels in %zu strips, universes %d to %d, %.1f by %.1f by %.1f m", pixels,
-                p.strips.size(), patch.universes.empty() ? 0 : patch.universes.front(),
-                patch.universes.empty() ? 0 : patch.universes.back(), rig.max.x - rig.min.x,
-                rig.max.y - rig.min.y, rig.max.z - rig.min.z);
+    mono_text("%d pixels in %zu strips, universes %d to %d, %.1f by %.1f by %.1f m", pixels,
+              p.strips.size(), patch.universes.empty() ? 0 : patch.universes.front(),
+              patch.universes.empty() ? 0 : patch.universes.back(), rig.max.x - rig.min.x,
+              rig.max.y - rig.min.y, rig.max.z - rig.min.z);
     if (pixels > kPixelBudget) {
         ImGui::TextColored(theme().warning, "Over the 1,500-pixel budget (SPEC 2.1).");
     }
     const double full_white_a = pixels * 3 * p.limiter.current_per_channel_ma * 1e-3;
-    ImGui::Text("Full white: %.1f A estimated; power budget %.1f A%s", full_white_a,
-                p.limiter.budget_a, p.limiter.budget_a <= 0.0 ? " (off)" : "");
+    mono_text("Full white: %.1f A estimated; power budget %.1f A%s", full_white_a,
+              p.limiter.budget_a, p.limiter.budget_a <= 0.0 ? " (off)" : "");
     // Where each strip lands.
     if (ImGui::TreeNode("Patch by strip")) {
         size_t first = 0;
@@ -259,11 +266,11 @@ void RigView::draw_patch() {
             }
             const PatchedPixel &a = patch.pixels[first];
             const PatchedPixel &b = patch.pixels[first + count - 1];
-            ImGui::Text("%s: universe %d channel %d to universe %d channel %d (%s)",
-                        p.strips[s].spec.name.c_str(),
-                        patch.universes[static_cast<size_t>(a.universe_slot)], a.channel + 1,
-                        patch.universes[static_cast<size_t>(b.universe_slot)], b.channel + 3,
-                        colour_order_name(p.strips[s].order));
+            mono_text("%s: universe %d channel %d to universe %d channel %d (%s)",
+                      p.strips[s].spec.name.c_str(),
+                      patch.universes[static_cast<size_t>(a.universe_slot)], a.channel + 1,
+                      patch.universes[static_cast<size_t>(b.universe_slot)], b.channel + 3,
+                      colour_order_name(p.strips[s].order));
             first += count;
         }
         ImGui::TreePop();

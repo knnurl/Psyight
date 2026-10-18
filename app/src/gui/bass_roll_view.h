@@ -18,6 +18,7 @@
 // fields, a plain click on one selects it for the inspector, which can copy it to the labels.
 #pragma once
 
+#include "gui/field_gesture.h"
 #include "gui/session.h"
 #include "gui/spectrogram_textures.h"
 #include "gui/theme.h"
@@ -94,6 +95,7 @@ class BassRollView {
     bool snap_ = true;
     double shift_ms_ = 0.0; // "Shift all labels" amount.
     std::array<char, 16> pitch_text_{};
+    FieldGesture field_gesture_; // The inspector's number fields: one undo step per drag.
     bool editing_pitch_ = false; // While typing, the field is not refilled from the note.
     std::string pitch_error_;
     // Pitch background: harmonic-sum salience on the semitone rows

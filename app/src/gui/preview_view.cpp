@@ -6,6 +6,7 @@
 #include "engine/effect_spec.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
+#include "gui/widgets.h"
 #include "io/session_record.h"
 
 #include <ctime>
@@ -188,8 +189,8 @@ void PreviewView::draw_top_bar() {
             stop_recording("Recorded");
         }
         ImGui::SameLine();
-        ImGui::Text("REC %lld frames%s", static_cast<long long>(recorder_->frames_written()),
-                    recorder_->dropped() > 0 ? ", some dropped" : "");
+        mono_text("REC %lld frames%s", static_cast<long long>(recorder_->frames_written()),
+                  recorder_->dropped() > 0 ? ", some dropped" : "");
         if (!recorder_->error().empty()) {
             stop_recording(recorder_->error());
         }
@@ -209,16 +210,9 @@ void PreviewView::draw_top_bar() {
                           style.ItemSpacing.x;
     ImGui::SameLine(ImGui::GetWindowWidth() - buttons - style.WindowPadding.x);
     const auto toggle = [this](const char *label, bool &on, const ImVec4 &colour) {
-        const bool was_on = on;
-        if (was_on) {
-            push_filled_button(colour);
-        }
-        if (ImGui::Button(label)) {
+        if (toggle_button(label, on, &colour)) {
             on = !on;
             dirty_ = true;
-        }
-        if (was_on) {
-            pop_filled_button();
         }
     };
     toggle("Blackout (B)", config_.blackout, theme().danger); // Safety: red, not the accent.
@@ -308,12 +302,12 @@ void PreviewView::draw() {
     playing_scene_ = std::max(0, frame->mix.to);
 
     draw_controls(*frame);
-    ImGui::Text("%s%s, beat %d of the bar, %.1f A estimated%s",
-                config_.blackout ? "Blackout: "
-                : config_.hold   ? "Hold: "
-                                 : "",
-                frame->section.c_str(), frame->beat_in_bar + 1, frame->report.current_a,
-                frame->report.power_scale < 1.0 ? " (power limited)" : "");
+    mono_text("%s%s, beat %d of the bar, %.1f A estimated%s",
+              config_.blackout ? "Blackout: "
+              : config_.hold   ? "Hold: "
+                               : "",
+              frame->section.c_str(), frame->beat_in_bar + 1, frame->report.current_a,
+              frame->report.power_scale < 1.0 ? " (power limited)" : "");
     draw_rig(*frame);
     ImGui::End();
 }
@@ -392,15 +386,15 @@ void PreviewView::draw_live() {
     } else {
         const double now_s = static_cast<double>(live->now()) / live->sample_rate_hz();
         const EngineInputs in = inputs_at(s, now_s);
-        ImGui::Text("%s %.2f BPM, beat %d of the bar, %s (last kick %+.1f ms off the beat)",
-                    s.locked ? "Locked:" : "Acquiring:", bpm, in.beat_in_bar + 1,
-                    live_section_name(s.section), s.last_error_ms);
+        mono_text("%s %.2f BPM, beat %d of the bar, %s (last kick %+.1f ms off the beat)",
+                  s.locked ? "Locked:" : "Acquiring:", bpm, in.beat_in_bar + 1,
+                  live_section_name(s.section), s.last_error_ms);
     }
     const float level = live->level();
-    ImGui::Text("Analysis delay %.0f ms (decisions %.0f ms after the audio), load %.1f%%, "
-                "level %.0f dBFS, dropped %lld samples",
-                live->analysis_delay_ms(), 1e3 * s.latency_s, 100.0 * live->load(),
-                level > 0.0f ? 20.0 * std::log10(level) : -120.0, live->dropped());
+    mono_text("Analysis delay %.0f ms (decisions %.0f ms after the audio), load %.1f%%, "
+              "level %.0f dBFS, dropped %lld samples",
+              live->analysis_delay_ms(), 1e3 * s.latency_s, 100.0 * live->load(),
+              level > 0.0f ? 20.0 * std::log10(level) : -120.0, live->dropped());
 
     // Operator controls: downbeat now, nudge, relock.
     const auto now_s = [&] { return static_cast<double>(live->now()) / live->sample_rate_hz(); };
@@ -452,8 +446,8 @@ void PreviewView::draw_live() {
             var += (e - mean) * (e - mean);
         }
         const double sd = std::sqrt(var / static_cast<double>(tap_errors_s_.size() - 1));
-        ImGui::Text("%zu taps: %+.0f ms after the predicted beat (sd %.0f ms)",
-                    tap_errors_s_.size(), 1e3 * mean, 1e3 * sd);
+        mono_text("%zu taps: %+.0f ms after the predicted beat (sd %.0f ms)", tap_errors_s_.size(),
+                  1e3 * mean, 1e3 * sd);
         ImGui::BeginDisabled(tap_errors_s_.size() < 8);
         if (ImGui::Button("Use as latency offset")) {
             // Lights show beat b when the render time reaches b; it is heard at b + mean on the
@@ -626,7 +620,9 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     draw_scene_cards(frame);
     ImGui::SetNextItemWidth(7.0f * em);
     float latency_ms = static_cast<float>(project_.project().latency_offset_ms);
-    if (ImGui::DragFloat("Latency offset (ms)", &latency_ms, 1.0f, -200.0f, 200.0f, "%.0f")) {
+    if (mono_field("Latency offset", [&](const char *id) {
+            return ImGui::DragFloat(id, &latency_ms, 1.0f, -200.0f, 200.0f, "%+.0f ms");
+        })) {
         project_.edit().latency_offset_ms = latency_ms;
         project_.changed();
     }
@@ -652,7 +648,9 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         bool changed = false;
         float cap = static_cast<float>(p.brightness_cap);
         ImGui::SetNextItemWidth(8.0f * em);
-        if (ImGui::SliderFloat("Brightness cap", &cap, 0.0f, 1.0f, "%.2f")) {
+        if (mono_field("Brightness cap", [&](const char *id) {
+                return ImGui::SliderFloat(id, &cap, 0.0f, 1.0f, "%.2f");
+            })) {
             p.brightness_cap = cap;
             changed = true;
         }
@@ -662,7 +660,9 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         if (tier_at_least(Tier::tune)) {
             float budget = static_cast<float>(p.budget_a);
             ImGui::SetNextItemWidth(8.0f * em);
-            if (ImGui::DragFloat("Power budget (A, 0: off)", &budget, 0.1f, 0.0f, 100.0f, "%.1f")) {
+            if (mono_field("Power budget (0: off)", [&](const char *id) {
+                    return ImGui::DragFloat(id, &budget, 0.1f, 0.0f, 100.0f, "%.1f A");
+                })) {
                 p.budget_a = budget;
                 changed = true;
             }
@@ -681,8 +681,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
             ImGui::TextColored(theme().danger, "Flash limiter off: photosensitive epilepsy risk "
                                                "(SPEC 7.7).");
         }
-        ImGui::Text("Flashes held back so far: %lld",
-                    static_cast<long long>(frame.flashes_limited));
+        mono_text("Flashes held back so far: %lld", static_cast<long long>(frame.flashes_limited));
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Output")) {
@@ -745,7 +744,9 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
         const bool open = ImGui::TreeNode(layer.effect->name());
         ImGui::SameLine(15.5f * em);
         ImGui::SetNextItemWidth(5.0f * em);
-        scene_edited_ |= ImGui::SliderFloat("##opacity", &layer.opacity, 0.0f, 1.0f, "%.2f");
+        scene_edited_ |= mono_field("##opacity", [&](const char *id) {
+            return ImGui::SliderFloat(id, &layer.opacity, 0.0f, 1.0f, "%.2f");
+        });
         ImGui::SetItemTooltip("Opacity");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(5.0f * em);
@@ -798,20 +799,26 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes) {
             for (size_t k = 0; k < infos.size(); ++k) {
                 const EffectParamInfo &info = infos[k];
                 ImGui::SetNextItemWidth(8.0f * em);
-                const std::string label =
-                    std::string(info.label) +
-                    (info.unit[0] != 0 ? std::string(" (") + info.unit + ")" : std::string());
+                const std::string label = std::string(info.label) + "##" + info.id;
+                const std::string unit =
+                    info.unit[0] != 0 ? std::string(" ") + info.unit : std::string();
                 if (info.integer) {
                     int v = static_cast<int>(std::lround(effect_param(layer.spec, k)));
-                    if (ImGui::SliderInt(label.c_str(), &v, static_cast<int>(info.min),
-                                         static_cast<int>(info.max))) {
+                    const std::string format = "%d" + unit;
+                    if (mono_field(label.c_str(), [&](const char *id) {
+                            return ImGui::SliderInt(id, &v, static_cast<int>(info.min),
+                                                    static_cast<int>(info.max), format.c_str());
+                        })) {
                         set_effect_param(layer.spec, k, v);
                         params_changed = true;
                     }
                 } else {
                     float v = static_cast<float>(effect_param(layer.spec, k));
-                    if (ImGui::SliderFloat(label.c_str(), &v, static_cast<float>(info.min),
-                                           static_cast<float>(info.max), "%.3g")) {
+                    const std::string format = "%.3g" + unit;
+                    if (mono_field(label.c_str(), [&](const char *id) {
+                            return ImGui::SliderFloat(id, &v, static_cast<float>(info.min),
+                                                      static_cast<float>(info.max), format.c_str());
+                        })) {
                         set_effect_param(layer.spec, k, v);
                         params_changed = true;
                     }
@@ -886,7 +893,9 @@ void PreviewView::draw_group_caps() {
                                [&g](const GroupCap &c) { return c.group == g; });
         float cap = it == caps.end() ? 1.0f : static_cast<float>(it->cap);
         ImGui::SetNextItemWidth(8.0f * ImGui::GetFontSize());
-        if (ImGui::SliderFloat(g.c_str(), &cap, 0.0f, 1.0f, "%.2f")) {
+        if (mono_field(g.c_str(), [&](const char *id) {
+                return ImGui::SliderFloat(id, &cap, 0.0f, 1.0f, "%.2f");
+            })) {
             if (it == caps.end()) {
                 caps.push_back({g, cap});
             } else {
@@ -1038,8 +1047,10 @@ void PreviewView::draw_routes(Scene &scene) {
         ImGui::SetNextItemWidth(6.0f * em);
         float amount = static_cast<float>(r.amount);
         const bool hue = r.target == ModTarget::hue_shift;
-        if (ImGui::SliderFloat("amount", &amount, hue ? -180.0f : -1.0f, hue ? 180.0f : 1.0f,
-                               hue ? "%.0f deg" : "%.2f")) {
+        if (mono_field("amount", [&](const char *id) {
+                return ImGui::SliderFloat(id, &amount, hue ? -180.0f : -1.0f, hue ? 180.0f : 1.0f,
+                                          hue ? "%.0f deg" : "%.2f");
+            })) {
             r.amount = amount;
             scene_edited_ = true;
         }
@@ -1118,11 +1129,11 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
                           "ticked again.");
     if (frame.mix.from >= 0) {
         ImGui::SameLine();
-        ImGui::Text("crossfade %.0f%%", 100.0 * frame.mix.to_weight);
+        mono_text("crossfade %.0f%%", 100.0 * frame.mix.to_weight);
     }
     if (frame.mix.palette_shift != 0) {
         ImGui::SameLine();
-        ImGui::Text("palette +%d", frame.mix.palette_shift);
+        mono_text("palette +%d", frame.mix.palette_shift);
     }
 }
 
@@ -1169,7 +1180,8 @@ void PreviewView::draw_output(const ShowFrame &frame) {
         }
     }
     ImGui::SetNextItemWidth(6.0f * em);
-    if (ImGui::InputInt("First universe", &first_universe)) {
+    if (mono_field("First universe",
+                   [&](const char *id) { return ImGui::InputInt(id, &first_universe); })) {
         first_universe = std::clamp(first_universe, 1, 63000);
         changed = true;
     }
@@ -1178,7 +1190,8 @@ void PreviewView::draw_output(const ShowFrame &frame) {
         ImGui::SameLine();
         int sync_universe = o.sync_universe;
         ImGui::SetNextItemWidth(6.0f * em);
-        if (ImGui::InputInt("Sync universe", &sync_universe)) {
+        if (mono_field("Sync universe",
+                       [&](const char *id) { return ImGui::InputInt(id, &sync_universe); })) {
             o.sync_universe = static_cast<std::uint16_t>(std::clamp(sync_universe, 1, 63999));
             changed = true;
         }
@@ -1195,20 +1208,20 @@ void PreviewView::draw_output(const ShowFrame &frame) {
         std::find(universes.begin(), universes.end(), o.sync_universe) != universes.end()) {
         ImGui::TextColored(theme().danger, "The sync universe carries pixel data.");
     }
-    ImGui::Text("Universes %d to %d, %d packets a frame, %.1f fps",
-                universes.empty() ? 0 : universes.front(), universes.empty() ? 0 : universes.back(),
-                frame.packets_sent, measured_fps_);
+    mono_text("Universes %d to %d, %d packets a frame, %.1f fps",
+              universes.empty() ? 0 : universes.front(), universes.empty() ? 0 : universes.back(),
+              frame.packets_sent, measured_fps_);
     if (!tier_at_least(Tier::engineer)) {
         return;
     }
-    ImGui::Text("Frame cost %.2f ms, %lld late frames", frame.render_ms,
-                static_cast<long long>(frame.late_frames));
+    mono_text("Frame cost %.2f ms, %lld late frames", frame.render_ms,
+              static_cast<long long>(frame.late_frames));
     ImGui::SetItemTooltip("Render, limiters, patch and send, measured on the show thread.");
-    ImGui::Text("Node: %lld packets, %lld latched, %lld gaps, %lld bad",
-                static_cast<long long>(frame.node.packets),
-                static_cast<long long>(frame.node.latches),
-                static_cast<long long>(frame.node.sequence_gaps),
-                static_cast<long long>(frame.node.bad_packets));
+    mono_text("Node: %lld packets, %lld latched, %lld gaps, %lld bad",
+              static_cast<long long>(frame.node.packets),
+              static_cast<long long>(frame.node.latches),
+              static_cast<long long>(frame.node.sequence_gaps),
+              static_cast<long long>(frame.node.bad_packets));
     if (frame.send_errors > 0 || !frame.network_error.empty()) {
         ImGui::TextColored(theme().danger, "Network: %lld send errors. %s",
                            static_cast<long long>(frame.send_errors), frame.network_error.c_str());

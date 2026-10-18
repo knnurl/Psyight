@@ -5,6 +5,7 @@
 #include "gui/spectrogram_image.h"
 #include "gui/theme.h"
 #include "gui/time_plot.h"
+#include "gui/widgets.h"
 
 #include <imgui.h>
 #include <implot.h>
@@ -111,12 +112,13 @@ void BassRollView::draw_roll() {
     LabelEditor &labels = session_.labels();
     sync_selection();
     mouse_time_s_.reset();
+    help_marker("Double-click: new note. Drag: move, resize or box select (Shift adds). Click a "
+                "detection: inspect. Right-click: delete. Ctrl+C, V, D: copy, paste, duplicate. "
+                "Ctrl+A: select the notes in view. Esc: clear the selection. Del: delete it. "
+                "Middle-drag: pan. Middle double-click: fit. Ctrl+click: seek.");
+    ImGui::SameLine();
     ImGui::Checkbox("Snap to 1/16 (hold Alt for free)", &snap_);
     ImGui::SameLine();
-    ImGui::TextDisabled("Double-click: new note. Drag: move, resize or box select (Shift adds). "
-                        "Click a detection: inspect. Right-click: delete. Ctrl+C, V, D: copy, "
-                        "paste, duplicate. Middle-drag: pan. Middle double-click: fit. "
-                        "Ctrl+click: seek.");
     ImGui::Checkbox("Pitch background", &show_pitch_);
     ImGui::SameLine();
     if (const std::vector<BassNote> *found = detections(); found != nullptr) {
@@ -143,8 +145,11 @@ void BassRollView::draw_roll() {
     if (show_pitch_) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(12.0f * ImGui::GetFontSize());
-        if (ImGui::DragFloatRange2("##pitch range", &pitch_min_db_, &pitch_max_db_, 0.25f, -120.0f,
-                                   0.0f, "%.0f dB", "%.0f dB", ImGuiSliderFlags_AlwaysClamp)) {
+        if (mono_field("##pitch range", [&](const char *id) {
+                return ImGui::DragFloatRange2(id, &pitch_min_db_, &pitch_max_db_, 0.25f, -120.0f,
+                                              0.0f, "%.0f dB", "%.0f dB",
+                                              ImGuiSliderFlags_AlwaysClamp);
+            })) {
             pitch_max_db_ = std::max(pitch_max_db_, pitch_min_db_ + 1.0f);
             pitch_range_changed_ = true;
         }
@@ -167,8 +172,8 @@ void BassRollView::draw_roll() {
         pitch_range_changed_ = false;
     }
     ImGui::SameLine();
-    ImGui::Text("| %zu notes, %zu selected%s", labels.labels().bass_notes.size(), selection_.size(),
-                labels.dirty() ? ", unsaved" : "");
+    mono_text("| %zu notes, %zu selected%s", labels.labels().bass_notes.size(), selection_.size(),
+              labels.dirty() ? ", unsaved" : "");
 
     // In the bass roll the left button edits, so panning and fit-to-data (ImPlot's double-click,
     // which would reset the view whenever a note is created) move to the middle button here only.
@@ -605,28 +610,32 @@ void BassRollView::draw_inspector() {
     }
     const LoadedTrack &track = session_.track();
     LabelEditor &labels = session_.labels();
+    field_gesture_.update(labels);
 
     ImGui::TextWrapped("Labels: %s", path_to_utf8(session_.labels_path().filename()).c_str());
-    if (ImGui::Button(labels.dirty() ? "Save (Ctrl+S) *" : "Save (Ctrl+S)")) {
+    if (primary_button(labels.dirty() ? "Save *###save" : "Save###save")) {
         if (const Result<void> saved = session_.save_labels(); !saved) {
             spdlog::error("{}", saved.error().message);
         }
     }
+    ImGui::SetItemTooltip("Save the labels (Ctrl+S). * marks unsaved changes.");
     ImGui::SameLine();
     ImGui::BeginDisabled(!labels.can_undo());
     if (ImGui::Button("Undo")) {
         labels.undo();
     }
     ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Ctrl+Z");
     ImGui::SameLine();
     ImGui::BeginDisabled(!labels.can_redo());
     if (ImGui::Button("Redo")) {
         labels.redo();
     }
     ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Ctrl+Y");
     const float em = ImGui::GetFontSize();
     ImGui::SetNextItemWidth(9.0f * em);
-    ImGui::InputDouble("ms##shift", &shift_ms_, 1.0, 10.0, "%.1f");
+    drag_double("##shift", &shift_ms_, 0.1f, 0.0, 0.0, "%+.1f ms");
     ImGui::SameLine();
     ImGui::BeginDisabled(shift_ms_ == 0.0);
     if (ImGui::Button("Shift all labels")) {
@@ -675,14 +684,20 @@ void BassRollView::draw_inspector_note() {
     BassNoteLabel note = labels.labels().bass_notes[selected];
     bool changed = false;
     const float em = ImGui::GetFontSize();
+    const auto field_changed = [&](bool edited) {
+        if (edited) {
+            field_gesture_.before_edit(labels);
+        }
+        return edited;
+    };
     ImGui::SetNextItemWidth(9.0f * em);
-    changed |= ImGui::InputDouble("Onset (s)", &note.onset_s, 0.001, 0.01, "%.4f");
+    changed |= field_changed(drag_double("Onset", &note.onset_s, 0.0005f, 0.0, 0.0, "%.4f s"));
     ImGui::SetNextItemWidth(9.0f * em);
-    changed |= ImGui::InputDouble("Offset (s)", &note.offset_s, 0.001, 0.01, "%.4f");
+    changed |= field_changed(drag_double("Offset", &note.offset_s, 0.0005f, 0.0, 0.0, "%.4f s"));
     const double slot_s = 60.0 / labels.labels().grid.bpm / 4.0;
-    ImGui::Text("Duration %.1f ms, gate ratio %.3f (slot %.2f ms)",
-                1000.0 * (note.offset_s - note.onset_s), (note.offset_s - note.onset_s) / slot_s,
-                1000.0 * slot_s);
+    mono_text("Duration %.1f ms, gate ratio %.3f (slot %.2f ms)",
+              1000.0 * (note.offset_s - note.onset_s), (note.offset_s - note.onset_s) / slot_s,
+              1000.0 * slot_s);
 
     if (!editing_pitch_) {
         std::snprintf(pitch_text_.data(), pitch_text_.size(), "%s",
@@ -701,18 +716,20 @@ void BassRollView::draw_inspector_note() {
     }
     editing_pitch_ = ImGui::IsItemActive();
     ImGui::SameLine();
-    ImGui::Text("MIDI %d", note.midi);
+    mono_text("MIDI %d", note.midi);
     if (!pitch_error_.empty()) {
         ImGui::TextColored(theme().danger, "%s", pitch_error_.c_str());
     }
     ImGui::SetNextItemWidth(9.0f * em);
-    changed |= ImGui::InputDouble("Cents", &note.cents, 1.0, 10.0, "%.0f");
+    changed |= field_changed(drag_double("##cents", &note.cents, 0.5f, 0.0, 0.0, "%+.0f cents"));
     changed |= ImGui::Checkbox("Slide in", &note.slide_in);
     ImGui::SameLine();
     changed |= ImGui::Checkbox("Slide out", &note.slide_out);
     float velocity = static_cast<float>(note.velocity);
     ImGui::SetNextItemWidth(9.0f * em);
-    if (ImGui::SliderFloat("Velocity", &velocity, 0.0f, 1.0f, "%.2f")) {
+    if (field_changed(mono_field("Velocity", [&](const char *id) {
+            return ImGui::SliderFloat(id, &velocity, 0.0f, 1.0f, "%.2f");
+        }))) {
         note.velocity = velocity;
         changed = true;
     }
@@ -728,15 +745,15 @@ void BassRollView::draw_inspector_detection() {
         return;
     }
     const BassNote &n = (*found)[selected_detection_];
-    ImGui::Text("Pitch %s (MIDI %d, %+.0f cents, octave %d)",
-                midi_to_note_name(n.pitch_midi).c_str(), n.pitch_midi, n.cents, n.octave);
-    ImGui::Text("Onset %.4f s, offset %.4f s", n.onset_s, n.offset_s);
-    ImGui::Text("Duration %.1f ms, gate ratio %.3f (slot %.2f ms, slot %d of the bar)",
-                n.duration_ms, n.gate_ratio, n.slot_len_ms, n.slot_index);
-    ImGui::Text("Decay time constant %s",
-                n.decay_tau_ms > 0.0 ? (std::to_string(std::lround(n.decay_tau_ms)) + " ms").c_str()
-                                     : "not measured");
-    ImGui::Text("Velocity %.2f, confidence %.2f", n.velocity, n.confidence);
+    mono_text("Pitch %s (MIDI %d, %+.0f cents, octave %d)", midi_to_note_name(n.pitch_midi).c_str(),
+              n.pitch_midi, n.cents, n.octave);
+    mono_text("Onset %.4f s, offset %.4f s", n.onset_s, n.offset_s);
+    mono_text("Duration %.1f ms, gate ratio %.3f (slot %.2f ms, slot %d of the bar)", n.duration_ms,
+              n.gate_ratio, n.slot_len_ms, n.slot_index);
+    mono_text("Decay time constant %s",
+              n.decay_tau_ms > 0.0 ? (std::to_string(std::lround(n.decay_tau_ms)) + " ms").c_str()
+                                   : "not measured");
+    mono_text("Velocity %.2f, confidence %.2f", n.velocity, n.confidence);
     ImGui::Text("%s%s%s", n.slide_in ? "Slides in. " : "", n.slide_out ? "Slides out. " : "",
                 n.is_long ? "Long note." : "");
     if (ImGui::Button("Copy to labels")) {
@@ -749,22 +766,24 @@ void BassRollView::draw_inspector_detection() {
 void BassRollView::draw_inspector_selection() {
     LabelEditor &labels = session_.labels();
     if (selection_.empty()) {
-        ImGui::PushStyleColor(ImGuiCol_Text, theme().text_dim);
-        ImGui::TextWrapped("Click a note, or drag a box around notes. Ctrl+A selects the notes "
-                           "in view.");
-        ImGui::PopStyleColor();
+        ImGui::TextDisabled("No notes selected");
     } else {
-        ImGui::Text("%zu note%s selected", selection_.size(), selection_.size() == 1 ? "" : "s");
-    }
-    ImGui::BeginDisabled(selection_.empty());
-    if (ImGui::Button("Copy (Ctrl+C)")) {
-        clipboard_ = selection_pattern();
+        mono_text("%zu note%s selected", selection_.size(), selection_.size() == 1 ? "" : "s");
     }
     ImGui::SameLine();
-    if (ImGui::Button("Delete (Del)")) {
+    help_marker("Click a note, or drag a box around notes (Shift adds). Ctrl+A selects the notes "
+                "in view.");
+    ImGui::BeginDisabled(selection_.empty());
+    if (ImGui::Button("Copy")) {
+        clipboard_ = selection_pattern();
+    }
+    ImGui::SetItemTooltip("Ctrl+C");
+    ImGui::SameLine();
+    if (ImGui::Button("Delete")) {
         labels.delete_notes(selection_);
         selection_.clear();
     }
+    ImGui::SetItemTooltip("Del, or right-click a note");
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(clipboard_.empty());
@@ -772,6 +791,8 @@ void BassRollView::draw_inspector_selection() {
         paste(snapped(session_.playhead_s()));
     }
     ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Ctrl+V pastes at the mouse when it is over the roll, else at the "
+                          "playhead.");
 
     // Duplicate: the selection repeated right after itself, replacing the notes there.
     const NotePattern pattern = selection_pattern();
@@ -795,14 +816,15 @@ void BassRollView::draw_inspector_selection() {
                           "beats.");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(6.0f * em);
-    if (ImGui::InputInt("times", &repeat_count_)) {
+    if (drag_int("##times", &repeat_count_, 0.1f, 1, kMaxRepeatCount, "%d times")) {
         repeat_count_ = std::clamp(repeat_count_, 1, kMaxRepeatCount);
     }
     ImGui::BeginDisabled(pattern.empty());
-    if (ImGui::Button("Duplicate (Ctrl+D)")) {
+    if (ImGui::Button("Duplicate")) {
         duplicate(repeat_count_, std::numeric_limits<double>::infinity());
     }
     ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Ctrl+D");
     ImGui::SameLine();
     const LabelRegion *region = nullptr;
     for (const LabelRegion &candidate : labels.labels().regions) {
@@ -830,8 +852,6 @@ void BassRollView::draw_inspector_selection() {
 void BassRollView::draw_inspector_regions(const LoadedTrack &track) {
     LabelEditor &labels = session_.labels();
     const LoopRegion &loop = session_.loop();
-    ImGui::TextWrapped("A complete region has every note in it labelled; only complete regions "
-                       "are scored.");
     ImGui::BeginDisabled(!loop.enabled);
     if (ImGui::Button("Add region from loop")) {
         labels.add_region(
@@ -843,6 +863,9 @@ void BassRollView::draw_inspector_regions(const LoadedTrack &track) {
         labels.add_region({std::max(0.0, session_.view.min_s),
                            std::min(track.duration_s, session_.view.max_s), false});
     }
+    ImGui::SameLine();
+    help_marker("A complete region has every note in it labelled; only complete regions are "
+                "scored.");
     const float em = ImGui::GetFontSize();
     const std::vector<LabelRegion> regions = labels.labels().regions;
     for (int i = 0; i < static_cast<int>(regions.size()); ++i) {
@@ -850,12 +873,18 @@ void BassRollView::draw_inspector_regions(const LoadedTrack &track) {
         LabelRegion region = regions[i];
         bool changed = false;
         ImGui::SetNextItemWidth(8.0f * em);
-        changed |= ImGui::InputDouble("##start", &region.start_s, 0.01, 1.0, "%.3f");
+        if (drag_double("##start", &region.start_s, 0.005f, 0.0, 0.0, "%.3f s")) {
+            field_gesture_.before_edit(labels);
+            changed = true;
+        }
         ImGui::SameLine();
         ImGui::TextUnformatted("to");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(8.0f * em);
-        changed |= ImGui::InputDouble("s##end", &region.end_s, 0.01, 1.0, "%.3f");
+        if (drag_double("##end", &region.end_s, 0.005f, 0.0, 0.0, "%.3f s")) {
+            field_gesture_.before_edit(labels);
+            changed = true;
+        }
         ImGui::SameLine();
         changed |= ImGui::Checkbox("Complete", &region.complete);
         if (changed) {

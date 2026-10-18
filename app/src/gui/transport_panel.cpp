@@ -1,6 +1,7 @@
 #include "gui/transport_panel.h"
 
 #include "gui/theme.h"
+#include "gui/widgets.h"
 
 #include <imgui.h>
 #include <implot.h>
@@ -56,14 +57,17 @@ void TransportPanel::draw() {
 
     const bool playing = transport.playing();
     const ImGuiIO &io = ImGui::GetIO();
-    if (ImGui::Button(playing ? "Pause" : "Play") ||
-        (ImGui::IsKeyPressed(ImGuiKey_Space, false) && !io.WantTextInput)) {
+    const bool play_clicked = primary_button(playing ? "Pause###play" : "Play###play");
+    ImGui::SetItemTooltip("Space");
+    if (play_clicked || (ImGui::IsKeyPressed(ImGuiKey_Space, false) && !io.WantTextInput)) {
         playing ? transport.pause() : transport.play();
     }
     ImGui::SameLine();
     const double position_s = samples_to_seconds(transport.position(), track.sample_rate_hz);
-    ImGui::Text("%s / %s   %s", format_time(position_s).c_str(),
-                format_time(track.duration_s).c_str(), track.name.c_str());
+    ImGui::AlignTextToFramePadding();
+    mono_text("%s / %s", format_time(position_s).c_str(), format_time(track.duration_s).c_str());
+    ImGui::SameLine();
+    ImGui::TextUnformatted(track.name.c_str());
     if (!session_.status().empty()) {
         ImGui::TextUnformatted(session_.status().c_str());
     }
@@ -77,7 +81,7 @@ void TransportPanel::draw() {
     }
     if (loop.enabled) {
         ImGui::SameLine();
-        ImGui::Text("%s to %s", format_time(loop.start_s).c_str(), format_time(loop.end_s).c_str());
+        mono_text("%s to %s", format_time(loop.start_s).c_str(), format_time(loop.end_s).c_str());
     }
     ImGui::SameLine();
     bool half_speed = transport.speed() < 1.0f;
@@ -86,7 +90,9 @@ void TransportPanel::draw() {
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(10.0f * ImGui::GetFontSize());
-    if (ImGui::SliderFloat("Volume", &volume_db_, kMinVolumeDb, kMaxVolumeDb, "%.1f dB")) {
+    if (mono_field("Volume", [&](const char *id) {
+            return ImGui::SliderFloat(id, &volume_db_, kMinVolumeDb, kMaxVolumeDb, "%.1f dB");
+        })) {
         transport.set_gain(volume_to_gain(volume_db_));
     }
 

@@ -3,6 +3,7 @@
 #include "core/paths.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
+#include "gui/widgets.h"
 
 #include <imgui.h>
 #include <spdlog/spdlog.h>
@@ -62,7 +63,7 @@ void SettingsView::draw(bool *open, bool &reset_layout) {
                        project_.dirty() ? " (unsaved changes)" : "");
     help("The rig, patch, output, limiters, scenes, palettes and MIDI. Saved by itself a minute "
          "after a change and on exit.");
-    if (ImGui::Button("Save now")) {
+    if (primary_button("Save now")) {
         if (const Result<void> saved = project_.save(); !saved) {
             spdlog::error("{}", saved.error().message);
         }
