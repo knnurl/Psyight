@@ -60,8 +60,7 @@ Result<std::vector<ArtNode>> discover(std::vector<NetworkInterface> interfaces) 
 
 } // namespace
 
-void PreflightView::draw() {
-    ImGui::Begin("Preflight");
+void PreflightView::update() {
     const auto now = std::chrono::steady_clock::now();
     if (now - interfaces_at_ > kInterfaceRefresh) {
         interfaces_ = list_ipv4_interfaces(); // A few ms; not every frame.
@@ -92,7 +91,12 @@ void PreflightView::draw() {
     in.sending = preview_.sending();
     in.interfaces = interfaces_;
     in.nodes = nodes_;
-    const std::vector<PreflightCheck> checks = run_preflight(in);
+    checks_ = run_preflight(in);
+}
+
+void PreflightView::draw() {
+    ImGui::Begin("Preflight");
+    const std::vector<PreflightCheck> &checks = checks_;
 
     const auto count = [&checks](CheckLevel level) {
         return std::count_if(checks.begin(), checks.end(),

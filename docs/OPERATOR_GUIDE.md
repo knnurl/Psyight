@@ -16,6 +16,8 @@ The top bar has three parts:
 
 The app always starts in Preview, so nothing reaches the lights until you step up the ladder.
 
+The **status bar** along the bottom shows, at a glance: the worst preflight problem in red (or the number of warnings in amber; click it to open Preflight), the tempo or the live lock, the audio device, where the detections come from, whether the show is sending (and at what frame rate), how many nodes answered, and REC while recording.
+
 The window: the transport (play, loop, half speed, time, volume, the track's waveform) is at the top left, above the analysis and the bass roll. The rig preview is pinned at the top right; its button folds it away and the button at the far right of the top bar (or View > Rig preview) brings it back. Below it are the note inspector and scoring, then the Show tab (live input, MIDI, scenes, limiters, output) with the log, rig and preflight. View > Reset layout puts everything back.
 
 **Show mode:** React and Show switch the app to the dark Show theme and hide the editing panels; the rig is then drawn large where the bass roll was. Leaving them restores the theme and panels. File > Settings turns either change off.

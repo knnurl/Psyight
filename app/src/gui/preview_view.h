@@ -45,6 +45,8 @@ class PreviewView {
     // Inside the main menu bar.
     void draw_top_bar();
     bool sending() const { return config_.send_to_network; }
+    double measured_fps() const { return measured_fps_; }
+    bool recording() const { return recorder_ != nullptr; }
     // React or Show on the top bar: the app may switch to its show look (main.cpp).
     bool performing() const { return ladder_ == Ladder::react || ladder_ == Ladder::show; }
     bool &preview_open() { return preview_open_; } // View > Rig preview.

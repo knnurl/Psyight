@@ -17,6 +17,7 @@
 #include "gui/scoring_view.h"
 #include "gui/session.h"
 #include "gui/settings_view.h"
+#include "gui/status_bar.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/transport_panel.h"
@@ -81,6 +82,80 @@ void save_labels(psyight::Session &session) {
     } else {
         spdlog::error("{}", saved.error().message);
     }
+}
+
+// What the status bar shows: the worst preflight failure (or the warnings) and short facts.
+psyight::StatusInfo status_info(psyight::Session &session, const psyight::PreviewView &preview,
+                                const psyight::PreflightView &preflight) {
+    using psyight::ChipTone;
+    psyight::StatusInfo info;
+    for (const psyight::PreflightCheck &c : preflight.checks()) {
+        if (c.level == psyight::CheckLevel::fail) {
+            if (info.failures++ == 0) {
+                info.fault = c.area + ": " + c.message;
+            }
+        } else if (c.level == psyight::CheckLevel::warn) {
+            ++info.warnings;
+        }
+    }
+    const auto text = [](const char *format, auto... values) {
+        char buffer[128];
+        std::snprintf(buffer, sizeof(buffer), format, values...);
+        return std::string(buffer);
+    };
+    if (const std::shared_ptr<const psyight::LiveInput> live = session.live_input(); live) {
+        const psyight::LiveState s = live->state();
+        info.chips.push_back({s.tempo_known ? text("Live %.1f BPM, %s", 60.0 / s.period_s,
+                                                   s.locked ? "locked" : "acquiring")
+                                            : std::string("Live, listening"),
+                              "Live input: the show follows what it hears.",
+                              s.locked ? ChipTone::good : ChipTone::warn});
+        info.chips.push_back({text("%.0f ms delay", live->analysis_delay_ms()),
+                              "From the audio to the decisions about it.", ChipTone::plain});
+    } else if (session.has_track() && session.track().track_analysis != nullptr) {
+        const psyight::BeatTrackResult &b = session.track().track_analysis->beats;
+        info.chips.push_back(
+            {text("%.2f BPM", session.grid().bpm),
+             text("The grid's tempo; the beat tracker's confidence %.2f.", b.tempo_confidence),
+             ChipTone::plain});
+    }
+    if (psyight::Transport &t = session.transport(); t.is_open()) {
+        const int rate = t.buffer().sample_rate_hz;
+        info.chips.push_back(
+            {text("%.0f kHz, %.1f ms", rate / 1000.0, 1e3 * t.device_period_frames() / rate),
+             "Audio device: sample rate and period (the playback latency).", ChipTone::dim});
+    }
+    if (session.has_track()) {
+        info.chips.push_back({std::string("Detections: ") + session.detection_name(),
+                              "Where the bass roll's and scoring's notes come from.",
+                              ChipTone::dim});
+    }
+    if (preview.test_pattern().kind != psyight::TestPatternKind::off) {
+        info.chips.push_back({std::string("Test pattern: ") +
+                                  psyight::test_pattern_name(preview.test_pattern().kind),
+                              "Preflight test pattern on.",
+                              preview.test_pattern().send ? ChipTone::bad : ChipTone::warn});
+    }
+    info.chips.push_back(
+        preview.sending() ? psyight::StatusChip{text("Sending, %.0f fps", preview.measured_fps()),
+                                                "The show goes to the network.", ChipTone::accent}
+                          : psyight::StatusChip{"Preview only",
+                                                "Nothing goes to the lights (Preflight or "
+                                                "Preview on the top bar).",
+                                                ChipTone::dim});
+    if (const auto &nodes = preflight.nodes(); nodes.has_value()) {
+        info.chips.push_back({text("%zu nodes", nodes->size()),
+                              "Art-Net nodes that answered the last discovery (Preflight).",
+                              nodes->empty() ? ChipTone::warn : ChipTone::good});
+    } else {
+        info.chips.push_back({"Nodes not checked",
+                              "Preflight: Discover Art-Net nodes, on the show network.",
+                              ChipTone::dim});
+    }
+    if (preview.recording()) {
+        info.chips.push_back({"REC", "Recording the show (top bar).", ChipTone::bad});
+    }
+    return info;
 }
 
 void handle_shortcuts(psyight::Session &session) {
@@ -329,6 +404,11 @@ int main() {
                 }
                 preview_view.draw_top_bar();
                 ImGui::EndMainMenuBar();
+            }
+            // The status bar (chips and the fault banner), before the dock space so it makes room.
+            preflight_view.update();
+            if (psyight::draw_status_bar(status_info(session, preview_view, preflight_view))) {
+                ImGui::SetWindowFocus("Preflight");
             }
             // Bump the version when panels are added, so saved layouts get the new default once.
             const ImGuiID dockspace_id = ImGui::GetID("Main dock space v7");

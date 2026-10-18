@@ -9,6 +9,7 @@
 #include "gui/project_state.h"
 #include "gui/session.h"
 #include "output/art_poll.h"
+#include "output/preflight.h"
 #include "output/udp_socket.h"
 
 #include <chrono>
@@ -24,7 +25,10 @@ class PreflightView {
     PreflightView(Session &session, ProjectState &project, PreviewView &preview)
         : session_(session), project_(project), preview_(preview) {}
 
+    void update(); // Once a frame, before the status bar: the checks (shown or not).
     void draw();
+    const std::vector<PreflightCheck> &checks() const { return checks_; }
+    const std::optional<std::vector<ArtNode>> &nodes() const { return nodes_; }
 
   private:
     void draw_test_patterns();
@@ -37,6 +41,7 @@ class PreflightView {
     std::optional<std::vector<ArtNode>> nodes_;
     std::future<Result<std::vector<ArtNode>>> discovery_;
     std::string discovery_error_;
+    std::vector<PreflightCheck> checks_;
 };
 
 } // namespace psyight
