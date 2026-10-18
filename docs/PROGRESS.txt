@@ -1,11 +1,29 @@
 # Psyight progress and handoff
 
-Last updated: 2026-10-17. Written so another agent can pick up without the original session.
+Last updated: 2026-10-18. Written so another agent can pick up without the original session.
 
 ## Read first
 - `CLAUDE.md` (process, conventions, commands), `docs/SPEC.md` (requirements; decision log in section 16).
 - GitHub: https://github.com/knnurl/Psyight (private), branch `main`, everything pushed.
 - Private audio and labels live in `data/` (gitignored): `OculusDrift.mp3`, `Hagios.mp3`, `Hall of Purity.wav`, `Phase Change.mp3`.
+
+## Where we are (2026-10-18)
+- Done today, all on `main` and pushed: settings persistence; restyle phases 2 to 4 (layout option A, show mode); builds from flatness risers (file and live); modulation (macros, hold per grid division, attack and release, effect settings as targets); the Show tab as an Ableton-style rack (knobs, device chain, route cards, modulation rings); rig templates (pillars, matrix panel); presets (scene presets, palettes, show packs; built-in library plus the user's presets/ folder). Details in the sections below.
+- Export zip: `cmake --build --preset windows-msvc-release --target package`; the owner asked twice for the private weights to be added to the zip by hand (data/m4/student.weights.{json,bin} into Psyight-0.1.0-win64/data/m4/, and the README line changed), never to the packaging rules. The last zip predates the rig templates and presets.
+
+## Usability batches (owner 2026-10-18: "do all of them in batches, don't wait for approval")
+Order, with status. Each batch: build, tests, capture check where visual, docs, commit, push, then the next.
+1. Analysis cache: save the track analysis beside the track and load it instantly when the audio, options and analysis version match. [in progress]
+2. Preflight test patterns: chase along each strip (direction and order), RGB colour-order check, identify a universe, all-on at the power budget.
+3. Knob right-click menu: Modulate with (makes a route on that knob), Learn MIDI, Reset.
+4. Quantised scene launch (next downbeat or phrase, SPEC 7.6) and number keys 1 to 9 for scenes.
+5. Perform view: full-screen live page (scene grid, big macro knobs, Blackout and Hold, beat and lock, preview).
+6. Status chips and a single fault banner in the top bar (SPEC 9.3).
+7. Undo for show edits (scenes, rig, modulation), Ctrl+Z and Ctrl+Y.
+8. Preview helpers: strip direction arrows and names; hovering a strip highlights it in the Rig tab.
+9. Setup assistant: rig template, output and node discovery, latency (tap test), test patterns, in one guided pass.
+10. Preset browser with search and audition on the preview.
+11. Edit sections by hand: drag boundaries on the spectrogram's section strip.
 
 ## Owner's labelling state (2026-10-16)
 - `data/OculusDrift.mp3.labels.json`: grid **150 BPM** (not 160), first downbeat 16.042 s, one region 93.242 to 154.465 s, **marked complete**: 452 notes, all E1 (MIDI 28), on the grid, gate 1.0 (rolling K-B-B-B, 100 ms slots).
