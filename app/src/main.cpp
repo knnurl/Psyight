@@ -6,6 +6,7 @@
 #include "gui/capture.h"
 #include "gui/command_line.h"
 #include "gui/crash_guard.h"
+#include "gui/file_dialog.h"
 #include "gui/frame_pacing.h"
 #include "gui/layout.h"
 #include "gui/log_view.h"
@@ -15,9 +16,11 @@
 #include "gui/rig_view.h"
 #include "gui/scoring_view.h"
 #include "gui/session.h"
+#include "gui/settings_view.h"
 #include "gui/theme.h"
 #include "gui/transport_panel.h"
 #include "io/png.h"
+#include "io/recent_files.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -27,6 +30,8 @@
 #include <spdlog/spdlog.h>
 
 #include <GLFW/glfw3.h> // Brings in the system OpenGL header for glClear and glViewport.
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h> // The window handle, as the file dialog's owner.
 
 #include <algorithm>
 #include <chrono>
@@ -60,17 +65,21 @@ void on_files_dropped(GLFWwindow *window, int count, const char *paths[]) {
 }
 
 // Global shortcuts. Text fields keep Ctrl+Z for their own undo: global routing gives way to them.
+void save_labels(psyight::Session &session) {
+    if (const psyight::Result<void> saved = session.save_labels(); saved) {
+        spdlog::info("Saved {}", psyight::path_to_utf8(session.labels_path().filename()));
+    } else {
+        spdlog::error("{}", saved.error().message);
+    }
+}
+
 void handle_shortcuts(psyight::Session &session) {
     if (!session.has_track()) {
         return;
     }
     constexpr ImGuiInputFlags kGlobal = ImGuiInputFlags_RouteGlobal;
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, kGlobal)) {
-        if (const psyight::Result<void> saved = session.save_labels(); saved) {
-            spdlog::info("Saved {}", psyight::path_to_utf8(session.labels_path().filename()));
-        } else {
-            spdlog::error("{}", saved.error().message);
-        }
+        save_labels(session);
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, kGlobal)) {
         session.labels().undo();
@@ -155,6 +164,11 @@ int main() {
         psyight::PreviewView preview_view(session, project);
         psyight::RigView rig_view(project);
         psyight::PreflightView preflight_view(session, project, preview_view);
+        psyight::SettingsView settings_view(project);
+        psyight::RecentFiles recent;
+        std::filesystem::path recent_path; // The track last added to the recent list.
+        bool show_settings = false;
+        bool open_requested = false;
         glfwSetWindowUserPointer(window, &session);
         glfwSetDropCallback(window, on_files_dropped);
         psyight::CaptureTarget capture_target;
@@ -205,6 +219,57 @@ int main() {
             ImGui::NewFrame();
 
             if (ImGui::BeginMainMenuBar()) {
+                if (ImGui::BeginMenu("File")) {
+                    if (ImGui::MenuItem("Open track...", "Ctrl+O")) {
+                        open_requested = true;
+                    }
+                    if (ImGui::BeginMenu("Open recent", !recent.items().empty())) {
+                        std::optional<std::filesystem::path> chosen;
+                        for (const std::filesystem::path &track : recent.items()) {
+                            ImGui::PushID(psyight::path_to_utf8(track).c_str());
+                            if (ImGui::MenuItem(psyight::path_to_utf8(track.filename()).c_str())) {
+                                chosen = track;
+                            }
+                            ImGui::SetItemTooltip("%s", psyight::path_to_utf8(track).c_str());
+                            ImGui::PopID();
+                        }
+                        ImGui::Separator();
+                        if (ImGui::MenuItem("Clear the list")) {
+                            recent.clear();
+                        }
+                        ImGui::EndMenu();
+                        if (chosen && std::filesystem::exists(*chosen)) {
+                            session.open_file(*chosen);
+                        } else if (chosen) {
+                            spdlog::warn("{} is gone; removed from the recent list",
+                                         psyight::path_to_utf8(*chosen));
+                            recent.remove(*chosen);
+                        }
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Save labels", "Ctrl+S", false, session.has_track())) {
+                        save_labels(session);
+                    }
+                    ImGui::Separator();
+                    ImGui::MenuItem("Settings...", nullptr, &show_settings);
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Exit", "Alt+F4")) {
+                        glfwSetWindowShouldClose(window, GLFW_TRUE);
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Edit")) {
+                    psyight::LabelEditor &labels = session.labels();
+                    if (ImGui::MenuItem("Undo", "Ctrl+Z", false,
+                                        session.has_track() && labels.can_undo())) {
+                        labels.undo();
+                    }
+                    if (ImGui::MenuItem("Redo", "Ctrl+Y", false,
+                                        session.has_track() && labels.can_redo())) {
+                        labels.redo();
+                    }
+                    ImGui::EndMenu();
+                }
                 if (ImGui::BeginMenu("View")) {
                     ImGui::MenuItem("Reset layout", nullptr, &reset_layout);
                     if (ImGui::BeginMenu("Theme")) {
@@ -235,6 +300,10 @@ int main() {
             }
             ImGui::DockSpaceOverViewport(dockspace_id);
             session.update();
+            if (!capture && session.has_track() && session.track().path != recent_path) {
+                recent_path = session.track().path; // Loaded (from the menu, a drop or the
+                recent.add(recent_path);            // command line): first in the recent list.
+            }
             transport_panel.draw();
             analysis_view.draw();
             bass_roll_view.draw_roll();
@@ -249,6 +318,10 @@ int main() {
                 focus_preview = false;
             }
             handle_shortcuts(session);
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
+                open_requested = true;
+            }
+            settings_view.draw(&show_settings, reset_layout);
             project.autosave();
             session.end_frame();
             if (show_imgui_demo) {
@@ -278,6 +351,14 @@ int main() {
             if (!capture) {
                 glfwSwapBuffers(window);
                 psyight::wait_for_display_refresh();
+                if (open_requested) { // After the frame is shown, not halfway through it.
+                    open_requested = false;
+                    if (const auto chosen =
+                            psyight::open_audio_file_dialog(glfwGetWin32Window(window));
+                        chosen) {
+                        session.open_file(*chosen);
+                    }
+                }
                 continue;
             }
             glFinish();
