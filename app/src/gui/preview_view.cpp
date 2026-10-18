@@ -321,6 +321,9 @@ void PreviewView::sync_config() {
     config_.scenes = p.scenes;
     config_.palettes = p.palettes;
     config_.macros = p.macro_values;
+    if (midi_started_ && midi_map_.learning().empty()) {
+        midi_map_.bindings = p.midi; // Follows undo and reloads.
+    }
     if (config_.manual_scene >= static_cast<int>(config_.scenes.size())) {
         config_.manual_scene = -1;
     }

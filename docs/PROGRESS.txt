@@ -19,8 +19,8 @@ Order, with status. Each batch: build, tests, capture check where visual, docs, 
 4. Quantised scene launch (next downbeat or phrase, SPEC 7.6) and number keys 1 to 9 for scenes. [done: engine/automation SceneLauncher in the show renderer (reset on a seek; immediate while the transport stands still); AutomationParams::launch (now, next bar, next phrase; default next bar, saved as automation.launch); the queued card pulses; keys 1 to 9 pick scenes, 0 returns to Auto; tests/scene_launch_test.cpp.]
 5. Perform view: full-screen live page (scene grid, big macro knobs, Blackout and Hold, beat and lock, preview). [done: PreviewView::draw_perform, View > Perform view or F11, Esc leaves; the panels keep running underneath; knob scale (push_knob_scale) for the big macros.]
 6. Status chips and a single fault banner in the top bar (SPEC 9.3). [done, as a status bar along the bottom (the top bar is full): gui/status_bar.*; the banner names the worst preflight failure or counts warnings and opens Preflight; chips for tempo or live lock, delay, audio device, detections, test pattern, sending and fps, nodes, REC. PreflightView::update runs the checks every frame.]
-7. Undo for show edits (scenes, rig, modulation), Ctrl+Z and Ctrl+Y. [in progress]
-8. Preview helpers: strip direction arrows and names; hovering a strip highlights it in the Rig tab.
+7. Undo for show edits (scenes, rig, modulation), Ctrl+Z and Ctrl+Y. [done: core/undo_history.h (snapshots; changes within 0.5 s merge), ProjectState::undo and redo (load clears, reset is undoable); Ctrl+Z and Ctrl+Y go to show edits while a show panel has the focus (Show, Rig, Preview, Stage, Perform, Settings), else to the labels; the Edit menu lists both; MIDI bindings follow the project.]
+8. Preview helpers: strip direction arrows and names; hovering a strip highlights it in the Rig tab. [in progress]
 9. Setup assistant: rig template, output and node discovery, latency (tap test), test patterns, in one guided pass.
 10. Preset browser with search and audition on the preview.
 11. Edit sections by hand: drag boundaries on the spectrogram's section strip.

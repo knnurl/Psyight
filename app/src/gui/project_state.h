@@ -4,9 +4,13 @@
 // changes. Loaded from psyight.psyproj in the working directory
 // at start when that exists, and saved there on exit when changed and at most a minute after a
 // change (autosave), unless the file could not be read (a damaged file is never overwritten).
+// Undo: every changed() records the project as it was (core/undo_history.h; changes within half a
+// second are one step, so a knob drag undoes at once); resetting to the default is undoable, and
+// loading a file clears the history.
 #pragma once
 
 #include "core/result.h"
+#include "core/undo_history.h"
 #include "engine/rig.h"
 #include "io/project.h"
 #include "output/patch.h"
@@ -38,12 +42,18 @@ class ProjectState {
     Result<void> save();
     void autosave(); // Once a frame: saves a change after a minute (crash recovery, M6).
     void reset_to_default();
+    bool can_undo() const { return history_.can_undo(); }
+    bool can_redo() const { return history_.can_redo(); }
+    bool undo();
+    bool redo();
     const std::string &status() const { return status_; }
 
   private:
     void rebuild();
 
     Project project_ = default_project();
+    Project committed_ = project_; // As of the last change: the state an edit starts from.
+    UndoHistory<Project> history_;
     Rig rig_;
     Patch patch_;
     std::uint64_t version_ = 1;

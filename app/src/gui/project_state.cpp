@@ -24,7 +24,18 @@ ProjectState::~ProjectState() {
     }
 }
 
+namespace {
+
+double now_s() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+} // namespace
+
 void ProjectState::changed() {
+    history_.record(committed_, now_s());
+    committed_ = project_;
     rebuild();
     ++version_;
     dirty_ = true;
@@ -42,6 +53,8 @@ Result<void> ProjectState::load() {
         return loaded.error();
     }
     project_ = std::move(loaded.value());
+    committed_ = project_;
+    history_.clear(); // Another file: its own history.
     rebuild();
     ++version_;
     dirty_ = false;
@@ -74,8 +87,32 @@ void ProjectState::autosave() {
     }
 }
 
+bool ProjectState::undo() {
+    if (!history_.undo(project_)) {
+        return false;
+    }
+    committed_ = project_;
+    rebuild();
+    ++version_;
+    dirty_ = true;
+    return true;
+}
+
+bool ProjectState::redo() {
+    if (!history_.redo(project_)) {
+        return false;
+    }
+    committed_ = project_;
+    rebuild();
+    ++version_;
+    dirty_ = true;
+    return true;
+}
+
 void ProjectState::reset_to_default() {
+    history_.record(committed_, now_s());
     project_ = default_project();
+    committed_ = project_;
     rebuild();
     ++version_;
     dirty_ = true;

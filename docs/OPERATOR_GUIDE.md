@@ -110,6 +110,8 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 - **Scene presets** (the scene's Presets button): a look with its layers, modulation and palette. Replace the scene you are editing, or add it as a new one. "Save this scene as a preset" keeps yours.
 - **Palettes:** "Add from the library" for more palettes (none use white: it is kept for kicks and drops); "Save to the library" keeps one.
 
+**Undo:** Ctrl+Z and Ctrl+Y undo and redo show edits (scenes, layers, modulation, macros, palettes, the rig, settings) while the Show, Rig or Preview panel has the focus, and label edits elsewhere. A knob drag undoes in one step. The Edit menu lists both.
+
 Your presets are JSON files in the `presets` folder beside the project (`scenes`, `palettes`, `shows`), easy to copy to another machine.
 
 ## MIDI controller

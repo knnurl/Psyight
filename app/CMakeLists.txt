@@ -187,6 +187,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/recent_files_test.cpp tests/user_settings_test.cpp
                              tests/rig_templates_test.cpp tests/presets_test.cpp
                              tests/test_patterns_test.cpp tests/scene_launch_test.cpp
+                             tests/undo_history_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)

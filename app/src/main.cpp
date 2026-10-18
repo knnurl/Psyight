@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -158,20 +159,41 @@ psyight::StatusInfo status_info(psyight::Session &session, const psyight::Previe
     return info;
 }
 
-void handle_shortcuts(psyight::Session &session) {
-    if (!session.has_track()) {
-        return;
+// A show panel has the keyboard focus: undo and redo act on the project (scenes, rig,
+// modulation, settings), not the labels.
+bool show_panel_focused() {
+    const ImGuiWindow *window = ImGui::GetCurrentContext()->NavWindow;
+    if (window == nullptr || window->RootWindow == nullptr) {
+        return false;
     }
+    for (const char *name : {"Show", "Rig", "Preview", "Stage", "Perform", "Settings"}) {
+        if (std::strcmp(window->RootWindow->Name, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void handle_shortcuts(psyight::Session &session, psyight::ProjectState &project) {
     constexpr ImGuiInputFlags kGlobal = ImGuiInputFlags_RouteGlobal;
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, kGlobal)) {
+    const bool show = show_panel_focused();
+    if (session.has_track() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, kGlobal)) {
         save_labels(session);
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, kGlobal)) {
-        session.labels().undo();
+        if (show) {
+            project.undo();
+        } else if (session.has_track()) {
+            session.labels().undo();
+        }
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y, kGlobal) ||
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, kGlobal)) {
-        session.labels().redo();
+        if (show) {
+            project.redo();
+        } else if (session.has_track()) {
+            session.labels().redo();
+        }
     }
 }
 
@@ -371,15 +393,27 @@ int main() {
                     ImGui::EndMenu();
                 }
                 if (ImGui::BeginMenu("Edit")) {
+                    // Ctrl+Z and Ctrl+Y act on whichever has the focus: a show panel (Show,
+                    // Rig, Preview) or the labels (everywhere else).
                     psyight::LabelEditor &labels = session.labels();
-                    if (ImGui::MenuItem("Undo", "Ctrl+Z", false,
+                    if (ImGui::MenuItem("Undo label edit", "Ctrl+Z", false,
                                         session.has_track() && labels.can_undo())) {
                         labels.undo();
                     }
-                    if (ImGui::MenuItem("Redo", "Ctrl+Y", false,
+                    if (ImGui::MenuItem("Redo label edit", "Ctrl+Y", false,
                                         session.has_track() && labels.can_redo())) {
                         labels.redo();
                     }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Undo show edit", "Ctrl+Z", false, project.can_undo())) {
+                        project.undo();
+                    }
+                    if (ImGui::MenuItem("Redo show edit", "Ctrl+Y", false, project.can_redo())) {
+                        project.redo();
+                    }
+                    ImGui::SetItemTooltip("Scenes, layers, modulation, macros, palettes, the "
+                                          "rig and settings. The keys act on show edits while "
+                                          "the Show, Rig or Preview panel has the focus.");
                     ImGui::EndMenu();
                 }
                 if (ImGui::BeginMenu("View")) {
@@ -449,7 +483,7 @@ int main() {
                 ImGui::SetWindowFocus("Show");
                 focus_preview = false;
             }
-            handle_shortcuts(session);
+            handle_shortcuts(session, project);
             if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
                 open_requested = true;
             }
