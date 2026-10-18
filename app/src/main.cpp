@@ -204,6 +204,7 @@ int main() {
         psyight::ThemeMode theme_before_show = psyight::theme_mode();
         std::filesystem::path recent_path; // The track last added to the recent list.
         bool show_settings = false;
+        bool perform = false; // The Perform view (F11) over the workspace.
         bool open_requested = false;
         glfwSetWindowUserPointer(window, &session);
         glfwSetDropCallback(window, on_files_dropped);
@@ -309,6 +310,7 @@ int main() {
                 if (ImGui::BeginMenu("View")) {
                     ImGui::MenuItem("Reset layout", nullptr, &reset_layout);
                     ImGui::MenuItem("Rig preview", nullptr, &preview_view.preview_open());
+                    ImGui::MenuItem("Perform view", "F11", &perform);
                     if (ImGui::BeginMenu("Theme")) {
                         const psyight::ThemeMode mode = psyight::theme_mode();
                         if (ImGui::MenuItem("Desk", nullptr, mode == psyight::ThemeMode::desk)) {
@@ -372,6 +374,12 @@ int main() {
                 open_requested = true;
             }
             settings_view.draw(&show_settings, reset_layout, prefs);
+            if (ImGui::IsKeyPressed(ImGuiKey_F11, false)) {
+                perform = !perform;
+            }
+            if (perform) {
+                preview_view.draw_perform(&perform);
+            }
             project.autosave();
             if (!capture && !ImGui::IsAnyItemActive()) { // Not on every step of a drag.
                 psyight::UserSettings now = prefs;

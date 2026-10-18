@@ -1527,8 +1527,26 @@ void PreviewView::draw_macros() {
     }
     pop_device_title();
     ImGui::SetCursorPosY(device_title_height());
+    draw_macro_knobs(kColumns);
+    if (ImGui::BeginPopup("##macro names")) {
+        for (int i = 0; i < kMacroCount; ++i) {
+            ImGui::PushID(i);
+            ImGui::SetNextItemWidth(10.0f * ImGui::GetFontSize());
+            const std::string hint = "Macro " + std::to_string(i + 1);
+            if (ImGui::InputTextWithHint("##name", hint.c_str(),
+                                         &project_.edit().macro_names[static_cast<size_t>(i)])) {
+                project_.changed();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
+    end_device();
+}
+
+void PreviewView::draw_macro_knobs(int columns) {
     for (int i = 0; i < kMacroCount; ++i) {
-        if (i % kColumns != 0) {
+        if (i % columns != 0) {
             ImGui::SameLine();
         }
         ImGui::PushID(i);
@@ -1552,20 +1570,148 @@ void PreviewView::draw_macros() {
         }
         ImGui::PopID();
     }
-    if (ImGui::BeginPopup("##macro names")) {
-        for (int i = 0; i < kMacroCount; ++i) {
-            ImGui::PushID(i);
-            ImGui::SetNextItemWidth(10.0f * ImGui::GetFontSize());
-            const std::string hint = "Macro " + std::to_string(i + 1);
-            if (ImGui::InputTextWithHint("##name", hint.c_str(),
-                                         &project_.edit().macro_names[static_cast<size_t>(i)])) {
-                project_.changed();
-            }
-            ImGui::PopID();
-        }
-        ImGui::EndPopup();
+}
+
+void PreviewView::draw_perform(bool *open) {
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowFocus();
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
+    ImGui::Begin("Perform", nullptr, flags);
+    if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        *open = false;
     }
-    end_device();
+    const std::shared_ptr<const ShowFrame> frame = show_.latest();
+    const ImGuiStyle &style = ImGui::GetStyle();
+    const float em = ImGui::GetFontSize();
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const float side = std::min(30.0f * em, 0.42f * avail.x);
+
+    // The stage: the beat, section and tempo, then the rig, large.
+    ImGui::BeginChild("##stage", ImVec2(avail.x - side - style.ItemSpacing.x, 0.0f));
+    if (frame != nullptr) {
+        ImGui::PushFont(theme_font(ThemeFont::timecode));
+        ImGui::TextUnformatted(frame->section.empty() ? "-" : frame->section.c_str());
+        ImGui::PopFont();
+        ImGui::SameLine();
+        // Four beat dots, the current one lit.
+        const float r = 0.45f * em;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImDrawList *draw = ImGui::GetWindowDrawList();
+        for (int b = 0; b < 4; ++b) {
+            const ImVec2 c(at.x + r + b * 3.0f * r, at.y + 0.75f * em);
+            draw->AddCircleFilled(
+                c, r, to_u32(b == frame->beat_in_bar ? theme().accent : theme().frame_hover));
+        }
+        ImGui::Dummy(ImVec2(12.0f * r, 1.5f * em));
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        if (const std::shared_ptr<const LiveInput> live = session_.live_input(); live) {
+            const LiveState s = live->state();
+            if (s.tempo_known) {
+                mono_text("%.1f BPM  %s", 60.0 / s.period_s, s.locked ? "locked" : "acquiring");
+            } else {
+                mono_text("listening");
+            }
+        } else {
+            mono_text("%.1f BPM", config_.grid.bpm);
+        }
+        if (config_.blackout || config_.hold) {
+            ImGui::SameLine();
+            ImGui::TextColored(config_.blackout ? theme().danger : theme().accent, "%s",
+                               config_.blackout ? "BLACKOUT" : "HOLD");
+        }
+        draw_rig(*frame);
+    } else {
+        ImGui::TextDisabled("No show yet: load a track or start live input.");
+    }
+    ImGui::EndChild();
+    ImGui::SameLine();
+
+    // The controls.
+    ImGui::BeginChild("##controls", ImVec2(0.0f, 0.0f));
+    const float width = ImGui::GetContentRegionAvail().x;
+    constexpr int kColumns = 3;
+    const float button_w = (width - (kColumns - 1) * style.ItemSpacing.x) / kColumns;
+    const ImVec2 big(button_w, 3.0f * em);
+    ImGui::SeparatorText("Scenes");
+    ImGui::BeginDisabled(ladder_ == Ladder::ambient);
+    for (int i = 0; i < static_cast<int>(config_.scenes.size()); ++i) {
+        if (i % kColumns != 0) {
+            ImGui::SameLine();
+        }
+        const bool playing = frame != nullptr && frame->mix.to == i;
+        if (playing) {
+            push_filled_button(theme().accent);
+        }
+        ImGui::PushID(i);
+        char label[96];
+        const char *name = config_.scenes[static_cast<size_t>(i)].name.c_str();
+        if (i < 9) { // Keys 1 to 9.
+            std::snprintf(label, sizeof(label), "%d  %s", i + 1, name);
+        } else {
+            std::snprintf(label, sizeof(label), "%s", name);
+        }
+        if (ImGui::Button(label, big)) {
+            pick_scene(i);
+        }
+        ImGui::PopID();
+        if (playing) {
+            pop_filled_button();
+        }
+        if (frame != nullptr && frame->queued_scene == i) {
+            const float pulse =
+                0.5f + 0.5f * static_cast<float>(std::sin(ImGui::GetTime() * 2.0 * kPi * 2.0));
+            ImGui::GetWindowDrawList()->AddRect(
+                ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                to_u32(with_alpha(theme().accent, 0.4f + 0.6f * pulse)), style.FrameRounding, 0,
+                3.0f);
+        }
+    }
+    const bool automatic = config_.manual_scene < 0;
+    if (toggle_button("Auto: scenes follow the sections (0)###auto", automatic)) {
+        pick_scene(automatic ? std::max(0, frame != nullptr ? frame->mix.to : 0) : -1);
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Macros");
+    // On a device-coloured panel, where the knob tracks are tuned to show.
+    push_knob_scale(1.5f);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme().device_bg);
+    ImGui::BeginChild(
+        "##perform macros",
+        ImVec2(width, 2.0f * knob_height() + style.ItemSpacing.y + 2.0f * style.WindowPadding.y),
+        ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NoScrollbar);
+    draw_macro_knobs(4);
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    pop_knob_scale();
+
+    ImGui::SeparatorText("Safety");
+    const ImVec2 half((width - style.ItemSpacing.x) / 2.0f, 3.0f * em);
+    const auto safety = [&](const char *label, bool &on, const ImVec4 &colour) {
+        if (on) {
+            push_filled_button(colour);
+        }
+        if (ImGui::Button(label, half)) {
+            on = !on;
+            dirty_ = true;
+        }
+        if (on) {
+            pop_filled_button();
+        }
+    };
+    safety("Blackout (B)", config_.blackout, theme().danger);
+    ImGui::SameLine();
+    safety("Hold (H)", config_.hold, theme().accent);
+    ImGui::Spacing();
+    if (ImGui::Button("Exit the Perform view (Esc)", ImVec2(width, 0.0f))) {
+        *open = false;
+    }
+    ImGui::EndChild();
+    ImGui::End();
 }
 
 void PreviewView::draw_scene_cards(const ShowFrame &frame) {

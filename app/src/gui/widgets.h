@@ -67,6 +67,9 @@ bool knob_int(const char *label, int *value, int min, int max, const char *forma
 // is drawn). Applies to the next knob only.
 void set_knob_menu(std::function<void()> items);
 float knob_width(); // Pixels: lay knobs out in columns of this width.
+// Knob size multiplier for the knobs drawn until the pop (the Perform view's big knobs).
+void push_knob_scale(float scale);
+void pop_knob_scale();
 
 // A device panel (the Show tab's racks): a child window of `size` in the device colour with a
 // title bar strip of device_title_height() at the top. Draw the title row first (compact

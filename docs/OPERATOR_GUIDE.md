@@ -74,6 +74,9 @@ The lights should flash when the audience hears the kick, not when the computer 
 
 ## During the set
 
+**Perform view** (View > Perform view, or F11; Esc leaves): one full-screen page for the set: the rig large with the section, the beat (four dots) and the tempo or lock; big numbered scene buttons and Auto; the 8 macros as big knobs; Blackout and Hold. The top bar stays above it.
+
+
 - **Show:** the scenes follow the music's sections (groove, breakdown, build, drop) on their own.
 - **React:** the scene stays as you choose it from the scene buttons (or keys 1 to 9; 0 goes back to the sections); the effects still follow the music. A scene you pick waits for the next bar (or phrase, or none: the menu beside Auto), and its button pulses until it takes over.
 - **Ambient:** the calm ambient scene only. Use it between sets, during talks, or whenever the analysis looks wrong.

@@ -28,6 +28,7 @@ constexpr float kDeviceRounding = 4.0f;
 constexpr float kDeviceTitlePaddingY = 2.0f;
 
 std::function<void()> g_knob_menu; // The next knob's extra menu items (set_knob_menu).
+float g_knob_scale = 1.0f;         // push_knob_scale.
 
 float knob_fraction(double value, double min, double max) {
     return max > min ? static_cast<float>(std::clamp((value - min) / (max - min), 0.0, 1.0)) : 0.0f;
@@ -44,7 +45,7 @@ void arc(ImDrawList *draw, ImVec2 centre, float radius, float from, float to, Im
 
 bool knob_impl(const char *label, double *value, double min, double max, const char *format,
                double default_value, const double *modulated, bool integer) {
-    const float em = ImGui::GetFontSize();
+    const float em = ImGui::GetFontSize() * g_knob_scale;
     const ImGuiStyle &style = ImGui::GetStyle();
     ImFont *label_font = theme_font(ThemeFont::plot);
     ImFont *mono = theme_font(ThemeFont::mono);
@@ -249,7 +250,11 @@ bool knob_int(const char *label, int *value, int min, int max, const char *forma
 
 void set_knob_menu(std::function<void()> items) { g_knob_menu = std::move(items); }
 
-float knob_width() { return kKnobWidthEm * ImGui::GetFontSize(); }
+float knob_width() { return kKnobWidthEm * ImGui::GetFontSize() * g_knob_scale; }
+
+void push_knob_scale(float scale) { g_knob_scale = scale; }
+
+void pop_knob_scale() { g_knob_scale = 1.0f; }
 
 float device_padding() { return 0.4f * ImGui::GetFontSize(); }
 
@@ -294,7 +299,7 @@ bool device_icon_button(const char *icon, const char *id, const char *tooltip) {
 float knob_height() {
     const ImFont *label_font = theme_font(ThemeFont::plot);
     const ImFont *mono = theme_font(ThemeFont::mono);
-    const float em = ImGui::GetFontSize();
+    const float em = ImGui::GetFontSize() * g_knob_scale;
     return (label_font != nullptr ? label_font->FontSize : em) +
            ImGui::GetStyle().ItemInnerSpacing.y + kKnobRingMarginEm * em +
            2.0f * kKnobRadiusEm * em + 2.0f * ImGui::GetStyle().FramePadding.y +

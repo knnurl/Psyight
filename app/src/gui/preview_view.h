@@ -38,6 +38,10 @@ class PreviewView {
     // The Show window, and the Preview window unless folded. stage (show mode with the editing
     // panels hidden): the rig drawn large in the "Stage" window, where the bass roll was, instead.
     void draw(bool stage = false);
+    // The Perform view (View > Perform view, F11): one full-screen live page over the workspace:
+    // the rig large with the beat and section, big scene buttons, the macros, Blackout and Hold.
+    // Esc (or its button) clears *open.
+    void draw_perform(bool *open);
     // Inside the main menu bar.
     void draw_top_bar();
     bool sending() const { return config_.send_to_network; }
@@ -86,6 +90,7 @@ class PreviewView {
                          double value, double min, double max);
     void midi_menu(const std::string &target);
     void draw_macros(); // The 8 macro knobs (modulation sources, MIDI-learnable).
+    void draw_macro_knobs(int columns);
     // Presets (engine/presets.h, io/presets.h). The user's are rescanned when a menu opens. A
     // scene preset is applied after the scene editor (which holds references into the scenes).
     void draw_library();         // Show packs: load (confirmed) and save.
