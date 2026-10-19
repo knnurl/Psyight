@@ -4,7 +4,7 @@ Last updated: 2026-10-19. Written so another agent can pick up without the origi
 
 ## Read first
 - `CLAUDE.md` (process, conventions, commands), `docs/SPEC.md` (requirements; decision log in section 16).
-- GitHub: https://github.com/knnurl/Psyight (private), branch `main`, everything pushed.
+- GitHub: https://github.com/knnurl/Psyight (public since 2026-10-19; no licence chosen yet), branch `main`, everything pushed. Never commit private audio, labels or weights: anything pushed is public.
 - Private audio and labels live in `data/` (gitignored): `OculusDrift.mp3`, `Hagios.mp3`, `Hall of Purity.wav`, `Phase Change.mp3`.
 
 ## Where we are (2026-10-18)
