@@ -1,8 +1,11 @@
 // Section detection (SPEC section 6.6), file mode: intro, groove, breakdown, build, drop and
 // outro per bar, from the beat tracker's kicks per beat and the front end's high band.
 //
-// Rules (per bar of the grid; a bar has a kick when most of its beats do; one with exactly half
-// takes the state of the nearest decisive bar, and a lone kick bar inside a breakdown is a blip):
+// Rules (per bar of the grid). The kick state per bar is smoothed by a two-state Viterbi: each
+// bar costs the beats that disagree with its state, and every change of state costs
+// kick_switch_penalty beats, so a dropout (a fill, missed kicks) stays a groove and a stray kick
+// stays inside a breakdown. With the default 6 beats, a breakdown inside the track needs four
+// kickless bars (it saves 4 beats a bar and costs two changes); at either end, two.
 // - intro and outro: the bars without kicks before the first and after the last kick bar;
 // - breakdown: a run of at least min_breakdown_bars bars without kicks (a single kickless bar
 //   is a fill: SPEC 6.6 said 4 beats, real tracks are full of one-bar fills);
@@ -18,6 +21,10 @@
 // - drop: the first drop_bars bars after a breakdown of at least drop_min_breakdown_bars
 //   (SPEC 18 A9: the kick returning after 8 bars or more is a drop);
 // - groove: every other bar with kicks.
+// - energy: grooves split where the level changes by energy_step_db or more between phrases (a
+//   groove that steps up); every section then gets an energy level, low, mid or high, from its
+//   level against the track's bar levels (terciles);
+// - build starts within build_snap_bars of a 4-bar line of the phrase grid move onto it.
 // Confidence is the share of beats in the section that agree with its kick state.
 // Assumptions: 4/4 on the beat tracker's grid. Deterministic. Latency: non-causal (file mode).
 #pragma once
@@ -42,14 +49,18 @@ struct SectionParams {
     double build_search_bars = 8.0;    // The riser peaks within the breakdown's last bars.
     double drop_min_breakdown_bars = 8.0;
     double drop_bars = 8.0;
+    double kick_switch_penalty = 6.0; // Beats of disagreement a change of kick state costs.
+    double energy_step_db = 3.0;      // A level change between phrases that splits a groove.
+    double build_snap_bars = 1.0;     // A build start this close to a 4-bar line moves onto it.
 };
 
 // One bar of the grid as the section rules see it (also printed by psyight_analyse --bars).
 struct SectionBar {
     double start_s = 0.0;
-    bool kick = false;        // After the half-kicked and lone-kick-bar rules.
+    bool kick = false;        // After the Viterbi smoothing.
     int kick_beats = 0;       // Beats of the bar with a kick.
     double high_db = 0.0;     // The hats band's mean power.
+    double level_db = 0.0;    // All bands' mean power: the bar's loudness.
     double flatness = 0.0;    // The residual's mean spectral flatness over sounding frames, 0 to 1.
     double centroid_hz = 0.0; // The residual's mean spectral centroid over sounding frames.
 };
@@ -59,19 +70,31 @@ struct DetectedSection {
     double end_s = 0.0;
     std::string label; // "intro", "groove", "breakdown", "build", "drop" or "outro" (SPEC 6.10).
     double confidence = 0.0;
+    int energy = 1; // 0 low, 1 mid, 2 high: the section's level against the track's.
 };
 
 // The bars from the grid's first downbeat; empty when the beat tracker found no grid. Without
 // the residual, flatness and centroid are 0.
 Result<std::vector<SectionBar>> section_bars(const FrontEndResult &features,
                                              const BeatTrackResult &beats,
-                                             const ResidualFeatures *residual);
+                                             const ResidualFeatures *residual,
+                                             const SectionParams &params = {});
 
 // Contiguous sections in time order; empty when the beat tracker found no grid.
 Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &features,
                                                      const BeatTrackResult &beats,
                                                      const SectionParams &params,
                                                      const ResidualFeatures *residual = nullptr);
+
+// Each section's energy, low (0), mid (1) or high (2): its bars' mean level against the terciles
+// of all bars' levels. Sections without bars keep mid.
+void assign_energy(std::vector<DetectedSection> &sections, const std::vector<SectionBar> &bars);
+
+// The riser curve, 0 to 1 per residual frame (frame_s apart): through each build it follows the
+// residual's flatness (smoothed over 1 s) from the build's start to its peak, never falling, and
+// holds there to the build's end; 0 elsewhere. A build without a flatness rise ramps linearly.
+std::vector<float> riser_curve(const ResidualFeatures &residual,
+                               const std::vector<DetectedSection> &sections, double frame_s);
 
 // Sections from their starts (hand-edited ones): sorted by start, each running to the next start
 // and the last to duration_s, with full confidence. Starts at or past duration_s are dropped; the

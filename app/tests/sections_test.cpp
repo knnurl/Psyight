@@ -202,3 +202,152 @@ TEST_CASE("sections: parameters round trip through the registry") {
     CHECK(section_params_from(registry.values()).drop_bars == 16.0);
     CHECK(section_params_from(registry.values()).min_breakdown_bars == 2.0);
 }
+
+namespace {
+
+// 40 bars of rolling bass at 150 BPM with kicks where kick_at(bar) and the bass scaled by
+// bass_gain(bar); the sections found, and the first downbeat and phrase offset.
+template <typename KickAt, typename BassGain>
+std::vector<DetectedSection> sections_of(KickAt kick_at, BassGain bass_gain, double &downbeat_s,
+                                         int &phrase_offset) {
+    constexpr double kBpm = 150.0;
+    synth::SynthParams params;
+    params.bpm = kBpm;
+    params.bars = 40;
+    synth::SynthParams bass_params = params;
+    bass_params.kick = false;
+    synth::SynthOutput mix =
+        synth::render(bass_params, synth::make_pattern(synth::Pattern::rolling, 40, 29, 0.7));
+    synth::SynthParams kick_params = params;
+    kick_params.bass_level = 0.0;
+    const synth::SynthOutput kicks = synth::render(kick_params, {});
+    downbeat_s = mix.labels.downbeats.front().t_s;
+    const double bar_s = 4.0 * 60.0 / kBpm;
+    for (size_t i = 0; i < mix.samples.size(); ++i) {
+        const double bar = (static_cast<double>(i) / kSampleRateHz - downbeat_s) / bar_s;
+        const int whole = static_cast<int>(std::floor(bar));
+        mix.samples[i] = static_cast<float>(mix.samples[i] * bass_gain(whole));
+        if (whole >= 0 && kick_at(whole)) {
+            mix.samples[i] += kicks.samples[i];
+        }
+    }
+    const Result<FrontEndResult> features = analyse_front_end(mix.samples, kSampleRateHz, {});
+    REQUIRE(features.ok());
+    const Result<BeatTrackResult> beats = track_beats(features.value(), {});
+    REQUIRE(beats.ok());
+    phrase_offset = beats.value().phrase_bar_offset;
+    const Result<std::vector<DetectedSection>> found =
+        detect_sections(features.value(), beats.value(), {});
+    REQUIRE(found.ok());
+    return found.value();
+}
+
+std::string summary_of(const std::vector<DetectedSection> &sections, double downbeat_s) {
+    std::string out;
+    for (const DetectedSection &s : sections) {
+        out += s.label + "@" + std::to_string((s.start_s - downbeat_s) / 1.6) + "/" +
+               std::to_string(s.energy) + " ";
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("sections: kick dropouts up to three bars stay in the groove; four make a breakdown") {
+    double downbeat_s = 0.0;
+    int offset = 0;
+    const auto steady = [](int) { return 1.0; };
+    // Dropouts of one bar (12) and three bars (18 to 20).
+    std::vector<DetectedSection> found = sections_of(
+        [](int bar) { return bar >= 4 && bar < 36 && bar != 12 && (bar < 18 || bar > 20); }, steady,
+        downbeat_s, offset);
+    CAPTURE(summary_of(found, downbeat_s));
+    REQUIRE(found.size() == 3);
+    CHECK(found[0].label == "intro");
+    CHECK(found[1].label == "groove");
+    CHECK(found[2].label == "outro");
+    // Four bars (18 to 21): a breakdown, and the groove again (too short a break for a drop).
+    found = sections_of([](int bar) { return bar >= 4 && bar < 36 && (bar < 18 || bar > 21); },
+                        steady, downbeat_s, offset);
+    CAPTURE(summary_of(found, downbeat_s));
+    REQUIRE(found.size() == 5);
+    CHECK(found[2].label == "breakdown");
+    CHECK(found[2].start_s == doctest::Approx(downbeat_s + 18 * 1.6).epsilon(0.001));
+    CHECK(found[3].label == "groove");
+    CHECK(found[3].start_s == doctest::Approx(downbeat_s + 22 * 1.6).epsilon(0.001));
+}
+
+TEST_CASE("sections: a groove that steps up splits on the phrase grid, with higher energy") {
+    double downbeat_s = 0.0;
+    int offset = 0;
+    const std::vector<DetectedSection> found =
+        sections_of([](int bar) { return bar >= 4 && bar < 36; },
+                    [](int bar) { return bar < 20 ? 0.15 : 1.0; }, downbeat_s, offset);
+    CAPTURE(summary_of(found, downbeat_s));
+    CAPTURE(offset);
+    std::vector<const DetectedSection *> grooves;
+    for (const DetectedSection &s : found) {
+        if (s.label == "groove") {
+            grooves.push_back(&s);
+        }
+    }
+    REQUIRE(grooves.size() == 2);
+    const double split_bar = (grooves[1]->start_s - downbeat_s) / 1.6;
+    CHECK(std::fabs(split_bar - 20.0) <= 4.0);
+    const int whole = static_cast<int>(std::lround(split_bar));
+    CHECK(((whole - offset) % 8 + 8) % 8 == 0);
+    CHECK(grooves[1]->energy > grooves[0]->energy);
+}
+
+TEST_CASE("sections: energy levels from the bars' level terciles") {
+    std::vector<SectionBar> bars;
+    for (int m = 0; m < 30; ++m) {
+        SectionBar bar;
+        bar.start_s = m;
+        bar.level_db = m < 10 ? -40.0 : m < 20 ? -20.0 : -10.0;
+        bars.push_back(bar);
+    }
+    std::vector<DetectedSection> sections = {{0.0, 10.0, "intro", 1.0},
+                                             {10.0, 20.0, "groove", 1.0},
+                                             {20.0, 30.0, "drop", 1.0},
+                                             {30.0, 31.0, "outro", 1.0}}; // No bars: mid.
+    for (DetectedSection &s : sections) {
+        s.energy = -1;
+    }
+    assign_energy(sections, bars);
+    CHECK(sections[0].energy == 0);
+    CHECK(sections[1].energy == 1);
+    CHECK(sections[2].energy == 2);
+    CHECK(sections[3].energy == 1);
+}
+
+TEST_CASE("sections: the riser curve follows a build's flatness, holds, and is 0 elsewhere") {
+    constexpr double kFrameS = 0.01;
+    ResidualFeatures r;
+    for (int i = 0; i < 1000; ++i) { // 10 s.
+        const double t = i * kFrameS;
+        // A riser from 2 s to 5 s, a gap to 6 s, then tonal again.
+        r.flatness.push_back(t < 2.0   ? 0.02f
+                             : t < 5.0 ? static_cast<float>(0.02 + 0.28 * (t - 2.0) / 3.0)
+                             : t < 6.0 ? 0.05f
+                                       : 0.02f);
+    }
+    const std::vector<DetectedSection> sections = {{0.0, 2.0, "breakdown", 1.0},
+                                                   {2.0, 6.0, "build", 1.0},
+                                                   {6.0, 8.0, "drop", 1.0},
+                                                   {8.0, 9.0, "build", 1.0}, // Flat: a ramp.
+                                                   {9.0, 10.0, "groove", 1.0}};
+    const std::vector<float> curve = riser_curve(r, sections, kFrameS);
+    REQUIRE(curve.size() == 1000);
+    CHECK(curve[100] == 0.0f);
+    CHECK(curve[300] > 0.1f);
+    CHECK(curve[300] < 0.6f);
+    for (int i = 201; i < 600; ++i) {
+        CHECK(curve[i] >= curve[i - 1]); // Never falls in the build.
+    }
+    CHECK(curve[540] == doctest::Approx(1.0)); // Held through the gap.
+    CHECK(curve[650] == 0.0f);
+    CHECK(curve[850] == doctest::Approx(0.5).epsilon(0.05));
+    CHECK(curve[899] == doctest::Approx(1.0));
+    CHECK(curve[950] == 0.0f);
+}

@@ -74,6 +74,8 @@ struct LiveParams {
     double build_flatness_ratio = 2.5; // Riser: flatness over its breakdown floor.
     double build_min_flatness = 0.03;
     double build_flatness_smoothing_s = 1.0; // The flatness average the riser rule reads.
+    double energy_step = 3.0 / 90.0;         // Residual activity (3 dB) over a groove's mean: high.
+    double energy_memory_s = 60.0;           // The grooves' mean activity averages over this.
     double residual_smoothing_s = 0.05;
     double kick_threshold = 0.5;
     double hat_threshold = 0.5;
@@ -134,6 +136,8 @@ struct LiveState {
     LiveSection section = LiveSection::intro;
     double section_start_s = 0.0;
     int section_count = 0;
+    int section_energy = 1; // 0 low, 1 mid, 2 high (as file mode's DetectedSection::energy).
+    double riser = 0.0;     // 0 to 1 through a build (as file mode's riser curve).
     // For the scene rotation (engine/automation.h): starts of each kind so far, the current one
     // included, and the section before the current one.
     std::array<int, 5> section_occurrences{};
@@ -172,6 +176,9 @@ class LiveBeat {
     double flatness_slow_ = 0.0;   // The residual's flatness, averaged over about a second.
     double level_slow_ = 0.0;      // The residual's activity, averaged likewise.
     double flatness_floor_ = 1.0;  // Lowest flatness_slow_ since the breakdown began.
+    double groove_mean_ = -1.0;    // Mean level_slow_ in grooves and drops; negative: none yet.
+    long long energy_phrase_ = 0;  // The phrase the groove energy was judged in.
+    int energy_section_ = -1;      // The section count it was judged at.
     double last_update_s_ = -1.0;
     long long drop_end_beat_ = 0;
 };

@@ -19,6 +19,12 @@ std::vector<int> tagged(const std::vector<Scene> &scenes, const std::string &lab
 
 bool cuts_into(const std::string &label) { return label == "groove" || label == "drop"; }
 
+// Too short to change the scene for.
+bool held(const DetectedSection &section, double min_dwell_s) {
+    return section.label != "build" && section.label != "drop" &&
+           section.end_s - section.start_s < min_dwell_s;
+}
+
 int palette_index(const Scene &scene, int shift, size_t palette_count) {
     const auto n = static_cast<int>(palette_count);
     return ((scene.palette + shift) % n + n) % n;
@@ -45,14 +51,18 @@ int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, 
 }
 
 int scene_for_section(const std::vector<Scene> &scenes,
-                      const std::vector<DetectedSection> &sections, size_t index) {
+                      const std::vector<DetectedSection> &sections, size_t index,
+                      double min_dwell_s) {
     if (scenes.empty() || index >= sections.size()) {
         return 0;
+    }
+    while (index > 0 && held(sections[index], min_dwell_s)) {
+        --index;
     }
     const std::string &label = sections[index].label;
     size_t occurrence = 0;
     for (size_t j = 0; j < index; ++j) {
-        occurrence += sections[j].label == label;
+        occurrence += sections[j].label == label && !held(sections[j], min_dwell_s);
     }
     return scene_for_label(scenes, label, occurrence);
 }
@@ -66,6 +76,7 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
     const std::vector<DetectedSection> &sections =
         timeline != nullptr ? timeline->sections : analysis.sections;
     const double beat_s = grid.bpm > 0.0 ? 60.0 / grid.bpm : 0.5;
+    const double phrase_s = 4.0 * BeatTrackerParams{}.bars_per_phrase * beat_s;
 
     // Palette rotation by phrase.
     if (params.palette_every_phrases > 0 && inputs.phrase_index >= 0) {
@@ -94,11 +105,11 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         return mix;
     }
     const auto index = static_cast<size_t>(inputs.section_index);
-    mix.to = scene_for_section(scenes, sections, index);
+    mix.to = scene_for_section(scenes, sections, index, phrase_s);
     if (index == 0 || cuts_into(inputs.section)) {
         return mix;
     }
-    const int previous = scene_for_section(scenes, sections, index - 1);
+    const int previous = scene_for_section(scenes, sections, index - 1, phrase_s);
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
     if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
         mix.from = previous;

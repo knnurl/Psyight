@@ -416,6 +416,9 @@ void LiveBeat::reset() {
     flatness_slow_ = 0.0;
     level_slow_ = 0.0;
     flatness_floor_ = 1.0;
+    groove_mean_ = -1.0;
+    energy_phrase_ = 0;
+    energy_section_ = -1;
     last_update_s_ = -1.0;
     drop_end_beat_ = 0;
 }
@@ -568,6 +571,14 @@ void LiveBeat::update(LiveState &s, double t_s) {
             1.0 - std::exp(-(t_s - last_update_s_) / params_.build_flatness_smoothing_s);
         flatness_slow_ += alpha * (s.residual_flatness - flatness_slow_);
         level_slow_ += alpha * (s.residual_level - level_slow_);
+        if (s.section == LiveSection::groove || s.section == LiveSection::drop) {
+            groove_mean_ =
+                groove_mean_ < 0.0
+                    ? level_slow_
+                    : groove_mean_ +
+                          (1.0 - std::exp(-(t_s - last_update_s_) / params_.energy_memory_s)) *
+                              (level_slow_ - groove_mean_);
+        }
     }
     last_update_s_ = t_s;
     if (!s.tempo_known) {
@@ -593,6 +604,50 @@ void LiveBeat::update(LiveState &s, double t_s) {
     } else if (section == LiveSection::drop && now_beat >= static_cast<double>(drop_end_beat_)) {
         set_section(s, LiveSection::groove, time_of(s, drop_end_beat_));
     }
+
+    // The riser: 0 when a build starts (flatness build_flatness_ratio over its floor, or the
+    // level rule's rise), 1 at the ratio squared (twice the rise); it never falls in the build.
+    if (s.section == LiveSection::build) {
+        double level = 0.0;
+        if (flatness_floor_ > 0.0 && flatness_slow_ > 0.0 && params_.build_flatness_ratio > 1.0) {
+            level = std::log(flatness_slow_ / (flatness_floor_ * params_.build_flatness_ratio)) /
+                    std::log(params_.build_flatness_ratio);
+        }
+        if (params_.build_rise > 0.0) {
+            level = std::max(level, (level_slow_ - breakdown_floor_ - params_.build_rise) /
+                                        params_.build_rise);
+        }
+        s.riser = std::max(s.riser, std::clamp(level, 0.0, 1.0));
+    } else {
+        s.riser = 0.0;
+    }
+
+    // Energy: low in intros and breakdowns, mid in builds, high in drops; a groove is judged once
+    // a phrase (and when it starts) against the grooves' mean activity.
+    const long long phrase = static_cast<long long>(
+        std::floor((now_beat - static_cast<double>(s.phrase_beat)) / (4.0 * s.phrase_bars)));
+    switch (s.section) {
+    case LiveSection::intro:
+    case LiveSection::breakdown:
+        s.section_energy = 0;
+        break;
+    case LiveSection::build:
+        s.section_energy = 1;
+        break;
+    case LiveSection::drop:
+        s.section_energy = 2;
+        break;
+    case LiveSection::groove:
+        if (energy_section_ != s.section_count || phrase != energy_phrase_) {
+            const double above = groove_mean_ < 0.0 ? 0.0 : level_slow_ - groove_mean_;
+            s.section_energy = above >= params_.energy_step    ? 2
+                               : above <= -params_.energy_step ? 0
+                                                               : 1;
+        }
+        break;
+    }
+    energy_section_ = s.section_count;
+    energy_phrase_ = phrase;
 }
 
 } // namespace psyight

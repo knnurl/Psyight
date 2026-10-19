@@ -358,3 +358,41 @@ TEST_CASE("live beat: a run returning soon after a declared breakdown ends it") 
     CHECK(rig.state.section == LiveSection::groove);
     CHECK(rig.state.section_start_s == doctest::Approx(beat_s(32)).epsilon(1e-3));
 }
+
+TEST_CASE("live beat: the riser rises through a build, never falls, and ends with it; energy") {
+    const double period = 0.4;
+    const auto beat_s = [&](int b) { return 1.0 + b * period; };
+    BeatRig rig;
+    for (int b = 0; b < 32; ++b) {
+        rig.kick(beat_s(b));
+    }
+    REQUIRE(rig.state.locked);
+    CHECK(rig.state.section_energy == 1);
+    double last = 0.0;
+    bool rose = false;
+    for (int b = 32; b < 72; ++b) { // Ten bars without a kick; a riser over the last four.
+        rig.state.residual_flatness = b < 56 ? 0.01 : 0.01 + 0.3 * (b - 56) / 16.0;
+        rig.advance_to(beat_s(b + 1));
+        if (rig.state.section == LiveSection::groove) {
+            CHECK(b < 40); // The breakdown is declared after two bars.
+        } else if (rig.state.section == LiveSection::breakdown) {
+            CHECK(rig.state.riser == 0.0);
+            CHECK(rig.state.section_energy == 0);
+        } else {
+            REQUIRE(rig.state.section == LiveSection::build);
+            CHECK(rig.state.riser >= last);
+            CHECK(rig.state.section_energy == 1);
+            rose = rose || rig.state.riser > 0.5;
+            last = rig.state.riser;
+        }
+    }
+    CHECK(rose);
+    CHECK(inputs_at(rig.state, beat_s(72)).riser == doctest::Approx(rig.state.riser));
+    rig.state.residual_flatness = 0.01;
+    for (int b = 72; b < 80; ++b) {
+        rig.kick(beat_s(b));
+    }
+    CHECK(rig.state.section == LiveSection::drop);
+    CHECK(rig.state.riser == 0.0);
+    CHECK(rig.state.section_energy == 2);
+}

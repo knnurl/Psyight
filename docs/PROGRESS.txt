@@ -1,6 +1,6 @@
 # Psyight progress and handoff
 
-Last updated: 2026-10-18. Written so another agent can pick up without the original session.
+Last updated: 2026-10-19. Written so another agent can pick up without the original session.
 
 ## Read first
 - `CLAUDE.md` (process, conventions, commands), `docs/SPEC.md` (requirements; decision log in section 16).
@@ -27,8 +27,10 @@ Order, with status. Each batch: build, tests, capture check where visual, docs, 
 
 All eleven batches are done except 1 (the analysis cache), deferred by the owner.
 
-## Next (owner, 2026-10-18)
-- Plan in docs/PLAN_SECTIONS_EFFECTS.md: stable sections first (measure fragmentation, kick-state hysteresis, phrase-grid boundaries, energy levels, live dwell, automation on phrase boundaries), then more effects (spatial mapping, spread, triggers, trails; chase, wave, noise, particles, fire, spiral, bass bars, strobe accents; section choreography). Waiting for the owner's answers to its questions.
+## Next (owner, 2026-10-18; answers 2026-10-19)
+- Plan in docs/PLAN_SECTIONS_EFFECTS.md: stable sections first, then more effects (spatial mapping, spread, triggers, trails; chase, wave, noise, particles, fire, spiral, bass bars, strobe accents; section choreography). Owner's answers: they label the four reference tracks' sections with the editor (2026-10-19 or after); file and live together; energy levels yes, plus parts that follow the risers; no text effects, be creative.
+- Stable sections, part 1 (2026-10-19): done except tuning against the owner's section labels. `psyight_analyse --sections-report <audio or folder>` measures fragmentation; baseline and after are in the plan's "Results" section. Kick state by Viterbi (section.kick_switch_penalty), groove splits on 3 dB phrase-median steps (section.energy_step_db), build starts snapped to 4-bar lines, energy per section (DetectedSection::energy, LiveState::section_energy; a three-step meter on the section strip), the riser curve (TrackAnalysis::riser, SectionTimeline::riser, LiveState::riser; a line through builds on the strip), EngineInputs::section_energy and riser, ModSource::section_energy and riser ("Tension rise" now follows the riser), scenes hold through sections shorter than a phrase (file mode). Open: boundaries are mostly off the detected phrase grid (see the plan), live mode has no scene dwell yet, and the phrase-grid snapping of kick boundaries waits for the owner's labels.
+- Then part 2, more effects.
 - Node hardware: the owner will decide later between the F767 and a wired ESP32 running WLED (discussed 2026-10-18).
 
 ## Owner's labelling state (2026-10-16)

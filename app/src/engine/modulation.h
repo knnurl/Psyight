@@ -29,8 +29,10 @@ enum class ModSource {
     bar_phase,
     phrase_phase,
     section_progress,
-    kick,        // exp(-time since kick / 0.15 s).
-    bass_active, // 1 while a detected note sounds.
+    section_energy, // 0, 0.5 or 1 for low, mid and high.
+    riser,          // EngineInputs::riser.
+    kick,           // exp(-time since kick / 0.15 s).
+    bass_active,    // 1 while a detected note sounds.
     bass_velocity,
     bass_gate,
     bass_pitch, // C1 (24) to C4 (60).
@@ -54,15 +56,32 @@ enum class ModCurve { linear, exponential, logarithmic, s_curve };
 enum class ModTarget { opacity, hue_shift, brightness, setting };
 enum class ModQuantise { off, sixteenth, beat, bar }; // Sample-and-hold per grid division.
 
-inline constexpr std::array<ModSource, 24> kModSources = {
-    ModSource::constant,     ModSource::beat_phase,       ModSource::bar_phase,
-    ModSource::phrase_phase, ModSource::section_progress, ModSource::kick,
-    ModSource::bass_active,  ModSource::bass_velocity,    ModSource::bass_gate,
-    ModSource::bass_pitch,   ModSource::residual_level,   ModSource::residual_brightness,
-    ModSource::lfo_beat,     ModSource::lfo_bar,          ModSource::lfo_phrase,
-    ModSource::random_bar,   ModSource::macro_1,          ModSource::macro_2,
-    ModSource::macro_3,      ModSource::macro_4,          ModSource::macro_5,
-    ModSource::macro_6,      ModSource::macro_7,          ModSource::macro_8};
+inline constexpr std::array<ModSource, 26> kModSources = {ModSource::constant,
+                                                          ModSource::beat_phase,
+                                                          ModSource::bar_phase,
+                                                          ModSource::phrase_phase,
+                                                          ModSource::section_progress,
+                                                          ModSource::section_energy,
+                                                          ModSource::riser,
+                                                          ModSource::kick,
+                                                          ModSource::bass_active,
+                                                          ModSource::bass_velocity,
+                                                          ModSource::bass_gate,
+                                                          ModSource::bass_pitch,
+                                                          ModSource::residual_level,
+                                                          ModSource::residual_brightness,
+                                                          ModSource::lfo_beat,
+                                                          ModSource::lfo_bar,
+                                                          ModSource::lfo_phrase,
+                                                          ModSource::random_bar,
+                                                          ModSource::macro_1,
+                                                          ModSource::macro_2,
+                                                          ModSource::macro_3,
+                                                          ModSource::macro_4,
+                                                          ModSource::macro_5,
+                                                          ModSource::macro_6,
+                                                          ModSource::macro_7,
+                                                          ModSource::macro_8};
 inline constexpr std::array<ModQuantise, 4> kModQuantises = {
     ModQuantise::off, ModQuantise::sixteenth, ModQuantise::beat, ModQuantise::bar};
 inline constexpr double kMaxSmoothingS = 4.0; // Attack and release, at most.

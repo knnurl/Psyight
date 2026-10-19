@@ -42,6 +42,12 @@ double source_value(ModSource source, const EngineInputs &in, std::uint64_t seed
     case ModSource::section_progress:
         v = in.section_progress;
         break;
+    case ModSource::section_energy:
+        v = 0.5 * in.section_energy;
+        break;
+    case ModSource::riser:
+        v = in.riser;
+        break;
     case ModSource::kick:
         v = std::isfinite(in.since_kick_s) ? std::exp(-in.since_kick_s / kKickDecayS) : 0.0;
         break;
@@ -191,6 +197,10 @@ const char *mod_source_name(ModSource source) {
         return "Phrase phase";
     case ModSource::section_progress:
         return "Section progress";
+    case ModSource::section_energy:
+        return "Section energy";
+    case ModSource::riser:
+        return "Riser";
     case ModSource::kick:
         return "Kick";
     case ModSource::bass_active:
@@ -301,6 +311,10 @@ const char *mod_source_id(ModSource source) {
         return "phrase_phase";
     case ModSource::section_progress:
         return "section_progress";
+    case ModSource::section_energy:
+        return "section_energy";
+    case ModSource::riser:
+        return "riser";
     case ModSource::kick:
         return "kick";
     case ModSource::bass_active:

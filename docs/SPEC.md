@@ -225,13 +225,16 @@ When a slot is a rest, the residual features (non-bass content) drive the residu
 
 ### 6.6 Section detection
 
-Built per bar of the beat grid (`app/src/analysis/sections.*`); a bar has a kick when most of its beats do, one with exactly half takes its nearest decisive neighbour's state, and a lone kick bar inside a breakdown is a blip.
+Built per bar of the beat grid (`app/src/analysis/sections.*`). The kick state per bar comes from a two-state Viterbi: a bar costs the beats that disagree with its state and each change of state costs 6 beats (`section.kick_switch_penalty`). A breakdown inside the track therefore needs four kickless bars; dropouts of up to three bars (fills, missed kicks) stay in the groove, and stray kicks stay in the breakdown.
 - **Intro and outro:** the bars without kicks before the first and after the last kick bar.
 - **Breakdown:** no kick for 2 bars or more. One kickless bar is a fill: real tracks are full of them, so the SPEC's first default of 4 beats was too short.
 - **Build:** first from a riser: in a breakdown of 4 bars or more, the residual's spectral flatness (above 400 Hz) peaks within the last 8 bars at 2.5 times or more its lower quartile in the breakdown and at 0.03 or more. The build starts where flatness first passes the quartile times √2.5 on the way up and runs to the kick's return, so a pre-drop gap of up to 4 bars stays in it. Flatness that is high from the breakdown's first bar is texture, not a riser. Without a riser, the old rule: the high band (8 to 12 kHz) rises 6 dB or more above the breakdown's quietest bar. Live mode applies both rules causally to 1 s averages (the riser against the flatness floor since the breakdown began). `psyight_analyse --bars` prints what the rules see per bar.
 - **Drop:** **[Likely]** the kick returning after 8 or more bars without one is a reliable drop detector; the 8 bars after it are labelled drop.
-- **Groove:** every other bar with kicks.
-- Outputs carry a label, a confidence and a timestamp. Scene automation (section 7.6) consumes them.
+- **Groove:** every other bar with kicks. A groove splits on a phrase line where the median bar level of the phrase after differs from the phrase before by 3 dB or more (`section.energy_step_db`), each piece at least a phrase long: a groove that steps up gets its own section.
+- **Build snap:** a build start within a bar of a 4-bar line of the phrase grid moves onto it.
+- **Energy:** each section gets low, mid or high from its bars' mean level (all bands) against the terciles of the track's bar levels. Live mode: low in intros and breakdowns, mid in builds, high in drops; a groove is judged once a phrase against the grooves' mean residual activity (3 dB over: high, under: low).
+- **Riser curve:** 0 to 1 per frame. Through each build it follows the residual's flatness (1 s average) from the build's start to its peak, never falling, and holds to the build's end (a build without a flatness rise ramps linearly); 0 elsewhere. Live: 0 when the build is declared, 1 at the riser ratio squared, never falling within the build. It is an engine input and a modulation source ("some parts follow the risers").
+- Outputs carry a label, an energy, a confidence and a timestamp. Scene automation (section 7.6) consumes them. `psyight_analyse --sections-report <audio or folder>` measures fragmentation: sections per minute, median length, short sections, boundaries on the phrase grid and kick flips per minute.
 
 ### 6.7 Confidence and fallback
 
@@ -372,7 +375,7 @@ The two browser prototypes in `prototypes/` demonstrate shockwave plus conveyor,
 ### 7.4 Modulation matrix
 
 - A route is: **source**, then **transform**, then **target**, with an amount.
-- **Sources:** any feature (6.2), beat, bar or phrase-synced LFOs, MIDI CC, constants, random (seeded).
+- **Sources:** any feature (6.2), beat, bar or phrase-synced LFOs, MIDI CC, constants, random (seeded), section progress and energy, the riser curve (6.6).
 - **Transforms:** gain, offset, threshold, curve (linear, exponential, logarithmic, S-curve), attack and release smoothing, sample-and-hold, quantise to grid, invert, range map.
 - **Targets:** any registry parameter flagged as modulatable.
 - Multiple routes to one target are summed, then clamped to range.
@@ -394,7 +397,7 @@ The two browser prototypes in `prototypes/` demonstrate shockwave plus conveyor,
 
 - A scene is a layer stack, palette, modulation routes and a parameter snapshot, shown as a grid of scene cards like a clip launcher.
 - **Automation rules:**
-  - on a section change (breakdown to an ambient scene, build to a build scene, drop to a drop scene, chosen in rotation or at random among tagged scenes)
+  - on a section change (breakdown to an ambient scene, build to a build scene, drop to a drop scene, chosen in rotation or at random among tagged scenes); a section shorter than a phrase keeps the scene before it, unless it is a build or a drop (file mode)
   - on a phrase boundary (rotate palette every N phrases)
   - on the low-confidence policy (section 6.7)
 - Manual selection always overrides automation until released.
@@ -711,6 +714,7 @@ Initial metric targets are placeholders, marked **[Guessing]**. Replace them wit
 | 2026-10-18 | Builds from spectral flatness risers, with the high-band rule as the fallback; live builds read 1 s averages | Owner request: builds into drops caught better. Hall of Purity's 181 to 203 s build (hats entering mid-breakdown) becomes 195 to 203 s (the riser); live false builds on OculusDrift drop from 5 to 3. No section ground truth exists: the owner checks by ear |
 | 2026-10-18 | Restyle phase 4 layout: transport strip over the left column, rig preview pinned top right (foldable), show controls in their own Show tab. Show mode is React or Show (the app moves between them by itself when a scene is clicked, so tying it to Show alone would flip the layout mid-set): Show theme, editing panels hidden, the rig drawn large in their place | Owner's choice of layout; ease of live operation |
 | 2026-10-18 | Restyle phase 3: number fields drag (double-click to type), one undo step per drag; the universe fields stay typed and stepped because a drag would sweep live output across universes; Re-analyse gets no confirm because it never touches labels | Owner's restyle plan; reliability |
+| 2026-10-19 | Sections: kick state by a two-state Viterbi (switch penalty 6 beats) instead of the majority vote with the half-bar and lone-bar rules; grooves split on 3 dB phrase-median level steps; build starts snap to 4-bar lines within a bar; an energy level per section; a riser curve as an engine input and modulation source; scenes hold through sections shorter than a phrase (builds and drops aside) | Owner: stable sections (docs/PLAN_SECTIONS_EFFECTS.md part 1), energy levels, "some parts follow the risers". Measured with `--sections-report`: Hagios 6.79 to 2.36 sections a minute, Hall of Purity 5.45 to 2.39, OculusDrift 2.11 to 1.05 (its 197 to 234 s breakdown no longer alternates with 3 s grooves; a 2-bar break at 179 s is now inside the groove) |
 | 2026-10-18 | Operator preferences persist in psyight.settings.json (working directory): theme, interface depth, spectrogram colours and range, volume, bass roll toggles. Saved when they change; capture mode ignores the file | Owner: settings should persist |
 | 2026-10-18 | Restyle phase 2: magma spectrogram by default (inferno and viridis selectable; the CC0 tables compiled in); the bass roll's pitch background becomes a neutral ramp so accent-filled notes stand out (plasma's yellow top hid them); phase 4 layout: compact transport over the left column, rig preview pinned top right | Owner's restyle plan; the layout is the owner's choice of three |
 | 2026-10-17 | Node firmware: D-cache off (I-cache on) instead of DTCM placement; lwIP without an RTOS, UDP only; DHCP falling back after 10 s to a MAC-derived 2.x.y.z/8 address (or a fixed address with `dhcp 0`), not "static with DHCP fallback"; lanes mapped by global pixel index; config as text commands on UDP 6455 | Uncached RAM keeps every DMA buffer coherent with no MPU setup, and the node's load is far below the core's; a poll loop needs no locking; DHCP-first finds the node on any network while the fallback keeps it reachable without one; global pixel indices match the app's patch, which runs strips across universe boundaries; a text protocol needs no tool to configure |

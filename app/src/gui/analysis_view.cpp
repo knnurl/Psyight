@@ -136,11 +136,19 @@ void AnalysisView::draw() {
         draw_grid_lines(grid, limits.X.Min, limits.X.Max);
         // Sections: edited by hand (the labels) when they are, else the detection.
         const std::shared_ptr<const SectionTimeline> edited = session_.edited_sections();
-        if (edited != nullptr) {
-            draw_sections(edited->sections, edited->phrase_starts_s, limits.X.Min, limits.X.Max);
-        } else if (track.track_analysis != nullptr) {
-            draw_sections(track.track_analysis->sections, track.track_analysis->phrase_starts_s,
-                          limits.X.Min, limits.X.Max);
+        if (track.track_analysis != nullptr) {
+            const TrackAnalysis &ta = *track.track_analysis;
+            const double riser_frame_s = ta.mix_features.sample_rate_hz > 0
+                                             ? static_cast<double>(ta.mix_features.hop_samples) /
+                                                   ta.mix_features.sample_rate_hz
+                                             : 0.0;
+            if (edited != nullptr) {
+                draw_sections(edited->sections, edited->phrase_starts_s, limits.X.Min, limits.X.Max,
+                              edited->riser, riser_frame_s);
+            } else {
+                draw_sections(ta.sections, ta.phrase_starts_s, limits.X.Min, limits.X.Max, ta.riser,
+                              riser_frame_s);
+            }
         }
         draw_playhead(playhead_s);
         LabelEditor &labels = session_.labels();

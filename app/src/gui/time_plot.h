@@ -5,6 +5,7 @@
 #include "core/timebase.h"
 #include "gui/session.h"
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,10 +27,12 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s);
 
 void draw_playhead(double playhead_s);
 
-// Detected sections (SPEC 6.6) as a labelled, colour-coded strip along the top of the plot.
-// Phrase starts are marked as white ticks on the strip.
+// Detected sections (SPEC 6.6) as a labelled, colour-coded strip along the top of the plot, each
+// with a three-step energy meter at its right end. Phrase starts are marked as white ticks on
+// the strip; the riser curve (riser_frame_s apart, may be empty) rises through the builds.
 void draw_sections(const std::vector<DetectedSection> &sections,
-                   const std::vector<double> &phrase_starts_s, double from_s, double to_s);
+                   const std::vector<double> &phrase_starts_s, double from_s, double to_s,
+                   std::span<const float> riser = {}, double riser_frame_s = 0.0);
 
 // Shades the loop region when it is enabled and draws its edges: draggable with editable (ImPlot
 // drag tool ids first_drag_id and first_drag_id + 1), plain lines otherwise. Returns the edge

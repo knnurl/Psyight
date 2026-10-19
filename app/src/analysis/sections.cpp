@@ -1,6 +1,7 @@
 #include "analysis/sections.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace psyight {
@@ -46,6 +47,12 @@ int riser_start(const std::vector<SectionBar> &bars, int begin, int end, const S
     return start;
 }
 
+double median_of(std::vector<double> values) {
+    std::sort(values.begin(), values.end());
+    const size_t n = values.size();
+    return n == 0 ? 0.0 : n % 2 == 1 ? values[n / 2] : 0.5 * (values[n / 2 - 1] + values[n / 2]);
+}
+
 int band_index(const FrontEndResult &features, const char *name) {
     for (size_t b = 0; b < features.bands.size(); ++b) {
         if (features.bands[b].band.name == name) {
@@ -58,7 +65,8 @@ int band_index(const FrontEndResult &features, const char *name) {
 } // namespace
 
 Result<std::vector<SectionBar>> section_bars(const FrontEndResult &f, const BeatTrackResult &beats,
-                                             const ResidualFeatures *residual) {
+                                             const ResidualFeatures *residual,
+                                             const SectionParams &params) {
     const int hats = band_index(f, "hats");
     if (hats < 0) {
         return Error{"section detection needs the front-end band hats"};
@@ -93,6 +101,13 @@ Result<std::vector<SectionBar>> section_bars(const FrontEndResult &f, const Beat
             power += std::pow(10.0, f.bands[hats].energy_db[i] / 10.0);
         }
         bar.high_db = 10.0 * std::log10(power / (end - begin) + 1e-12);
+        double all = 0.0;
+        for (const BandTrack &band : f.bands) {
+            for (int i = begin; i < end; ++i) {
+                all += std::pow(10.0, band.energy_db[i] / 10.0);
+            }
+        }
+        bar.level_db = 10.0 * std::log10(all / (end - begin) + 1e-12);
         if (residual != nullptr) {
             const int last = std::min(end, static_cast<int>(residual->flatness.size()));
             int sounding = 0;
@@ -111,27 +126,31 @@ Result<std::vector<SectionBar>> section_bars(const FrontEndResult &f, const Beat
         out.push_back(bar);
     }
     const int bars = static_cast<int>(out.size());
-    // A bar with exactly half its beats kicked is ambiguous (a groove with misses, or a
-    // breakdown with stray detections): it takes the state of the nearest decisive bar. Then a
-    // single kick bar between kickless bars is a blip inside a breakdown.
-    for (int m = 0; m < bars; ++m) {
-        if (2 * out[m].kick_beats != kBeatsPerBar) {
-            continue;
-        }
-        for (int d = 1; d < bars; ++d) {
-            if (m - d >= 0 && 2 * out[m - d].kick_beats != kBeatsPerBar) {
-                kick[m] = kick[m - d];
-                break;
+    // The kick state, smoothed: a two-state Viterbi over the bars. A bar costs the beats that
+    // disagree with its state; a change of state costs kick_switch_penalty.
+    if (bars > 0) {
+        const double penalty = params.kick_switch_penalty;
+        std::vector<std::array<double, 2>> cost(static_cast<size_t>(bars));
+        std::vector<std::array<int, 2>> from(static_cast<size_t>(bars));
+        for (int m = 0; m < bars; ++m) {
+            const double with = kBeatsPerBar - out[m].kick_beats; // State 1: kick.
+            const double without = out[m].kick_beats;             // State 0: none.
+            for (int state = 0; state < 2; ++state) {
+                const double here = state == 1 ? with : without;
+                if (m == 0) {
+                    cost[0][state] = here;
+                    continue;
+                }
+                const double stay = cost[m - 1][state];
+                const double change = cost[m - 1][1 - state] + penalty;
+                from[m][state] = stay <= change ? state : 1 - state;
+                cost[m][state] = std::min(stay, change) + here;
             }
-            if (m + d < bars && 2 * out[m + d].kick_beats != kBeatsPerBar) {
-                kick[m] = kick[m + d];
-                break;
-            }
         }
-    }
-    for (int m = 1; m + 1 < bars; ++m) {
-        if (kick[m] && !kick[m - 1] && !kick[m + 1]) {
-            kick[m] = false;
+        int state = cost[bars - 1][1] < cost[bars - 1][0] ? 1 : 0;
+        for (int m = bars - 1; m >= 0; --m) {
+            kick[m] = state == 1;
+            state = m > 0 ? from[m][state] : state;
         }
     }
     for (int m = 0; m < bars; ++m) {
@@ -144,7 +163,7 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
                                                      const BeatTrackResult &beats,
                                                      const SectionParams &p,
                                                      const ResidualFeatures *residual) {
-    Result<std::vector<SectionBar>> found = section_bars(f, beats, residual);
+    Result<std::vector<SectionBar>> found = section_bars(f, beats, residual, p);
     if (!found) {
         return found.error();
     }
@@ -158,6 +177,9 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
     const double duration_s = f.frames * frame_s;
     const double bar_s = kBeatsPerBar * 60.0 / beats.bpm;
     const double first_downbeat_s = bar_list.front().start_s;
+    const int phrase_offset = beats.phrase_bar_offset;
+    const int phrase_bars =
+        std::max(1, static_cast<int>(std::lround(BeatTrackerParams{}.bars_per_phrase)));
     std::vector<bool> kick(bars);
     std::vector<int> kick_beats(bars);
     std::vector<double> high_db(bars);
@@ -195,15 +217,20 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
             label[k] = "breakdown";
             quietest = high_db[k] < high_db[quietest] ? k : quietest;
         }
-        if (const int riser = riser_start(bar_list, begin, end, p); riser >= 0) {
-            for (int k = riser; k < end; ++k) {
-                label[k] = "build";
-            }
-        } else if (high_db[end - 1] >= high_db[quietest] + p.build_min_rise_db) {
-            int build = end - 1;
+        int build = riser_start(bar_list, begin, end, p);
+        if (build < 0 && high_db[end - 1] >= high_db[quietest] + p.build_min_rise_db) {
+            build = end - 1;
             while (build - 1 > quietest &&
                    high_db[build - 1] >= high_db[quietest] + 0.5 * p.build_min_rise_db) {
                 --build;
+            }
+        }
+        if (build >= 0) {
+            // Onto the nearest 4-bar line when close, staying inside the breakdown.
+            const int line =
+                phrase_offset + 4 * static_cast<int>(std::lround((build - phrase_offset) / 4.0));
+            if (std::abs(line - build) <= p.build_snap_bars && line > begin && line < end) {
+                build = line;
             }
             for (int k = build; k < end; ++k) {
                 label[k] = "build";
@@ -220,11 +247,42 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
         }
     }
 
+    // A groove that steps up or down by energy_step_db between phrases splits there: the median
+    // level of the phrase before against the phrase after (a median, so a few bars of dropped
+    // kicks are no step), each piece at least a phrase long.
+    std::vector<bool> cut(bars, false);
+    for (int m = 0; m < bars;) {
+        int n = m;
+        while (n < bars && label[n] == label[m]) {
+            ++n;
+        }
+        if (label[m] == "groove") {
+            int last = m;
+            for (int b = m + 1; b < n; ++b) {
+                if ((b - phrase_offset) % phrase_bars != 0 || b - last < phrase_bars ||
+                    n - b < phrase_bars) {
+                    continue;
+                }
+                std::vector<double> before;
+                std::vector<double> after;
+                for (int k = 0; k < phrase_bars; ++k) {
+                    before.push_back(bar_list[b - 1 - k].level_db);
+                    after.push_back(bar_list[b + k].level_db);
+                }
+                if (std::fabs(median_of(after) - median_of(before)) >= p.energy_step_db) {
+                    cut[b] = true;
+                    last = b;
+                }
+            }
+        }
+        m = n;
+    }
+
     // Merge runs of equal labels.
     for (int m = 0; m < bars;) {
         int n = m;
         int agree = 0;
-        while (n < bars && label[n] == label[m]) {
+        while (n < bars && label[n] == label[m] && (n == m || !cut[n])) {
             agree += kick[n] ? kick_beats[n] : kBeatsPerBar - kick_beats[n];
             ++n;
         }
@@ -236,7 +294,84 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
         sections.push_back(section);
         m = n;
     }
+    assign_energy(sections, bar_list);
     return sections;
+}
+
+void assign_energy(std::vector<DetectedSection> &sections, const std::vector<SectionBar> &bars) {
+    if (bars.empty()) {
+        return;
+    }
+    std::vector<double> levels;
+    for (const SectionBar &bar : bars) {
+        levels.push_back(bar.level_db);
+    }
+    std::sort(levels.begin(), levels.end());
+    const double low = levels[levels.size() / 3];
+    const double high = levels[2 * levels.size() / 3];
+    for (DetectedSection &section : sections) {
+        double sum = 0.0;
+        int count = 0;
+        for (const SectionBar &bar : bars) {
+            if (bar.start_s >= section.start_s - 1e-6 && bar.start_s < section.end_s - 1e-6) {
+                sum += bar.level_db;
+                ++count;
+            }
+        }
+        if (count == 0) {
+            section.energy = 1;
+            continue;
+        }
+        const double level = sum / count;
+        section.energy = level < low ? 0 : level < high ? 1 : 2;
+    }
+}
+
+std::vector<float> riser_curve(const ResidualFeatures &residual,
+                               const std::vector<DetectedSection> &sections, double frame_s) {
+    const auto frames = static_cast<int>(residual.flatness.size());
+    std::vector<float> curve(static_cast<size_t>(frames), 0.0f);
+    if (frames == 0 || frame_s <= 0.0) {
+        return curve;
+    }
+    // Flatness over 1 s, centred (file mode).
+    const int half = std::max(1, static_cast<int>(std::lround(0.5 / frame_s)));
+    std::vector<double> prefix(static_cast<size_t>(frames) + 1, 0.0);
+    for (int i = 0; i < frames; ++i) {
+        prefix[i + 1] = prefix[i] + residual.flatness[i];
+    }
+    const auto smooth = [&](int i) {
+        const int a = std::max(0, i - half);
+        const int b = std::min(frames, i + half + 1);
+        return (prefix[b] - prefix[a]) / (b - a);
+    };
+    constexpr double kMinRise = 0.01; // Less flatness rise than this: a linear ramp instead.
+    for (const DetectedSection &section : sections) {
+        if (section.label != "build") {
+            continue;
+        }
+        const int begin =
+            std::clamp(static_cast<int>(std::lround(section.start_s / frame_s)), 0, frames);
+        const int end =
+            std::clamp(static_cast<int>(std::lround(section.end_s / frame_s)), begin, frames);
+        if (end <= begin) {
+            continue;
+        }
+        const double from = smooth(begin);
+        double peak = from;
+        for (int i = begin; i < end; ++i) {
+            peak = std::max(peak, smooth(i));
+        }
+        double held = 0.0;
+        for (int i = begin; i < end; ++i) {
+            const double linear = static_cast<double>(i - begin + 1) / (end - begin);
+            const double level =
+                peak - from >= kMinRise ? (smooth(i) - from) / (peak - from) : linear;
+            held = std::max(held, std::clamp(level, 0.0, 1.0));
+            curve[i] = static_cast<float>(held);
+        }
+    }
+    return curve;
 }
 
 std::vector<DetectedSection>
@@ -313,6 +448,9 @@ const ParamEntry kParamTable[] = {
     {&SectionParams::build_search_bars, "section.build_search_bars", "Riser search", "bars", 1.0, 32.0, ParamTier::engineer, "A riser peaks within this many bars before the kick's return."},
     {&SectionParams::drop_min_breakdown_bars, "section.drop_min_breakdown_bars", "Drop after", "bars", 1.0, 64.0, ParamTier::tune, "A breakdown at least this long ends in a drop (SPEC A9)."},
     {&SectionParams::drop_bars, "section.drop_bars", "Drop length", "bars", 1.0, 64.0, ParamTier::tune, "Bars after the kick's return labelled drop."},
+    {&SectionParams::kick_switch_penalty, "section.kick_switch_penalty", "Kick hysteresis", "beats", 0.0, 32.0, ParamTier::tune, "Beats of evidence a change between kick and no kick costs: higher keeps fills and dropouts inside the groove."},
+    {&SectionParams::energy_step_db, "section.energy_step_db", "Energy step", "dB", 0.5, 20.0, ParamTier::tune, "A level change between phrases that splits a groove into two sections."},
+    {&SectionParams::build_snap_bars, "section.build_snap_bars", "Build snap", "bars", 0.0, 2.0, ParamTier::engineer, "A build start this close to a 4-bar line moves onto it."},
 };
 // clang-format on
 
@@ -329,7 +467,8 @@ Result<void> declare_section_params(ParamRegistry &registry) {
         spec.default_value = kDefaults.*entry.member;
         const bool continuous = entry.member == &SectionParams::build_min_rise_db ||
                                 entry.member == &SectionParams::build_flatness_ratio ||
-                                entry.member == &SectionParams::build_min_flatness;
+                                entry.member == &SectionParams::build_min_flatness ||
+                                entry.member == &SectionParams::energy_step_db;
         spec.step = continuous ? 0.0 : 1.0;
         spec.tier = entry.tier;
         spec.description = entry.description;

@@ -51,6 +51,8 @@ struct EngineInputs {
     int section_index = -1;        // Into TrackAnalysis::sections; -1 outside them.
     double since_section_s = 0.0;  // Since the section started.
     double section_length_s = 0.0;
+    int section_energy = 1; // 0 low, 1 mid, 2 high.
+    double riser = 0.0;     // 0 to 1: how far the build's riser has risen; 0 outside builds.
     // Residual and hats.
     double residual_level = 0.0; // 0 to 1 (-90 to 0 dB).
     double residual_centroid_hz = 0.0;
@@ -67,13 +69,15 @@ struct EngineInputs {
 struct SectionTimeline {
     std::vector<DetectedSection> sections;
     std::vector<double> phrase_starts_s;
+    std::vector<float> riser; // For these sections' builds (riser_curve).
 };
 
 EngineInputs inputs_at(const TrackAnalysis &analysis, const Grid &grid, double t_s,
                        const SectionTimeline *timeline = nullptr);
 
-// The timeline for sections edited by hand: them, and the phrases restarting at each (phrases of
-// the default length from the analysis's phrase offset, on `grid`).
+// The timeline for sections edited by hand: them (with their energy from the analysis's bars),
+// the phrases restarting at each (phrases of the default length from the analysis's phrase
+// offset, on `grid`), and the riser curve through their builds.
 SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid,
                                  std::vector<DetectedSection> sections);
 

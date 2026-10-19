@@ -171,6 +171,14 @@ Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_
         return sections.error();
     }
     analysis.sections = std::move(sections.value());
+    if (Result<std::vector<SectionBar>> bars = section_bars(analysis.mix_features, analysis.beats,
+                                                            &analysis.residual, options.sections);
+        bars) {
+        analysis.section_bars = std::move(bars.value());
+    }
+    analysis.riser = riser_curve(analysis.residual, analysis.sections,
+                                 static_cast<double>(analysis.mix_features.hop_samples) /
+                                     analysis.mix_features.sample_rate_hz);
     analysis.phrase_starts_s =
         phrase_starts(analysis.grid, analysis.sections,
                       static_cast<int>(std::lround(options.beats.bars_per_phrase)),

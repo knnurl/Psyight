@@ -213,3 +213,26 @@ TEST_CASE("drop burst: a disc from the centre at the drop's start, then nothing"
     in.section = "groove";
     CHECK(lit_share(0.25) == 0.0);
 }
+
+TEST_CASE("automation: a section shorter than a phrase keeps the scene before it") {
+    const std::vector<Scene> scenes = default_scenes();
+    const std::vector<DetectedSection> sections = {
+        {0.0, 25.6, "groove", 1.0},  {25.6, 28.8, "breakdown", 1.0}, // A two-bar blip.
+        {28.8, 54.4, "groove", 1.0}, {54.4, 80.0, "breakdown", 1.0},
+        {80.0, 83.2, "build", 1.0},  {83.2, 86.4, "drop", 1.0}, // Short, but they change.
+        {86.4, 120.0, "groove", 1.0}};
+    // Without a dwell: groove, ambient, staccato. With one: the blip keeps the groove scene and
+    // does not count, so the next groove is the second groove scene.
+    CHECK(scene_for_section(scenes, sections, 1) == kAmbient);
+    CHECK(scene_for_section(scenes, sections, 1, kPhraseS) == kGroove);
+    CHECK(scene_for_section(scenes, sections, 2, kPhraseS) == kStaccato);
+    CHECK(scene_for_section(scenes, sections, 3, kPhraseS) == kAmbient); // The first breakdown.
+    CHECK(scene_for_section(scenes, sections, 4, kPhraseS) == kBuild);
+    CHECK(scene_for_section(scenes, sections, 5, kPhraseS) == kDrop);
+    // automate applies it: in the blip, the groove scene with no crossfade.
+    TrackAnalysis a = arrangement();
+    a.sections = sections;
+    const SceneMix mix = mix_at(scenes, a, 26.0);
+    CHECK(mix.to == kGroove);
+    CHECK(mix.from == -1);
+}

@@ -1,6 +1,7 @@
 // psyight_analyse: the file-mode analysis of a track without labels, as a report.
 //
 //   psyight_analyse [--kicks] [--tempo] [--bars] [--stems] <audio> [more audio...]
+//   psyight_analyse --sections-report <audio or folder> [more...]
 //
 // Runs the front end, the beat tracker and bass tracker v0 on the automatic grid, and prints
 // tempo, grid, downbeat and phrase (with confidences), kick coverage of the beats, and bass note
@@ -12,7 +13,12 @@
 // shows tempo changes (DJ mixes) and unstable estimates. --stems analyses the offline Demucs stems
 // (kicks and beats from drums, notes from bass) instead of the mix. --bars prints what the section
 // rules see per bar (kick state, hats level, the residual's flatness and centroid) with the
-// detected section, to check the breakdown, build and drop rules.
+// detected section, to check the breakdown, build and drop rules. --sections-report prints one
+// line per track (folders are searched for WAV, FLAC and MP3), analysed as the app would (stems
+// when they exist): sections per minute, median section length in bars, sections under 4 bars
+// (builds aside), the share of boundaries within half a bar of the 8-bar phrase grid, and kick
+// state flips per minute; then the medians over the tracks. It measures how fragmented the
+// section structure is, the problem docs/PLAN_SECTIONS_EFFECTS.md part 1 addresses.
 
 #include "analysis/bass_tracker.h"
 #include "analysis/beat_tracker.h"
@@ -24,6 +30,7 @@
 #include "core/paths.h"
 #include "core/pitch.h"
 #include "io/labels.h"
+#include "io/stems.h"
 
 #include <algorithm>
 #include <array>
@@ -31,8 +38,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cwchar>
+#include <cwctype>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -309,8 +318,10 @@ int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions 
     {
         std::printf("  sections:");
         for (const DetectedSection &section : a.sections) {
-            std::printf(" %s %.0f-%.0f s (%.2f);", section.label.c_str(), section.start_s,
-                        section.end_s, section.confidence);
+            static constexpr const char *kEnergy[] = {"low", "mid", "high"};
+            std::printf(" %s %.0f-%.0f s (%.2f, %s);", section.label.c_str(), section.start_s,
+                        section.end_s, section.confidence,
+                        kEnergy[std::clamp(section.energy, 0, 2)]);
         }
         std::printf("\n");
     }
@@ -346,10 +357,112 @@ int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions 
 
 } // namespace
 
+struct SectionStats {
+    double per_minute = 0.0;
+    double median_bars = 0.0;
+    int short_sections = 0;
+    double on_grid = 0.0; // Share of boundaries on the phrase grid.
+    double flips_per_minute = 0.0;
+};
+
+std::optional<SectionStats> section_report(const std::filesystem::path &path) {
+    TrackAnalysisOptions options;
+    options.source =
+        analysis_stems_exist(stem_paths_for(path)) ? AnalysisSource::stems : AnalysisSource::mix;
+    const Result<TrackAnalysis> analysis = analyse_track(path, options);
+    if (!analysis || analysis.value().beats.bpm <= 0.0) {
+        std::printf("%-60s  no tempo\n", path_to_utf8(path.filename()).substr(0, 60).c_str());
+        return std::nullopt;
+    }
+    const TrackAnalysis &a = analysis.value();
+    const double bar_s = 4.0 * 60.0 / a.grid.bpm;
+    const double first_s = samples_to_seconds(a.grid.first_downbeat, a.grid.sample_rate_hz);
+    const double minutes = a.duration_s / 60.0;
+    SectionStats s;
+    std::vector<double> lengths;
+    int boundaries = 0;
+    int on_grid = 0;
+    for (size_t i = 0; i < a.sections.size(); ++i) {
+        const DetectedSection &sec = a.sections[i];
+        const double bars = (sec.end_s - sec.start_s) / bar_s;
+        lengths.push_back(bars);
+        s.short_sections += bars < 3.5 && sec.label != "build";
+        if (i > 0) {
+            ++boundaries;
+            const double phrase_pos =
+                std::fmod((sec.start_s - first_s) / bar_s - a.beats.phrase_bar_offset, 8.0);
+            const double off =
+                std::min(std::fabs(phrase_pos), std::fabs(8.0 - std::fabs(phrase_pos)));
+            on_grid += off <= 0.5;
+        }
+    }
+    s.per_minute = a.sections.size() / std::max(1e-9, minutes);
+    s.median_bars = median(lengths);
+    s.on_grid = boundaries > 0 ? static_cast<double>(on_grid) / boundaries : 1.0;
+    if (const Result<std::vector<SectionBar>> bars =
+            section_bars(a.mix_features, a.beats, &a.residual);
+        bars) {
+        int flips = 0;
+        for (size_t m = 1; m < bars.value().size(); ++m) {
+            flips += bars.value()[m].kick != bars.value()[m - 1].kick;
+        }
+        s.flips_per_minute = flips / std::max(1e-9, minutes);
+    }
+    std::printf("%-60s  %5.2f/min  median %5.1f bars  short %2d  on grid %3.0f%%  flips %5.2f/min"
+                "  (%s)\n",
+                path_to_utf8(path.filename()).substr(0, 60).c_str(), s.per_minute, s.median_bars,
+                s.short_sections, 100.0 * s.on_grid, s.flips_per_minute,
+                options.source == AnalysisSource::stems ? "stems" : "mix");
+    std::fflush(stdout);
+    return s;
+}
+
+int sections_report(const std::vector<std::wstring> &paths) {
+    std::vector<std::filesystem::path> files;
+    for (const std::wstring &p : paths) {
+        const std::filesystem::path path(p);
+        if (std::filesystem::is_directory(path)) {
+            for (const auto &entry : std::filesystem::directory_iterator(path)) {
+                std::wstring ext = entry.path().extension().wstring();
+                for (wchar_t &c : ext) {
+                    c = static_cast<wchar_t>(std::towlower(c));
+                }
+                if (entry.is_regular_file() &&
+                    (ext == L".mp3" || ext == L".wav" || ext == L".flac")) {
+                    files.push_back(entry.path());
+                }
+            }
+        } else {
+            files.push_back(path);
+        }
+    }
+    std::sort(files.begin(), files.end());
+    std::vector<double> per_minute;
+    std::vector<double> median_bars;
+    std::vector<double> short_sections;
+    std::vector<double> on_grid;
+    std::vector<double> flips;
+    for (const std::filesystem::path &file : files) {
+        if (const std::optional<SectionStats> s = section_report(file); s) {
+            per_minute.push_back(s->per_minute);
+            median_bars.push_back(s->median_bars);
+            short_sections.push_back(s->short_sections);
+            on_grid.push_back(s->on_grid);
+            flips.push_back(s->flips_per_minute);
+        }
+    }
+    std::printf("\nMedians over %zu tracks: %.2f sections/min, median %.1f bars, %.0f short, "
+                "%.0f%% of boundaries on the phrase grid, %.2f kick flips/min\n",
+                per_minute.size(), median(per_minute), median(median_bars), median(short_sections),
+                100.0 * median(on_grid), median(flips));
+    return per_minute.empty() ? 1 : 0;
+}
+
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
     bool bar_table = false;
+    bool report = false;
     TrackAnalysisOptions options;
     std::vector<std::wstring> paths;
     for (int i = 1; i < argc; ++i) {
@@ -357,6 +470,8 @@ int wmain(int argc, wchar_t **argv) {
             kick_features = true;
         } else if (std::wcscmp(argv[i], L"--tempo") == 0) {
             local_tempo = true;
+        } else if (std::wcscmp(argv[i], L"--sections-report") == 0) {
+            report = true;
         } else if (std::wcscmp(argv[i], L"--bars") == 0) {
             bar_table = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
@@ -370,6 +485,9 @@ int wmain(int argc, wchar_t **argv) {
                      "usage: psyight_analyse [--kicks] [--tempo] [--bars] [--stems] <audio> [more "
                      "audio...]\n");
         return 2;
+    }
+    if (report) {
+        return sections_report(paths);
     }
     int status = 0;
     for (const std::wstring &path : paths) {

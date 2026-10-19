@@ -110,7 +110,32 @@ Built as a small engine plus parameters (the console lesson), not as many separa
 
 Each step: a unit test (determinism; known pixels at known times), a capture, a frame cost measurement (budget: the whole scene under 2 ms for 1,500 pixels).
 
-## Questions for the owner
+## Owner's answers (2026-10-19)
+1. Yes: the owner labels the four reference tracks' sections with the editor.
+2. File and live together.
+3. Energy levels: yes. Also: some parts should follow the risers (a riser level as an input, for modulation and effects).
+4. No text; be creative with the effects.
+
+## Results, part 1 (2026-10-19)
+Done: steps 0, 2 and 4, the build snap from step 3, the riser input (owner's answer 3), and the scene dwell from step 6 (file mode). `psyight_analyse --sections-report`, the four reference tracks (stems):
+
+| Track | Sections/min before | After | Median bars before | After | Short before | After | Kick flips/min before | After |
+|---|---|---|---|---|---|---|---|---|
+| Hagios | 6.79 | 2.36 | 4.0 | 8.0 | 31 | 2 | 5.53 | 1.73 |
+| Hall of Purity | 5.45 | 2.39 | 4.0 | 10.0 | 17 | 2 | 4.52 | 1.33 |
+| OculusDrift | 2.11 | 1.05 | 8.0 | 16.8 | 4 | 0 | 2.71 | 0.60 |
+| Phase Change | 0.41 | 0.55 | 7.8 | 9.0 | 1 | 1 | 1.10 | 0.27 |
+
+Over the four reference tracks plus Desktop\launch (109 tracks with a tempo; mix unless stems exist) before: medians 2.64 sections a minute, 6.0 bars, 5 short, 17% on the phrase grid, 2.68 kick flips a minute. After: in progress.
+
+OculusDrift changed, against the "unchanged" goal, but for the better on inspection: its 197 to 234 s breakdown no longer alternates with 3 s grooves; the one loss is a 2-bar break with a short riser at 179 s, now inside the groove. The owner's labels will say whether such short breaks matter.
+
+Not done yet:
+- Boundaries on the phrase grid: only 12 to 33% of boundaries sit within half a bar of the detected 8-bar phrase grid (chance for whole bars: 12.5%). The metric is harsher than it looks: on OculusDrift (phrase offset 6 bars, confidence 0.22) the drop (bar 150) and the groove after it (bar 158) are on the grid, the build starts on the 4-bar line before the drop (builds are naturally 4 bars), the intro ends at a half phrase (bar 10) and the breakdown starts at bar 123. Snapping to the grid now would move correct boundaries; check against the owner's labels first, and count 4-bar lines separately.
+- Live: no scene dwell yet (a live section's length is unknown when it starts); its energy and riser are done.
+- Novelty-curve candidates (Foote) and the boundary hit rate: after the labels.
+
+## Questions for the owner (answered above)
 1. Will you label the sections of the four reference tracks with the new editor? It gives the ground truth for step 3's tuning.
 2. Sections: file mode first and live after, or both together?
 3. Should sections get an energy level (low, mid, high) shown in the strip and usable by scenes?

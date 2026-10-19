@@ -23,6 +23,12 @@ SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid
     timeline.phrase_starts_s = phrase_starts(
         grid, sections, static_cast<int>(std::lround(BeatTrackerParams{}.bars_per_phrase)),
         analysis.beats.phrase_bar_offset, analysis.duration_s);
+    assign_energy(sections, analysis.section_bars);
+    if (analysis.mix_features.sample_rate_hz > 0) {
+        timeline.riser = riser_curve(analysis.residual, sections,
+                                     static_cast<double>(analysis.mix_features.hop_samples) /
+                                         analysis.mix_features.sample_rate_hz);
+    }
     timeline.sections = std::move(sections);
     return timeline;
 }
@@ -97,6 +103,7 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
             in.section_length_s = section.end_s - section.start_s;
             in.section_progress =
                 in.section_length_s > 0.0 ? in.since_section_s / in.section_length_s : 0.0;
+            in.section_energy = section.energy;
             break;
         }
     }
@@ -111,6 +118,10 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
         in.residual_level = std::clamp((r.energy_db[frame] + 90.0) / 90.0, 0.0, 1.0);
         in.residual_centroid_hz = r.centroid_hz[frame];
         in.residual_flatness = r.flatness[frame];
+        const std::vector<float> &riser = timeline != nullptr ? timeline->riser : a.riser;
+        if (frame < riser.size()) {
+            in.riser = riser[frame];
+        }
     }
     const long long hat = last_at_or_before(r.hats, t_s, [](const HatOnset &h) { return h.t_s; });
     in.hats_so_far = hat + 1;
@@ -178,6 +189,8 @@ EngineInputs inputs_at(const LiveState &s, double t_s) {
     in.section_length_s = s.tempo_known ? 4.0 * s.phrase_bars * s.period_s : 0.0;
     in.section_progress =
         in.section_length_s > 0.0 ? std::min(1.0, in.since_section_s / in.section_length_s) : 0.0;
+    in.section_energy = s.section_energy;
+    in.riser = s.riser;
 
     in.residual_level = std::clamp(s.residual_level, 0.0, 1.0);
     in.residual_centroid_hz = s.residual_centroid_hz;

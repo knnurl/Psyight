@@ -147,7 +147,7 @@ std::vector<ScenePreset> builtin_scene_presets() {
     { // Builds: rings speed up, sparkle thickens towards the drop.
         ScenePreset p{"Tension rise",
                       "Contracting rings that speed up through the build, "
-                      "sparkle thickening towards the drop.",
+                      "sparkle thickening as the riser rises.",
                       {},
                       palette_named("Ember")};
         p.scene.sections = {"build"};
@@ -156,9 +156,10 @@ std::vector<ScenePreset> builtin_scene_presets() {
             make_layer({BuildParams{0.4, 0.6, 4.0, 0.1, 0.8}}, BlendMode::add));
         p.scene.layers.push_back(make_layer({SparkleParams{0.04, 0.05}}, BlendMode::add, 0.2f));
         p.scene.routes.push_back(
-            route(ModSource::section_progress, ModTarget::opacity, 2, 0.8, ModCurve::exponential));
-        p.scene.routes.push_back(route(ModSource::section_progress, ModTarget::setting, 2, 0.4,
-                                       ModCurve::exponential, "density"));
+            route(ModSource::riser, ModTarget::opacity, 2, 0.8, ModCurve::exponential));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::setting, 2, 0.4, ModCurve::exponential, "density"));
+        p.scene.routes.push_back(route(ModSource::riser, ModTarget::brightness, 0, 0.5));
         looks.push_back(std::move(p));
     }
     { // Drops: the burst, then the groove at full energy.

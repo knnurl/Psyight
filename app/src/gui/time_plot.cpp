@@ -81,7 +81,8 @@ void draw_grid_lines(const Grid &grid, double from_s, double to_s) {
 }
 
 void draw_sections(const std::vector<DetectedSection> &sections,
-                   const std::vector<double> &phrase_starts_s, double from_s, double to_s) {
+                   const std::vector<double> &phrase_starts_s, double from_s, double to_s,
+                   std::span<const float> riser, double riser_frame_s) {
     ImDrawList *draw = ImPlot::GetPlotDrawList();
     const ImVec2 origin = ImPlot::GetPlotPos();
     const float height = ImGui::GetTextLineHeight() + 2.0f;
@@ -97,9 +98,44 @@ void draw_sections(const std::vector<DetectedSection> &sections,
         draw->AddLine(ImVec2(left, origin.y), ImVec2(left, origin.y + height),
                       to_u32(theme().section_boundary), 2.0f);
         const float text_left = std::max(left, origin.x) + 3.0f;
-        if (right - text_left > ImGui::CalcTextSize(section.label.c_str()).x + 3.0f) {
+        const float label_w = ImGui::CalcTextSize(section.label.c_str()).x;
+        if (right - text_left > label_w + 3.0f) {
             draw->AddText(ImVec2(text_left, origin.y + 1.0f), to_u32(theme().section_text),
                           section.label.c_str());
+        }
+        // Energy: three steps of rising height, lit up to the section's level.
+        constexpr float kStepW = 3.0f;
+        constexpr float kStepGap = 1.0f;
+        const float meter_w = 3.0f * kStepW + 2.0f * kStepGap;
+        if (right - text_left > label_w + meter_w + 12.0f) {
+            for (int k = 0; k < 3; ++k) {
+                const float x = right - 4.0f - meter_w + k * (kStepW + kStepGap);
+                const float h = (height - 6.0f) * (k + 1) / 3.0f;
+                const ImU32 colour = to_u32(theme().section_text);
+                const ImVec2 a(x, origin.y + height - 3.0f - h);
+                const ImVec2 b(x + kStepW, origin.y + height - 3.0f);
+                if (k <= section.energy) {
+                    draw->AddRectFilled(a, b, colour);
+                } else {
+                    draw->AddRect(a, b, colour);
+                }
+            }
+        }
+        // The riser through a build: a line from the strip's foot to its top.
+        if (section.label == "build" && !riser.empty() && riser_frame_s > 0.0) {
+            std::vector<ImVec2> points;
+            const float x0 = std::max(left, origin.x);
+            const float x1 = std::min(right, origin.x + ImPlot::GetPlotSize().x);
+            for (float x = x0; x <= x1; x += 2.0f) {
+                const double t_s = ImPlot::PixelsToPlot(ImVec2(x, origin.y)).x;
+                const auto frame = static_cast<size_t>(std::clamp(
+                    std::lround(t_s / riser_frame_s), 0L, static_cast<long>(riser.size()) - 1));
+                points.emplace_back(x, origin.y + height - 1.0f - (height - 2.0f) * riser[frame]);
+            }
+            if (points.size() >= 2) {
+                draw->AddPolyline(points.data(), static_cast<int>(points.size()),
+                                  to_u32(theme().section_text), ImDrawFlags_None, 1.5f);
+            }
         }
     }
     for (const double t_s : phrase_starts_s) {

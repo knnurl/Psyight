@@ -6,6 +6,8 @@
 // - Each section picks among the scenes tagged with its label, in rotation: the k-th groove gets
 //   the k-th groove scene modulo their count. A drop with no drop scene falls back to groove
 //   scenes; any other label with no scene falls back to the first scene.
+// - A section shorter than a phrase keeps the scene before it (it does not count in the
+//   rotation either), unless it is a build or a drop: a blip in the structure is no scene change.
 // - Entering a groove or drop cuts (sections start on downbeats, so the cut lands on one);
 //   entering anything else crossfades over crossfade_beats, at most half the section.
 // - The palette shifts by one every palette_every_phrases phrases (counted over the track),
@@ -80,9 +82,11 @@ struct SceneMix {
 // label in turn (a drop with no drop scene takes the groove scenes); scene 0 when none is tagged.
 int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence);
 
-// The scene for section `index` of the analysis (rotation among tagged scenes).
+// The scene for section `index` of the analysis (rotation among tagged scenes). Sections shorter
+// than min_dwell_s, builds and drops aside, keep the scene of the section before them.
 int scene_for_section(const std::vector<Scene> &scenes,
-                      const std::vector<DetectedSection> &sections, size_t index);
+                      const std::vector<DetectedSection> &sections, size_t index,
+                      double min_dwell_s = 0.0);
 
 // timeline: hand-edited sections in place of the analysis's (null: its own), as inputs_at.
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
