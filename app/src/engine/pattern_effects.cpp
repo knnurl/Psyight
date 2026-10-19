@@ -174,6 +174,13 @@ class Stutter final : public Effect {
         case 1: // The bassline's gate.
             open = in.bass_active ? 1.0 : std::exp(-in.since_bass_offset_s / release_s);
             break;
+        case 3: // Dark for the build's last gap_beats.
+            if (in.section == "build" && in.section_length_s > 0.0) {
+                const double into =
+                    in.since_section_s - (in.section_length_s - p_.gap_beats * beat_s);
+                open = into < 0.0 ? 1.0 : std::exp(-into / release_s);
+            }
+            break;
         default: // Duck after each kick, reopening over duty of a beat.
             if (std::isfinite(in.since_kick_s)) {
                 const double t = std::clamp(in.since_kick_s / (p_.duty * beat_s), 0.0, 1.0);

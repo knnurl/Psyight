@@ -144,6 +144,7 @@ struct LiveState {
     bool has_previous = false;
     LiveSection previous_section = LiveSection::intro;
     int previous_occurrence = 0;
+    int previous_energy = 1;
 };
 
 // The beat, downbeat, phrase and section half of the live analysis, driven by kick times: the

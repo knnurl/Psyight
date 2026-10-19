@@ -6,6 +6,9 @@
 // - Each section picks among the scenes tagged with its label, in rotation: the k-th groove gets
 //   the k-th groove scene modulo their count. A drop with no drop scene falls back to groove
 //   scenes; any other label with no scene falls back to the first scene.
+// - Scenes may also be tagged with an energy, "low", "mid" or "high": among the scenes for a
+//   label, a section picks those tagged with its energy, else those with no energy tag, else any
+//   (a groove that steps up gets its high-energy look).
 // - A section shorter than a phrase keeps the scene before it (it does not count in the
 //   rotation either), unless it is a build or a drop: a blip in the structure is no scene change.
 // - Entering a groove or drop cuts (sections start on downbeats, so the cut lands on one);
@@ -78,9 +81,14 @@ struct SceneMix {
     double palette_weight = 1.0; // 1: palette_shift alone.
 };
 
+// Energy tags, by DetectedSection::energy (0 low, 1 mid, 2 high).
+inline constexpr std::array<const char *, 3> kEnergyTags = {"low", "mid", "high"};
+
 // The scene for the occurrence-th section (from 0) with this label: the scenes tagged with the
-// label in turn (a drop with no drop scene takes the groove scenes); scene 0 when none is tagged.
-int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence);
+// label in turn (a drop with no drop scene takes the groove scenes), narrowed by energy (0 to 2;
+// -1 ignores it) as above; scene 0 when none is tagged.
+int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence,
+                    int energy = -1);
 
 // The scene for section `index` of the analysis (rotation among tagged scenes). Sections shorter
 // than min_dwell_s, builds and drops aside, keep the scene of the section before them.

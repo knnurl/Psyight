@@ -216,6 +216,253 @@ std::vector<ScenePreset> builtin_scene_presets() {
         p.scene.routes.push_back(fade);
         looks.push_back(std::move(p));
     }
+    // The pattern effects (engine/pattern_effects.cpp), with energy tags for the show packs below.
+    { // Grooves, mid energy: a scanner sweeping the rig each two bars over the conveyor.
+        ScenePreset p{"Scanner",
+                      "A comet sweeping across the rig and back every two bars, over the bass "
+                      "conveyor and kick rings.",
+                      {},
+                      palette_named("UV violet")};
+        p.scene.sections = {"groove", "mid"};
+        ChaseParams scan;
+        scan.mapping = 1; // Across x.
+        scan.clock = 3;   // Bar.
+        scan.rate = 0.5;
+        scan.count = 1;
+        scan.tail = 0.35;
+        scan.bounce = 1;
+        p.scene.layers.push_back(make_layer({PlasmaParams{0.05, 1.6, 0.1, 0.3}}, BlendMode::alpha));
+        p.scene.layers.push_back(make_layer({scan}, BlendMode::add, 0.8f));
+        p.scene.layers.push_back(make_layer({ConveyorParams{}}, BlendMode::add, 0.7f));
+        p.scene.layers.push_back(make_layer({ShockwaveParams{}}, BlendMode::screen));
+        looks.push_back(std::move(p));
+    }
+    { // Grooves, high energy: comets stepping with every bass note, sparks on kicks.
+        ScenePreset p{"Comet rain",
+                      "Four comets stepping along every strip with each bass note, kick bursts "
+                      "breaking into sparks, gated on the 16ths.",
+                      {},
+                      palette_named("Magenta storm")};
+        p.scene.sections = {"groove", "drop", "high"};
+        ChaseParams comets;
+        comets.clock = 5; // Bass note.
+        comets.rate = 1.0 / 16.0;
+        comets.count = 4;
+        comets.tail = 0.12;
+        BurstsParams sparks;
+        sparks.sparks = 0.5;
+        sparks.keep = 2;
+        StutterParams gate;
+        gate.duty = 0.6;
+        gate.depth = 0.5;
+        p.scene.layers.push_back(make_layer({comets}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({sparks}, BlendMode::screen, 0.8f));
+        p.scene.layers.push_back(make_layer({gate}, BlendMode::multiply));
+        p.scene.routes.push_back(route(ModSource::random_bar, ModTarget::hue_shift, 0, 90.0,
+                                       ModCurve::linear, "", ModQuantise::bar));
+        looks.push_back(std::move(p));
+    }
+    { // Grooves, high energy: a ring from the centre on every kick, the rest ducking.
+        ScenePreset p{"Kick pulse",
+                      "A ring rolling out from the centre on every beat; the plasma ducks "
+                      "after each kick like a sidechain.",
+                      {},
+                      palette_named("Ice")};
+        p.scene.sections = {"groove", "high"};
+        WaveParams rings;
+        rings.mapping = 3; // Radial.
+        rings.clock = 2;   // Beat: one ring out from the centre per beat (kick).
+        rings.rate = 1.0;
+        rings.shape = 4; // Bump.
+        rings.width = 0.25;
+        rings.level = 1.0;
+        StutterParams duck;
+        duck.mode = 2;
+        duck.duty = 0.6;
+        duck.depth = 0.8;
+        p.scene.layers.push_back(make_layer({PlasmaParams{0.1, 1.0, 0.35, 0.5}}, BlendMode::alpha));
+        p.scene.layers.push_back(make_layer({duck}, BlendMode::multiply));
+        p.scene.layers.push_back(make_layer({rings}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({ConveyorParams{}}, BlendMode::add, 0.5f));
+        looks.push_back(std::move(p));
+    }
+    { // Grooves: the bassline drawn as a pitch meter across the rig.
+        ScenePreset p{"Pitch meter",
+                      "The bassline as a bar across the rig, its length the note's pitch, over "
+                      "a slow wave; kick rings on top.",
+                      {},
+                      palette_named("Aurora")};
+        p.scene.sections = {"groove"};
+        BassBarsParams meter;
+        meter.mode = 1; // Bar.
+        meter.colours = 1;
+        WaveParams swell;
+        swell.mapping = 2; // Across y.
+        swell.clock = 4;   // Phrase.
+        swell.level = 0.25;
+        p.scene.layers.push_back(make_layer({swell}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({meter}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({ShockwaveParams{}}, BlendMode::screen, 0.6f));
+        looks.push_back(std::move(p));
+    }
+    { // Grooves, high energy: an acid line chopped by the bassline's own gate.
+        ScenePreset p{"Acid gate",
+                      "Ramps racing along the strips on the 16ths, opened and closed by the "
+                      "bassline's gate; hue follows the acid's brightness.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "high"};
+        WaveParams ramps;
+        ramps.mapping = 0;
+        ramps.wings = 2;
+        ramps.clock = 1; // 16th.
+        ramps.rate = 0.25;
+        ramps.shape = 2; // Ramp.
+        ramps.spread = 3.0;
+        ramps.level = 0.9;
+        StutterParams gate;
+        gate.mode = 1;
+        gate.release_s = 0.03;
+        p.scene.layers.push_back(make_layer({ramps}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({gate}, BlendMode::multiply));
+        p.scene.layers.push_back(make_layer({ShockwaveParams{}}, BlendMode::screen, 0.7f));
+        p.scene.routes.push_back(route(ModSource::residual_brightness, ModTarget::hue_shift, 0,
+                                       90.0, ModCurve::linear, "", ModQuantise::off, 0.05, 0.3));
+        looks.push_back(std::move(p));
+    }
+    { // Grooves, low energy: dim noise with the conveyor, for dark rooms.
+        ScenePreset p{"Forest floor",
+                      "Dim drifting noise in greens and teals with the bass conveyor and faint "
+                      "kick rings.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "low", "mid"};
+        NoiseParams moss;
+        moss.scale_m = 0.5;
+        moss.speed_hz = 0.15;
+        moss.level = 0.3;
+        p.scene.layers.push_back(make_layer({moss}, BlendMode::alpha));
+        p.scene.layers.push_back(make_layer({ConveyorParams{}}, BlendMode::add, 0.6f));
+        p.scene.layers.push_back(make_layer({ShockwaveParams{}}, BlendMode::screen, 0.35f));
+        looks.push_back(std::move(p));
+    }
+    { // Breakdowns: a slow nebula whose colour follows the pads.
+        ScenePreset p{"Nebula",
+                      "A slow noise nebula shifting colour with the pads' brightness, shimmer in "
+                      "the rests, hats as small fireworks.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"breakdown", "low"};
+        NoiseParams nebula;
+        nebula.scale_m = 1.2;
+        nebula.speed_hz = 0.06;
+        nebula.contrast = 2.0;
+        nebula.level = 0.55;
+        nebula.brightness_colour = 0.6;
+        BurstsParams fireworks;
+        fireworks.trigger = 1; // Hats.
+        fireworks.sparks = 0.7;
+        fireworks.width_m = 0.1;
+        fireworks.decay_s = 0.2;
+        fireworks.level = 0.5;
+        p.scene.layers.push_back(make_layer({nebula}, BlendMode::alpha));
+        p.scene.layers.push_back(make_layer({ShimmerParams{}}, BlendMode::add, 0.5f));
+        p.scene.layers.push_back(make_layer({fireworks}, BlendMode::screen));
+        p.scene.routes.push_back(
+            route(ModSource::lfo_phrase, ModTarget::hue_shift, 0, 45.0, ModCurve::s_curve));
+        looks.push_back(std::move(p));
+    }
+    { // Intros and outros: almost dark, one slow arm turning.
+        ScenePreset p{"Deep space",
+                      "Almost dark: one slow spiral arm turning once a phrase over faint noise.",
+                      {},
+                      palette_named("Mono violet")};
+        p.scene.sections = {"intro", "outro"};
+        SpiralParams arm;
+        arm.arms = 1;
+        arm.clock = 4; // Phrase.
+        arm.rate = 1.0;
+        arm.width = 0.25;
+        arm.level = 0.5;
+        NoiseParams dust;
+        dust.level = 0.15;
+        dust.speed_hz = 0.05;
+        p.scene.layers.push_back(make_layer({dust}, BlendMode::alpha));
+        p.scene.layers.push_back(make_layer({arm}, BlendMode::add));
+        looks.push_back(std::move(p));
+    }
+    { // Builds: fire climbing with the riser, dark for the last beat.
+        ScenePreset p{"Fire riser",
+                      "Flames climbing with the riser and a spiral spinning up through the "
+                      "build; dark for the last beat, so the drop lands out of nothing.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        FireParams flames;
+        flames.height = 0.35;
+        flames.riser_boost = 1.8;
+        SpiralParams spin;
+        spin.arms = 2;
+        spin.rate = 0.25;
+        spin.level = 0.5;
+        StutterParams gap;
+        gap.mode = 3; // Pre-drop gap.
+        p.scene.layers.push_back(make_layer({flames}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({spin}, BlendMode::add, 0.3f));
+        p.scene.layers.push_back(make_layer({gap}, BlendMode::multiply));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::setting, 1, 0.2, ModCurve::exponential, "rate"));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::opacity, 1, 0.6, ModCurve::exponential));
+        looks.push_back(std::move(p));
+    }
+    { // Builds: a 16th strobe roll into the drop over a tightening spiral.
+        ScenePreset p{"Strobe roll",
+                      "A spiral tightening with the riser, then a 16th strobe roll in the "
+                      "palette's colours over the build's last beat.",
+                      {},
+                      palette_named("Sunset")};
+        p.scene.sections = {"build"};
+        SpiralParams spin;
+        spin.arms = 4;
+        spin.twist = 2.0;
+        spin.level = 0.6;
+        StrobeParams roll;
+        roll.trigger = 1; // Build end.
+        roll.flashes = 4;
+        roll.colour = 1; // Palette: white stays for the drop.
+        roll.level = 0.8;
+        p.scene.layers.push_back(make_layer({spin}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({roll}, BlendMode::screen));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::setting, 0, 0.3, ModCurve::exponential, "rate"));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::setting, 0, 0.2, ModCurve::linear, "twist"));
+        looks.push_back(std::move(p));
+    }
+    { // Drops: white flashes, the burst, fireworks on every kick.
+        ScenePreset p{"Drop bloom",
+                      "Two white flashes and the burst as the drop lands, then fireworks on "
+                      "every kick over 16th waves.",
+                      {},
+                      palette_named("Magenta storm")};
+        p.scene.sections = {"drop"};
+        WaveParams waves;
+        waves.mapping = 3; // Radial.
+        waves.clock = 1;   // 16th.
+        waves.rate = 0.25;
+        waves.shape = 3; // Square.
+        waves.spread = 2.0;
+        waves.level = 0.4;
+        BurstsParams fireworks;
+        fireworks.keep = 3;
+        fireworks.sparks = 0.4;
+        p.scene.layers.push_back(make_layer({waves}, BlendMode::add));
+        p.scene.layers.push_back(make_layer({fireworks}, BlendMode::screen));
+        p.scene.layers.push_back(make_layer({DropBurstParams{}}, BlendMode::screen));
+        p.scene.layers.push_back(make_layer({StrobeParams{}}, BlendMode::screen));
+        looks.push_back(std::move(p));
+    }
     for (ScenePreset &p : looks) {
         p.scene.name = p.name;
         p.scene.palette = 0;
@@ -261,6 +508,29 @@ std::vector<ShowPack> builtin_show_packs() {
     live.automation.palette_every_phrases = 0; // The performer picks colours by hand.
     live.macro_names = {"Ambience", "Hue spin", "Density", "Shimmer", "Drift", "Fade out", "", ""};
     packs.push_back(std::move(live));
+
+    // Choreographed packs: a scene for every section, grooves by energy, builds that go dark
+    // before the drop.
+    ShowPack club = pack_of(
+        "Psy club",
+        "A full arc for a club: scanner grooves stepping up to comet rain and kick pulses at high "
+        "energy, a nebula in breakdowns, fire climbing with the riser, a blooming drop.",
+        {find(looks, "Scanner"), find(looks, "Comet rain"), find(looks, "Kick pulse"),
+         find(looks, "Nebula"), find(looks, "Fire riser"), find(looks, "Drop bloom"),
+         find(looks, "Deep space")});
+    club.automation.palette_every_phrases = 2;
+    packs.push_back(std::move(club));
+
+    ShowPack forest = pack_of(
+        "Dark forest",
+        "Darker and organic: forest-floor noise and the pitch meter, acid gates when the energy "
+        "rises, strobe rolls into the drops; the palette moves every 4 phrases.",
+        {find(looks, "Forest floor"), find(looks, "Pitch meter"), find(looks, "Acid gate"),
+         find(looks, "Nebula"), find(looks, "Strobe roll"), find(looks, "Drop impact"),
+         find(looks, "Deep space")});
+    forest.automation.palette_every_phrases = 4;
+    forest.automation.crossfade_beats = 8.0;
+    packs.push_back(std::move(forest));
     return packs;
 }
 

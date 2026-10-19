@@ -27,7 +27,8 @@
 // - strobe: full-field flashes on a trigger (the drop's start, a build's last beat, kicks, beats
 //   or bars), rolling on 16ths for `flashes`; white or palette. The flash limiter still applies;
 // - stutter: a gate for the layers below (multiply blend): open and closed on the 16th, 8th or
-//   beat grid, with the bassline's gate, or ducking after each kick like a sidechain;
+//   beat grid, with the bassline's gate, ducking after each kick like a sidechain, or dark for
+//   a build's last gap_beats so the drop lands out of darkness;
 // - noise: a drifting smooth noise field across the rig (ambient, breakdowns), coloured from the
 //   palette and shifted by the residual's brightness;
 // - fire: flames rising from the base of the mapping, flickering with noise; they reach higher
@@ -150,11 +151,12 @@ struct StrobeParams {
 };
 
 struct StutterParams {
-    int mode = 0;      // Grid, bass gate, kick duck.
+    int mode = 0;      // Grid, bass gate, kick duck, pre-drop gap.
     int division = 0;  // 16th, 8th, beat (grid mode).
     double duty = 0.5; // Grid: share open; kick duck: share of a beat to reopen.
     double depth = 1.0;
     double release_s = 0.02; // Closing fade.
+    double gap_beats = 1.0;  // Pre-drop gap: dark for the build's last beats.
 };
 
 struct NoiseParams {

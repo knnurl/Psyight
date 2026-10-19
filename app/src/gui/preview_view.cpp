@@ -852,6 +852,24 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes, const ShowFrame 
             scene_edited_ = true;
         }
     }
+    // Energy tags: preferred for sections of that energy (none: any energy).
+    ImGui::TextUnformatted("Energy");
+    for (const char *label : kEnergyTags) {
+        ImGui::SameLine();
+        auto it = std::find(scene.sections.begin(), scene.sections.end(), label);
+        bool tagged = it != scene.sections.end();
+        if (ImGui::Checkbox((std::string(label) + "##energy").c_str(), &tagged)) {
+            if (tagged) {
+                scene.sections.emplace_back(label);
+            } else {
+                scene.sections.erase(it);
+            }
+            scene_edited_ = true;
+        }
+        ImGui::SetItemTooltip("Preferred for %s-energy sections; with no energy ticked, the scene "
+                              "suits any energy.",
+                              label);
+    }
 
     draw_rack(scene, frame);
     draw_routes(scene, frame);

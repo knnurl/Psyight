@@ -198,9 +198,10 @@ template <> const std::vector<Field<StrobeParams>> &fields<StrobeParams>() {
 template <> const std::vector<Field<StutterParams>> &fields<StutterParams>() {
     using P = StutterParams;
     static const std::vector<Field<P>> f = {
-        {{"mode", "Mode", "", 0.0, 2.0, true,
-          "Open and close on the grid, with the bassline's gate, or duck after each kick",
-          "Grid|Bass gate|Kick duck"},
+        {{"mode", "Mode", "", 0.0, 3.0, true,
+          "Open and close on the grid, with the bassline's gate, duck after each kick, or go dark "
+          "before the drop",
+          "Grid|Bass gate|Kick duck|Pre-drop gap"},
          nullptr,
          &P::mode},
         {{"division", "Grid", "", 0.0, 2.0, true, "Grid division", "16th|8th|Beat"},
@@ -211,6 +212,9 @@ template <> const std::vector<Field<StutterParams>> &fields<StutterParams>() {
          &P::duty},
         {{"depth", "Depth", "", 0.0, 1.0, false, "How far the gate closes"}, &P::depth},
         {{"release_s", "Release", "s", 0.0, 0.2, false, "Closing fade"}, &P::release_s},
+        {{"gap_beats", "Gap", "beats", 0.25, 8.0, false,
+          "Pre-drop gap: dark for the build's last beats"},
+         &P::gap_beats},
     };
     return f;
 }

@@ -281,6 +281,17 @@ TEST_CASE("stutter: gates on the 16th grid, with the bass gate, and ducks after 
     CHECK(level(render(*make_stutter(duck), rig, in)[0]) == 0.0f);
     in.since_kick_s = 0.3; // Past half a beat: open again.
     CHECK(level(render(*make_stutter(duck), rig, in)[0]) == doctest::Approx(1.0f));
+    StutterParams gap;
+    gap.mode = 3; // Pre-drop gap: the build's last beat.
+    gap.release_s = 0.005;
+    in.section = "build";
+    in.section_length_s = 10.0;
+    in.since_section_s = 9.5;
+    CHECK(level(render(*make_stutter(gap), rig, in)[0]) == doctest::Approx(1.0f));
+    in.since_section_s = 9.7;
+    CHECK(level(render(*make_stutter(gap), rig, in)[0]) < 0.01f);
+    in.section = "drop";
+    CHECK(level(render(*make_stutter(gap), rig, in)[0]) == doctest::Approx(1.0f));
 }
 
 TEST_CASE("noise: a varied field that drifts smoothly") {

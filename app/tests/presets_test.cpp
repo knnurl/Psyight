@@ -174,3 +174,25 @@ TEST_CASE("presets: the user's presets are files beside the project") {
     CHECK(user.errors[0].find("broken.json") != std::string::npos);
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("presets: the choreographed packs cover every section, grooves by energy") {
+    for (const char *name : {"Psy club", "Dark forest"}) {
+        CAPTURE(name);
+        const std::vector<ShowPack> packs = builtin_show_packs();
+        const auto pack = std::find_if(packs.begin(), packs.end(),
+                                       [&](const ShowPack &p) { return p.name == name; });
+        REQUIRE(pack != packs.end());
+        for (const char *label : {"intro", "groove", "breakdown", "build", "drop", "outro"}) {
+            CAPTURE(label);
+            bool covered = false;
+            for (const Scene &s : pack->scenes) {
+                covered |=
+                    std::find(s.sections.begin(), s.sections.end(), label) != s.sections.end();
+            }
+            CHECK(covered);
+        }
+        // A high-energy groove and a low or mid one get different scenes.
+        CHECK(scene_for_label(pack->scenes, "groove", 0, 2) !=
+              scene_for_label(pack->scenes, "groove", 0, 0));
+    }
+}

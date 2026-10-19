@@ -135,6 +135,18 @@ Not done yet:
 - Live: no scene dwell yet (a live section's length is unknown when it starts); its energy and riser are done.
 - Novelty-curve candidates (Foote) and the boundary hit rate: after the labels.
 
+## Results, part 2 (2026-10-19)
+Done, in the plan's order:
+1. Infrastructure: `engine/space.*` (pixel mappings, wings, clocks free or locked to the 16th, beat, bar, phrase, bass note or kick; value noise). Named integer settings show as stepped knobs.
+2. Chase (comets, scanner) and wave.
+3. Strobe accents (drop, build end, kick, beat, bar; 16th rolls) and the stutter gate (grid, bass gate, kick duck, pre-drop gap).
+4. Noise and fire (fire climbs with the riser).
+5. Bursts (particles and fireworks: rings from seeded pixels, sparks), spiral, bass bars.
+6. Choreography: energy tags on scenes, the pre-drop gap, riser-driven builds.
+7. Presets: 11 new scene presets; show packs Psy club and Dark forest.
+
+Every effect has unit tests (known pixels at known times, determinism). Frame cost on 1,500 pixels, Release: at most 0.11 ms (noise). Not done: trails as a post-effect (it needs per-layer frame memory, cleared on a seek, like the modulation memory; a decision on whether recordings must replay it exactly).
+
 ## Questions for the owner (answered above)
 1. Will you label the sections of the four reference tracks with the new editor? It gives the ground truth for step 3's tuning.
 2. Sections: file mode first and live after, or both together?

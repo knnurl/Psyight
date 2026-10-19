@@ -236,3 +236,30 @@ TEST_CASE("automation: a section shorter than a phrase keeps the scene before it
     CHECK(mix.to == kGroove);
     CHECK(mix.from == -1);
 }
+
+TEST_CASE("automation: energy tags pick a section's scene by its energy") {
+    std::vector<Scene> scenes(4);
+    scenes[0].sections = {"groove"};
+    scenes[1].sections = {"groove", "high"};
+    scenes[2].sections = {"groove", "low"};
+    scenes[3].sections = {"breakdown"};
+    CHECK(scene_for_label(scenes, "groove", 0, 2) == 1);
+    CHECK(scene_for_label(scenes, "groove", 5, 2) == 1); // The only high one, in any rotation.
+    CHECK(scene_for_label(scenes, "groove", 0, 0) == 2);
+    CHECK(scene_for_label(scenes, "groove", 0, 1) == 0);    // No mid scene: the untagged one.
+    CHECK(scene_for_label(scenes, "groove", 1, -1) == 1);   // Energy ignored: plain rotation.
+    CHECK(scene_for_label(scenes, "breakdown", 0, 2) == 3); // No energy tags: unchanged.
+    // Only tagged scenes and no match: any of them, in rotation.
+    std::vector<Scene> tagged_only(2);
+    tagged_only[0].sections = {"groove", "high"};
+    tagged_only[1].sections = {"groove", "low"};
+    CHECK(scene_for_label(tagged_only, "groove", 0, 1) == 0);
+    CHECK(scene_for_label(tagged_only, "groove", 1, 1) == 1);
+    // Sections carry their energy into the rotation.
+    std::vector<DetectedSection> sections = {{0.0, 30.0, "groove", 1.0},
+                                             {30.0, 60.0, "groove", 1.0}};
+    sections[0].energy = 0;
+    sections[1].energy = 2;
+    CHECK(scene_for_section(scenes, sections, 0) == 2);
+    CHECK(scene_for_section(scenes, sections, 1) == 1);
+}

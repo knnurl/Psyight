@@ -39,10 +39,32 @@ void mix_into(Frame &frame, const Frame &other, double other_weight) {
 
 } // namespace
 
-int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence) {
+int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence,
+                    int energy) {
     std::vector<int> candidates = tagged(scenes, label);
     if (candidates.empty() && label == "drop") {
         candidates = tagged(scenes, "groove");
+    }
+    if (energy >= 0 && energy < static_cast<int>(kEnergyTags.size())) {
+        const auto has = [&](int scene, const char *tag) {
+            const std::vector<std::string> &s = scenes[static_cast<size_t>(scene)].sections;
+            return std::find(s.begin(), s.end(), tag) != s.end();
+        };
+        std::vector<int> matching;
+        std::vector<int> untagged;
+        for (const int c : candidates) {
+            if (has(c, kEnergyTags[static_cast<size_t>(energy)])) {
+                matching.push_back(c);
+            } else if (std::none_of(kEnergyTags.begin(), kEnergyTags.end(),
+                                    [&](const char *tag) { return has(c, tag); })) {
+                untagged.push_back(c);
+            }
+        }
+        if (!matching.empty()) {
+            candidates = std::move(matching);
+        } else if (!untagged.empty()) {
+            candidates = std::move(untagged);
+        }
     }
     if (candidates.empty()) {
         return 0;
@@ -64,7 +86,7 @@ int scene_for_section(const std::vector<Scene> &scenes,
     for (size_t j = 0; j < index; ++j) {
         occurrence += sections[j].label == label && !held(sections[j], min_dwell_s);
     }
-    return scene_for_label(scenes, label, occurrence);
+    return scene_for_label(scenes, label, occurrence, sections[index].energy);
 }
 
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
@@ -149,12 +171,14 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
         return static_cast<size_t>(
             std::max(0, state.section_occurrences[static_cast<size_t>(s)] - 1));
     };
-    mix.to = scene_for_label(scenes, inputs.section, occurrence(state.section));
+    mix.to =
+        scene_for_label(scenes, inputs.section, occurrence(state.section), state.section_energy);
     if (!state.has_previous || cuts_into(inputs.section)) {
         return mix;
     }
-    const int previous = scene_for_label(scenes, live_section_name(state.previous_section),
-                                         static_cast<size_t>(state.previous_occurrence));
+    const int previous =
+        scene_for_label(scenes, live_section_name(state.previous_section),
+                        static_cast<size_t>(state.previous_occurrence), state.previous_energy);
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
     if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
         mix.from = previous;
