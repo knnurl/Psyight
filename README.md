@@ -22,10 +22,15 @@ Optional offline Demucs stems improve every detector.
 - the same section rules, applied causally.
 
 **Show engine.**
-- Effects run on rig geometry in metres: plasma, kick shockwave, bass conveyor, hat sparkle, residual shimmer, build compression, drop burst, chase and wave.
+- Effects run on rig geometry in metres:
+  - plasma, kick shockwave, bass conveyor, hat sparkle and residual shimmer;
+  - build compression and the drop burst;
+  - chase and scanner, waves, a spiral, noise and fire;
+  - bursts and fireworks, bass bars (a pitch meter), strobe accents and a stutter gate.
+- Pattern effects map pixels along strips, across the rig or radially, with mirrored wings, and lock their motion to the 16th, beat, bar, phrase, bass notes or kicks.
 - Layers with blend modes and group masks.
 - A modulation matrix: musical sources, LFOs, macros and MIDI; curves, smoothing, quantise.
-- Palettes; scenes chosen per section with automation; presets and show packs.
+- Palettes, and scenes chosen per section and energy level by automation. Builds can follow the riser and go dark before the drop. Scene presets and show packs are included.
 - Rendering is deterministic: the same audio, settings and seed always give the same frames, so recordings replay exactly.
 
 **Safety.**
