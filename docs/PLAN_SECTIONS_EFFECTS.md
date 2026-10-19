@@ -126,7 +126,7 @@ Done: steps 0, 2 and 4, the build snap from step 3, the riser input (owner's ans
 | OculusDrift | 2.11 | 1.05 | 8.0 | 16.8 | 4 | 0 | 2.71 | 0.60 |
 | Phase Change | 0.41 | 0.55 | 7.8 | 9.0 | 1 | 1 | 1.10 | 0.27 |
 
-Over the four reference tracks plus Desktop\launch (109 tracks with a tempo; mix unless stems exist) before: medians 2.64 sections a minute, 6.0 bars, 5 short, 17% on the phrase grid, 2.68 kick flips a minute. After: in progress.
+Over the four reference tracks plus Desktop\launch (109 tracks with a tempo; mix unless stems exist) before: medians 2.64 sections a minute, 6.0 bars, 5 short, 17% on the phrase grid, 2.68 kick flips a minute. After: 1.20 sections a minute, 16.0 bars, 0 short, 38% on the phrase grid, 0.58 kick flips a minute. Six tracks gained sections (groove splits on energy steps); 20 still have a section under 4 bars that is not a build. The "about 1 section per 8 bars" goal is met with room (1.2 a minute is about one per 30 bars at 150 BPM).
 
 OculusDrift changed, against the "unchanged" goal, but for the better on inspection: its 197 to 234 s breakdown no longer alternates with 3 s grooves; the one loss is a 2-bar break with a short riser at 179 s, now inside the groove. The owner's labels will say whether such short breaks matter.
 
