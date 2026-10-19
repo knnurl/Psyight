@@ -1191,7 +1191,7 @@ void PreviewView::draw_rack(Scene &scene, const ShowFrame &frame) {
     }
     if (ImGui::BeginPopup("##add layer menu")) {
         for (const EffectType t : kEffectTypes) {
-            const Layer layer = make_layer(default_spec(t), BlendMode::add);
+            const Layer layer = make_layer(default_spec(t), default_blend(t));
             if (ImGui::Selectable(layer.effect->name())) {
                 scene.layers.push_back(layer);
                 scene_edited_ = true;

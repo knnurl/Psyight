@@ -23,7 +23,15 @@
 // - chase: comets with fading tails running along the mapping, looping or bouncing (a scanner),
 //   one palette colour each;
 // - wave: a waveform (sine, triangle, ramp, square, bump) across the mapping, `spread` cycles
-//   wide, moving with the clock; colour from the palette along the mapping.
+//   wide, moving with the clock; colour from the palette along the mapping;
+// - strobe: full-field flashes on a trigger (the drop's start, a build's last beat, kicks, beats
+//   or bars), rolling on 16ths for `flashes`; white or palette. The flash limiter still applies;
+// - stutter: a gate for the layers below (multiply blend): open and closed on the 16th, 8th or
+//   beat grid, with the bassline's gate, or ducking after each kick like a sidechain;
+// - noise: a drifting smooth noise field across the rig (ambient, breakdowns), coloured from the
+//   palette and shifted by the residual's brightness;
+// - fire: flames rising from the base of the mapping, flickering with noise; they reach higher
+//   with the riser through a build.
 #pragma once
 
 #include "engine/colour.h"
@@ -126,6 +134,44 @@ struct WaveParams {
     double colour_spread = 0.5; // Palette span across the mapping.
 };
 
+struct StrobeParams {
+    int trigger = 0; // Drop start, build end, kick, beat, bar.
+    int flashes = 2; // On successive 16ths after the trigger.
+    int every = 1;   // Kicks, beats or bars: every nth.
+    double decay_s = 0.05;
+    double level = 1.0;
+    int colour = 0; // White, palette.
+};
+
+struct StutterParams {
+    int mode = 0;      // Grid, bass gate, kick duck.
+    int division = 0;  // 16th, 8th, beat (grid mode).
+    double duty = 0.5; // Grid: share open; kick duck: share of a beat to reopen.
+    double depth = 1.0;
+    double release_s = 0.02; // Closing fade.
+};
+
+struct NoiseParams {
+    double scale_m = 0.7;
+    double speed_hz = 0.1; // How fast the field evolves.
+    int octaves = 2;
+    double contrast = 1.5;
+    double level = 0.5;
+    double colour_spread = 0.8;
+    double brightness_colour = 0.3; // Palette shift with the residual's brightness.
+};
+
+struct FireParams {
+    int mapping = 2;          // Across y: flames rise from the bottom.
+    double height = 0.5;      // Of the mapping the flames reach.
+    double riser_boost = 0.6; // Extra height at the riser's top, as a share of `height`.
+    double speed_m_per_s = 0.8;
+    double scale_m = 0.25;
+    double flicker = 0.6;
+    double level = 1.0;
+    int colours = 0; // Fire, palette.
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -137,11 +183,15 @@ enum class EffectType {
     build,
     drop_burst,
     chase,
-    wave
+    wave,
+    strobe,
+    stutter,
+    noise,
+    fire
 };
-using EffectParams =
-    std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
-                 BuildParams, DropBurstParams, ChaseParams, WaveParams>;
+using EffectParams = std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams,
+                                  ShimmerParams, BuildParams, DropBurstParams, ChaseParams,
+                                  WaveParams, StrobeParams, StutterParams, NoiseParams, FireParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -156,6 +206,10 @@ std::unique_ptr<Effect> make_build(const BuildParams &params = {});
 std::unique_ptr<Effect> make_drop_burst(const DropBurstParams &params = {});
 std::unique_ptr<Effect> make_chase(const ChaseParams &params = {});
 std::unique_ptr<Effect> make_wave(const WaveParams &params = {});
+std::unique_ptr<Effect> make_strobe(const StrobeParams &params = {});
+std::unique_ptr<Effect> make_stutter(const StutterParams &params = {});
+std::unique_ptr<Effect> make_noise(const NoiseParams &params = {});
+std::unique_ptr<Effect> make_fire(const FireParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

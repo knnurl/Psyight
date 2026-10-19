@@ -165,7 +165,11 @@ TEST_CASE("pattern effects: deterministic, and every setting round trips") {
     in.beat_phase = 0.3;
     in.bar_index = 2;
     in.bar_phase = 0.4;
-    for (const EffectType type : {EffectType::chase, EffectType::wave}) {
+    in.beat_s = 0.4;
+    in.section = "drop"; // The strobe's default trigger, just after it.
+    in.since_section_s = 0.01;
+    for (const EffectType type : {EffectType::chase, EffectType::wave, EffectType::strobe,
+                                  EffectType::stutter, EffectType::noise, EffectType::fire}) {
         CAPTURE(effect_type_id(type));
         EffectSpec spec = default_spec(type);
         const std::vector<EffectParamInfo> infos = effect_param_infos(type);
@@ -185,4 +189,131 @@ TEST_CASE("pattern effects: deterministic, and every setting round trips") {
         CHECK(lit > 0.0f);
         CHECK(effect_type_from_id(effect_type_id(type)) == type);
     }
+}
+
+TEST_CASE("value noise: bounded, deterministic, smooth, and varied") {
+    double lo = 1.0;
+    double hi = 0.0;
+    for (int i = 0; i < 400; ++i) {
+        const double x = -3.7 + 0.031 * i;
+        const double n = value_noise(x, 0.4 * x, 1.3, 9);
+        CHECK(n >= 0.0);
+        CHECK(n <= 1.0);
+        CHECK(n == value_noise(x, 0.4 * x, 1.3, 9));
+        CHECK(std::fabs(value_noise(x + 1e-3, 0.4 * x, 1.3, 9) - n) < 0.01);
+        lo = std::min(lo, n);
+        hi = std::max(hi, n);
+    }
+    CHECK(hi - lo > 0.4);
+    CHECK(value_noise(0.5, 0.5, 0.5, 1) != value_noise(0.5, 0.5, 0.5, 2));
+}
+
+TEST_CASE("strobe: rolls on 16ths after the drop starts and in a build's last beat") {
+    const Rig rig = line_rig();
+    const std::shared_ptr<const Effect> drop = make_strobe({});
+    EngineInputs in;
+    in.beat_s = 0.4; // 16ths of 0.1 s.
+    in.section = "drop";
+    in.since_section_s = 0.0;
+    CHECK(level(render(*drop, rig, in)[0]) == doctest::Approx(1.0f));
+    in.since_section_s = 0.1; // The second flash.
+    CHECK(level(render(*drop, rig, in)[0]) == doctest::Approx(1.0f));
+    in.since_section_s = 0.15;
+    CHECK(level(render(*drop, rig, in)[0]) < 0.4f);
+    in.since_section_s = 0.2; // Two flashes only.
+    CHECK(level(render(*drop, rig, in)[0]) == 0.0f);
+    in.section = "groove";
+    in.since_section_s = 0.0;
+    CHECK(level(render(*drop, rig, in)[0]) == 0.0f);
+
+    StrobeParams roll;
+    roll.trigger = 1; // Build end.
+    roll.flashes = 4;
+    const std::shared_ptr<const Effect> build = make_strobe(roll);
+    in.section = "build";
+    in.section_length_s = 10.0;
+    in.since_section_s = 9.0;
+    CHECK(level(render(*build, rig, in)[0]) == 0.0f);
+    in.since_section_s = 9.9; // The last beat, its fourth 16th.
+    CHECK(level(render(*build, rig, in)[0]) == doctest::Approx(1.0f));
+
+    StrobeParams bars;
+    bars.trigger = 4;
+    bars.every = 2;
+    bars.flashes = 1;
+    in.section = "groove";
+    in.bar_index = 3;
+    in.bar_phase = 0.0;
+    CHECK(level(render(*make_strobe(bars), rig, in)[0]) == 0.0f); // Odd bar.
+    in.bar_index = 4;
+    CHECK(level(render(*make_strobe(bars), rig, in)[0]) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("stutter: gates on the 16th grid, with the bass gate, and ducks after kicks") {
+    const Rig rig = line_rig();
+    CHECK(default_blend(EffectType::stutter) == BlendMode::multiply);
+    CHECK(default_blend(EffectType::wave) == BlendMode::add);
+    StutterParams p;
+    p.release_s = 0.001;
+    EngineInputs in;
+    in.beat_s = 0.4;
+    in.beat_phase = 0.1; // 16th position 0.4: open.
+    CHECK(level(render(*make_stutter(p), rig, in)[0]) == doctest::Approx(1.0f));
+    in.beat_phase = 0.2; // 16th position 0.8: closed.
+    CHECK(level(render(*make_stutter(p), rig, in)[0]) < 0.01f);
+    p.depth = 0.5;
+    CHECK(level(render(*make_stutter(p), rig, in)[0]) == doctest::Approx(0.5f).epsilon(0.02));
+
+    StutterParams gate;
+    gate.mode = 1;
+    in.bass_active = true;
+    CHECK(level(render(*make_stutter(gate), rig, in)[0]) == doctest::Approx(1.0f));
+    in.bass_active = false;
+    in.since_bass_offset_s = 0.2;
+    CHECK(level(render(*make_stutter(gate), rig, in)[0]) < 0.01f);
+
+    StutterParams duck;
+    duck.mode = 2;
+    in.since_kick_s = 0.0;
+    CHECK(level(render(*make_stutter(duck), rig, in)[0]) == 0.0f);
+    in.since_kick_s = 0.3; // Past half a beat: open again.
+    CHECK(level(render(*make_stutter(duck), rig, in)[0]) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("noise: a varied field that drifts smoothly") {
+    const Rig rig = default_rig();
+    const std::shared_ptr<const Effect> noise = make_noise({});
+    EngineInputs in;
+    in.t_s = 12.0;
+    const Frame a = render(*noise, rig, in);
+    in.t_s = 12.016;
+    const Frame b = render(*noise, rig, in);
+    float lo = 1.0f;
+    float hi = 0.0f;
+    for (size_t i = 0; i < a.size(); ++i) {
+        lo = std::min(lo, level(a[i]));
+        hi = std::max(hi, level(a[i]));
+        CHECK(std::fabs(level(a[i]) - level(b[i])) < 0.02f);
+    }
+    CHECK(hi - lo > 0.1f);
+}
+
+TEST_CASE("fire: brighter at the base, and higher with the riser") {
+    const Rig rig = default_rig(); // A frame: bottom strip at the lowest y.
+    const std::shared_ptr<const Effect> fire = make_fire({});
+    const auto lit_above = [&](double riser, double from_y) {
+        EngineInputs in;
+        in.t_s = 5.0;
+        in.riser = riser;
+        const Frame f = render(*fire, rig, in);
+        int lit = 0;
+        for (size_t i = 0; i < f.size(); ++i) {
+            lit += rig.pixels[i].position.y >= from_y && level(f[i]) > 0.02f;
+        }
+        return lit;
+    };
+    const double mid_y = 0.5 * (rig.min.y + rig.max.y);
+    const double low_y = rig.min.y;
+    CHECK(lit_above(0.0, low_y) > lit_above(0.0, mid_y));
+    CHECK(lit_above(1.0, mid_y) > lit_above(0.0, mid_y));
 }

@@ -15,10 +15,11 @@
 
 namespace psyight {
 
-inline constexpr std::array<EffectType, 9> kEffectTypes = {
-    EffectType::plasma,     EffectType::shockwave, EffectType::conveyor,
-    EffectType::sparkle,    EffectType::shimmer,   EffectType::build,
-    EffectType::drop_burst, EffectType::chase,     EffectType::wave};
+inline constexpr std::array<EffectType, 13> kEffectTypes = {
+    EffectType::plasma,  EffectType::shockwave, EffectType::conveyor,   EffectType::sparkle,
+    EffectType::shimmer, EffectType::build,     EffectType::drop_burst, EffectType::chase,
+    EffectType::wave,    EffectType::strobe,    EffectType::stutter,    EffectType::noise,
+    EffectType::fire};
 
 EffectSpec default_spec(EffectType type);
 std::shared_ptr<const Effect> make_effect(const EffectSpec &spec);
@@ -44,6 +45,9 @@ std::string effect_option_name(const EffectParamInfo &info, int value);
 std::vector<EffectParamInfo> effect_param_infos(EffectType type);
 double effect_param(const EffectSpec &spec, size_t index);
 void set_effect_param(EffectSpec &spec, size_t index, double value); // Clamped to the range.
+
+// The blend a new layer of this type starts with: multiply for the stutter gate, else add.
+BlendMode default_blend(EffectType type);
 
 const char *blend_mode_id(BlendMode mode); // "add", "max", "alpha", "multiply", "screen".
 std::optional<BlendMode> blend_mode_from_id(const std::string &id);

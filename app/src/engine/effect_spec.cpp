@@ -173,7 +173,91 @@ template <> const std::vector<Field<WaveParams>> &fields<WaveParams>() {
     return f;
 }
 
+template <> const std::vector<Field<StrobeParams>> &fields<StrobeParams>() {
+    using P = StrobeParams;
+    static const std::vector<Field<P>> f = {
+        {{"trigger", "Trigger", "", 0.0, 4.0, true, "What fires the flashes",
+          "Drop|Build end|Kick|Beat|Bar"},
+         nullptr,
+         &P::trigger},
+        {{"flashes", "Flashes", "", 1.0, 8.0, true, "Flashes on successive 16ths"},
+         nullptr,
+         &P::flashes},
+        {{"every", "Every", "", 1.0, 16.0, true, "Kicks, beats or bars: every nth"},
+         nullptr,
+         &P::every},
+        {{"decay_s", "Decay", "s", 0.01, 0.5, false, "Flash time constant"}, &P::decay_s},
+        {{"level", "Level", "", 0.0, 1.0, false, "Flash brightness"}, &P::level},
+        {{"colour", "Colour", "", 0.0, 1.0, true, "White, or the palette", "White|Palette"},
+         nullptr,
+         &P::colour},
+    };
+    return f;
+}
+
+template <> const std::vector<Field<StutterParams>> &fields<StutterParams>() {
+    using P = StutterParams;
+    static const std::vector<Field<P>> f = {
+        {{"mode", "Mode", "", 0.0, 2.0, true,
+          "Open and close on the grid, with the bassline's gate, or duck after each kick",
+          "Grid|Bass gate|Kick duck"},
+         nullptr,
+         &P::mode},
+        {{"division", "Grid", "", 0.0, 2.0, true, "Grid division", "16th|8th|Beat"},
+         nullptr,
+         &P::division},
+        {{"duty", "Duty", "", 0.05, 1.0, false,
+          "Grid: share of each division open; kick duck: share of a beat to reopen"},
+         &P::duty},
+        {{"depth", "Depth", "", 0.0, 1.0, false, "How far the gate closes"}, &P::depth},
+        {{"release_s", "Release", "s", 0.0, 0.2, false, "Closing fade"}, &P::release_s},
+    };
+    return f;
+}
+
+template <> const std::vector<Field<NoiseParams>> &fields<NoiseParams>() {
+    using P = NoiseParams;
+    static const std::vector<Field<P>> f = {
+        {{"scale_m", "Scale", "m", 0.05, 10.0, false, "Size of the noise features"}, &P::scale_m},
+        {{"speed_hz", "Speed", "Hz", 0.0, 2.0, false, "How fast the field evolves"}, &P::speed_hz},
+        {{"octaves", "Detail", "", 1.0, 4.0, true, "Octaves of finer noise"}, nullptr, &P::octaves},
+        {{"contrast", "Contrast", "x", 0.5, 4.0, false, "Contrast of the field"}, &P::contrast},
+        {{"level", "Level", "", 0.0, 1.0, false, "Field brightness"}, &P::level},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span over the field"},
+         &P::colour_spread},
+        {{"brightness_colour", "Timbre", "", 0.0, 1.0, false,
+          "Palette shift with the residual's brightness (spectral centroid)"},
+         &P::brightness_colour},
+    };
+    return f;
+}
+
+template <> const std::vector<Field<FireParams>> &fields<FireParams>() {
+    using P = FireParams;
+    static const std::vector<Field<P>> f = {
+        mapping_field<P>(),
+        {{"height", "Height", "", 0.0, 1.0, false, "Share of the mapping the flames reach"},
+         &P::height},
+        {{"riser_boost", "Riser", "", 0.0, 2.0, false,
+          "Extra height at the top of a build's riser"},
+         &P::riser_boost},
+        {{"speed_m_per_s", "Rise", "m/s", 0.0, 5.0, false, "How fast the flicker rises"},
+         &P::speed_m_per_s},
+        {{"scale_m", "Scale", "m", 0.02, 2.0, false, "Size of the flicker"}, &P::scale_m},
+        {{"flicker", "Flicker", "", 0.0, 1.0, false, "How much the flames flicker"}, &P::flicker},
+        {{"level", "Level", "", 0.0, 1.0, false, "Flame brightness"}, &P::level},
+        {{"colours", "Colours", "", 0.0, 1.0, true, "Fire colours, or the palette", "Fire|Palette"},
+         nullptr,
+         &P::colours},
+    };
+    return f;
+}
+
 } // namespace
+
+BlendMode default_blend(EffectType type) {
+    return type == EffectType::stutter ? BlendMode::multiply : BlendMode::add;
+}
 
 std::string effect_option_name(const EffectParamInfo &info, int value) {
     if (info.options == nullptr || value < 0) {
@@ -212,6 +296,14 @@ EffectSpec default_spec(EffectType type) {
         return {ChaseParams{}};
     case EffectType::wave:
         return {WaveParams{}};
+    case EffectType::strobe:
+        return {StrobeParams{}};
+    case EffectType::stutter:
+        return {StutterParams{}};
+    case EffectType::noise:
+        return {NoiseParams{}};
+    case EffectType::fire:
+        return {FireParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -236,8 +328,16 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_drop_burst(p);
             } else if constexpr (std::is_same_v<P, ChaseParams>) {
                 return make_chase(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, WaveParams>) {
                 return make_wave(p);
+            } else if constexpr (std::is_same_v<P, StrobeParams>) {
+                return make_strobe(p);
+            } else if constexpr (std::is_same_v<P, StutterParams>) {
+                return make_stutter(p);
+            } else if constexpr (std::is_same_v<P, NoiseParams>) {
+                return make_noise(p);
+            } else {
+                return make_fire(p);
             }
         },
         spec.params);
@@ -267,6 +367,14 @@ const char *effect_type_id(EffectType type) {
         return "chase";
     case EffectType::wave:
         return "wave";
+    case EffectType::strobe:
+        return "strobe";
+    case EffectType::stutter:
+        return "stutter";
+    case EffectType::noise:
+        return "noise";
+    case EffectType::fire:
+        return "fire";
     }
     return "plasma";
 }

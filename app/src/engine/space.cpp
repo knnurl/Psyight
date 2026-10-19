@@ -75,6 +75,31 @@ std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t se
     return u;
 }
 
+double value_noise(double x, double y, double z, std::uint64_t seed) {
+    const double fx = std::floor(x);
+    const double fy = std::floor(y);
+    const double fz = std::floor(z);
+    const auto ix = static_cast<long long>(fx);
+    const auto iy = static_cast<long long>(fy);
+    const auto iz = static_cast<long long>(fz);
+    const auto smooth = [](double t) { return t * t * (3.0 - 2.0 * t); };
+    const double tx = smooth(x - fx);
+    const double ty = smooth(y - fy);
+    const double tz = smooth(z - fz);
+    const auto at = [&](long long a, long long b, long long c) {
+        return hash_unit(seed ^ (static_cast<std::uint64_t>(c) * 0xD6E8FEB86659FD93ull),
+                         static_cast<std::uint64_t>(a), static_cast<std::uint64_t>(b));
+    };
+    const auto lerp = [](double a, double b, double t) { return a + (b - a) * t; };
+    double layer[2];
+    for (int k = 0; k < 2; ++k) {
+        const double bottom = lerp(at(ix, iy, iz + k), at(ix + 1, iy, iz + k), tx);
+        const double top = lerp(at(ix, iy + 1, iz + k), at(ix + 1, iy + 1, iz + k), tx);
+        layer[k] = lerp(bottom, top, ty);
+    }
+    return lerp(layer[0], layer[1], tz);
+}
+
 double fold_wings(double u, int wings) {
     if (wings <= 1) {
         return u;

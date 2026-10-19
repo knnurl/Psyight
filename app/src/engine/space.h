@@ -33,6 +33,10 @@ std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t se
 // u folded into `wings` mirrored copies: 1 leaves it, 2 runs 0 to 1 and back, and so on.
 double fold_wings(double u, int wings);
 
+// Smooth value noise, 0 to 1: a seeded lattice with smoothstep interpolation in three dimensions
+// (two spatial, one time), so a field drifts without jumps.
+double value_noise(double x, double y, double z, std::uint64_t seed);
+
 // The clock's position in cycles: rate per second when free, else rate per 16th, beat, bar,
 // phrase, bass note or kick. Notes and kicks step, gliding over 40 ms so a step is no jump.
 double clock_cycles(const EngineInputs &in, Clock clock, double rate);
