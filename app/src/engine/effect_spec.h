@@ -15,9 +15,10 @@
 
 namespace psyight {
 
-inline constexpr std::array<EffectType, 7> kEffectTypes = {
-    EffectType::plasma,  EffectType::shockwave, EffectType::conveyor,  EffectType::sparkle,
-    EffectType::shimmer, EffectType::build,     EffectType::drop_burst};
+inline constexpr std::array<EffectType, 9> kEffectTypes = {
+    EffectType::plasma,     EffectType::shockwave, EffectType::conveyor,
+    EffectType::sparkle,    EffectType::shimmer,   EffectType::build,
+    EffectType::drop_burst, EffectType::chase,     EffectType::wave};
 
 EffectSpec default_spec(EffectType type);
 std::shared_ptr<const Effect> make_effect(const EffectSpec &spec);
@@ -33,8 +34,12 @@ struct EffectParamInfo {
     double min;
     double max;
     bool integer;
-    const char *description = ""; // The long name, for tooltips (the label is short, for knobs).
+    const char *description = "";  // The long name, for tooltips (the label is short, for knobs).
+    const char *options = nullptr; // An integer setting's value names, "|" separated; or none.
 };
+
+// The name of an integer setting's value (its options), or "" when it has none or is out of range.
+std::string effect_option_name(const EffectParamInfo &info, int value);
 
 std::vector<EffectParamInfo> effect_param_infos(EffectType type);
 double effect_param(const EffectSpec &spec, size_t index);

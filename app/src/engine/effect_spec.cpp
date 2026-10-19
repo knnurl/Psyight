@@ -1,5 +1,7 @@
 #include "engine/effect_spec.h"
 
+#include "engine/space.h"
+
 #include <algorithm>
 #include <cmath>
 #include <type_traits>
@@ -106,7 +108,89 @@ template <> const std::vector<Field<DropBurstParams>> &fields<DropBurstParams>()
     return f;
 }
 
+// The mapping, wings and clock settings shared by the pattern effects.
+template <typename P> Field<P> mapping_field() {
+    return {{"mapping", "Mapping", "", 0.0, kMappingCount - 1.0, true,
+             "How pixels map to the pattern: along each strip, across the rig, from its centre, "
+             "by strip or at random",
+             kMappingOptions},
+            nullptr,
+            &P::mapping};
+}
+
+template <typename P> Field<P> wings_field() {
+    return {{"wings", "Wings", "", 1.0, 4.0, true, "Mirrored copies of the pattern"},
+            nullptr,
+            &P::wings};
+}
+
+template <typename P> Field<P> clock_field() {
+    return {{"clock", "Clock", "", 0.0, kClockCount - 1.0, true,
+             "What drives the motion: free (rate in Hz), or locked to the 16th, beat, bar, "
+             "phrase, bass note or kick",
+             kClockOptions},
+            nullptr,
+            &P::clock};
+}
+
+template <> const std::vector<Field<ChaseParams>> &fields<ChaseParams>() {
+    using P = ChaseParams;
+    static const std::vector<Field<P>> f = {
+        mapping_field<P>(),
+        wings_field<P>(),
+        clock_field<P>(),
+        {{"rate", "Rate", "x", 0.0, 8.0, false, "Passes per clock division (Hz when free)"},
+         &P::rate},
+        {{"count", "Comets", "", 1.0, 16.0, true, "Comets, evenly spaced"}, nullptr, &P::count},
+        {{"tail", "Tail", "", 0.01, 1.0, false, "Tail length, as a share of the mapping"},
+         &P::tail},
+        {{"bounce", "Motion", "", 0.0, 1.0, true, "Loop round, or bounce there and back",
+          "Loop|Bounce"},
+         nullptr,
+         &P::bounce},
+        {{"level", "Level", "", 0.0, 1.0, false, "Comet brightness"}, &P::level},
+    };
+    return f;
+}
+
+template <> const std::vector<Field<WaveParams>> &fields<WaveParams>() {
+    using P = WaveParams;
+    static const std::vector<Field<P>> f = {
+        mapping_field<P>(),
+        wings_field<P>(),
+        clock_field<P>(),
+        {{"rate", "Rate", "x", 0.0, 8.0, false, "Cycles per clock division (Hz when free)"},
+         &P::rate},
+        {{"shape", "Shape", "", 0.0, 4.0, true, "Waveform", "Sine|Triangle|Ramp|Square|Bump"},
+         nullptr,
+         &P::shape},
+        {{"spread", "Spread", "", 0.0, 16.0, false, "Cycles across the mapping"}, &P::spread},
+        {{"width", "Width", "", 0.01, 1.0, false, "Square duty, or bump width"}, &P::width},
+        {{"level", "Level", "", 0.0, 1.0, false, "Wave brightness"}, &P::level},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span across the mapping"},
+         &P::colour_spread},
+    };
+    return f;
+}
+
 } // namespace
+
+std::string effect_option_name(const EffectParamInfo &info, int value) {
+    if (info.options == nullptr || value < 0) {
+        return {};
+    }
+    const std::string all = info.options;
+    size_t from = 0;
+    for (int k = 0; k < value; ++k) {
+        from = all.find('|', from);
+        if (from == std::string::npos) {
+            return {};
+        }
+        ++from;
+    }
+    const size_t to = all.find('|', from);
+    return all.substr(from, to == std::string::npos ? std::string::npos : to - from);
+}
 
 EffectSpec default_spec(EffectType type) {
     switch (type) {
@@ -124,6 +208,10 @@ EffectSpec default_spec(EffectType type) {
         return {BuildParams{}};
     case EffectType::drop_burst:
         return {DropBurstParams{}};
+    case EffectType::chase:
+        return {ChaseParams{}};
+    case EffectType::wave:
+        return {WaveParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -144,8 +232,12 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_shimmer(p);
             } else if constexpr (std::is_same_v<P, BuildParams>) {
                 return make_build(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, DropBurstParams>) {
                 return make_drop_burst(p);
+            } else if constexpr (std::is_same_v<P, ChaseParams>) {
+                return make_chase(p);
+            } else {
+                return make_wave(p);
             }
         },
         spec.params);
@@ -171,6 +263,10 @@ const char *effect_type_id(EffectType type) {
         return "build";
     case EffectType::drop_burst:
         return "drop_burst";
+    case EffectType::chase:
+        return "chase";
+    case EffectType::wave:
+        return "wave";
     }
     return "plasma";
 }

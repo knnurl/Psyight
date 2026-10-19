@@ -1483,9 +1483,16 @@ void PreviewView::draw_layer_device(Scene &scene, size_t index,
         });
         if (info.integer) {
             int v = static_cast<int>(std::lround(effect_param(layer.spec, k)));
+            // A named value shows its name (as a format with no conversions, '%' escaped).
+            std::string format = "%.0f" + unit;
+            if (const std::string option = effect_option_name(info, v); !option.empty()) {
+                format.clear();
+                for (const char ch : option) {
+                    format += ch == '%' ? std::string("%%") : std::string(1, ch);
+                }
+            }
             if (knob_int(label.c_str(), &v, static_cast<int>(info.min), static_cast<int>(info.max),
-                         ("%.0f" + unit).c_str(),
-                         static_cast<int>(std::lround(effect_param(defaults, k))),
+                         format.c_str(), static_cast<int>(std::lround(effect_param(defaults, k))),
                          ring ? &moved : nullptr)) {
                 set_effect_param(layer.spec, k, v);
                 params_changed = true;

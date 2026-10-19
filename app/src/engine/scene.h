@@ -18,6 +18,12 @@
 //   brightening through the section (the speed ramp is integrated, so the motion never jumps);
 // - drop burst: a white disc released from the centre at the start of a drop (white is for
 //   kicks and drops, SPEC 7.5; the flash limiter still applies).
+// Pattern effects (engine/pattern_effects.cpp), on a mapping of the pixels to 0 to 1 with mirrored
+// wings and a clock free or locked to the music (engine/space.h):
+// - chase: comets with fading tails running along the mapping, looping or bouncing (a scanner),
+//   one palette colour each;
+// - wave: a waveform (sine, triangle, ramp, square, bump) across the mapping, `spread` cycles
+//   wide, moving with the clock; colour from the palette along the mapping.
 #pragma once
 
 #include "engine/colour.h"
@@ -96,11 +102,46 @@ struct DropBurstParams {
     double duration_s = 1.5; // After the drop starts.
 };
 
+// Mapping and clock values are engine/space.h's Mapping and Clock.
+struct ChaseParams {
+    int mapping = 0; // Along the strip.
+    int wings = 1;
+    int clock = 2;      // Beat.
+    double rate = 0.25; // Passes per clock division: one a bar.
+    int count = 2;      // Comets, evenly spaced.
+    double tail = 0.2;  // Of the mapping's length.
+    int bounce = 0;     // 1: there and back.
+    double level = 1.0;
+};
+
+struct WaveParams {
+    int mapping = 1; // Across x.
+    int wings = 1;
+    int clock = 3;       // Bar.
+    double rate = 1.0;   // Cycles per clock division.
+    int shape = 0;       // Sine, triangle, ramp, square, bump.
+    double spread = 1.0; // Cycles across the mapping.
+    double width = 0.3;  // Square duty, bump width.
+    double level = 0.8;
+    double colour_spread = 0.5; // Palette span across the mapping.
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
-enum class EffectType { plasma, shockwave, conveyor, sparkle, shimmer, build, drop_burst };
-using EffectParams = std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams,
-                                  ShimmerParams, BuildParams, DropBurstParams>;
+enum class EffectType {
+    plasma,
+    shockwave,
+    conveyor,
+    sparkle,
+    shimmer,
+    build,
+    drop_burst,
+    chase,
+    wave
+};
+using EffectParams =
+    std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
+                 BuildParams, DropBurstParams, ChaseParams, WaveParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -113,6 +154,8 @@ std::unique_ptr<Effect> make_sparkle(const SparkleParams &params = {});
 std::unique_ptr<Effect> make_shimmer(const ShimmerParams &params = {});
 std::unique_ptr<Effect> make_build(const BuildParams &params = {});
 std::unique_ptr<Effect> make_drop_burst(const DropBurstParams &params = {});
+std::unique_ptr<Effect> make_chase(const ChaseParams &params = {});
+std::unique_ptr<Effect> make_wave(const WaveParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

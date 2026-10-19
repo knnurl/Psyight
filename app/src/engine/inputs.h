@@ -27,11 +27,13 @@ struct EngineInputs {
     double bar_phase = 0.0;  // 0 to 1 through the bar.
     long long bar_index = 0; // From the first downbeat; negative before it.
     double slot_phase = 0.0; // 0 to 1 through the 16th.
+    double beat_s = 0.0;     // Beat length; 0 without a tempo.
     // Phrase (restarting at sections).
     double phrase_phase = 0.0; // 0 to 1 through the phrase, 0 before the first.
     int phrase_index = -1;
     // Kick.
     double since_kick_s = kNever;
+    long long kicks_so_far = 0; // Kicks at or before t: steps a pattern.
     // Bass.
     bool bass_active = false; // A detected note is sounding.
     int bass_midi = 0;        // Of the sounding note, else of the last one.

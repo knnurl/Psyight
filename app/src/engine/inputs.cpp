@@ -52,6 +52,7 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
     in.bar_index = static_cast<long long>(std::floor(bar));
     in.bar_phase = bar - std::floor(bar);
     in.slot_phase = slot - std::floor(slot);
+    in.beat_s = grid.bpm > 0.0 ? 60.0 / grid.bpm : 0.0;
 
     // Phrase.
     const long long phrase = last_at_or_before(phrase_starts, t_s, [](double x) { return x; });
@@ -66,6 +67,7 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
 
     // Kick.
     const long long kick = last_at_or_before(a.bass.kick_times_s, t_s, [](double x) { return x; });
+    in.kicks_so_far = kick + 1;
     if (kick >= 0) {
         in.since_kick_s = t_s - a.bass.kick_times_s[static_cast<size_t>(kick)];
     }
@@ -151,11 +153,17 @@ EngineInputs inputs_at(const LiveState &s, double t_s) {
             in.phrase_index = static_cast<int>(std::floor(phrase));
             in.phrase_phase = phrase - std::floor(phrase);
         }
+        in.beat_s = s.period_s;
+        in.kicks_so_far = s.kicks;
         if (s.locked && s.kick_streak >= 4) {
             const double last_beat_s =
                 s.anchor_s + (std::floor(beat) - static_cast<double>(s.anchor_beat)) * s.period_s;
             in.since_kick_s = t_s - last_beat_s;
+            // Predicted kicks count as they land, ahead of their detection.
+            in.kicks_so_far += std::max(0LL, in.beat_index - s.last_kick_beat);
         }
+    } else {
+        in.kicks_so_far = s.kicks;
     }
     if (in.since_kick_s == kNever && s.last_kick_s > kLiveNever && t_s >= s.last_kick_s) {
         in.since_kick_s = t_s - s.last_kick_s;
