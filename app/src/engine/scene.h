@@ -31,7 +31,13 @@
 // - noise: a drifting smooth noise field across the rig (ambient, breakdowns), coloured from the
 //   palette and shifted by the residual's brightness;
 // - fire: flames rising from the base of the mapping, flickering with noise; they reach higher
-//   with the riser through a build.
+//   with the riser through a build;
+// - bursts: rings expanding from seeded pixels on each kick, hat, beat, bar or bass note, up to
+//   `keep` overlapping (grid triggers and kicks), optionally broken into sparks (fireworks);
+// - spiral: arms rotating around the rig's centre with the clock (a pinwheel on a frame, a
+//   spiral on a matrix);
+// - bass bars: a pitch meter, a marker or a bar at the sounding bass note's pitch along the
+//   mapping (low_midi to high_midi), brightness from its velocity and decay like the conveyor.
 #pragma once
 
 #include "engine/colour.h"
@@ -172,6 +178,38 @@ struct FireParams {
     int colours = 0; // Fire, palette.
 };
 
+struct BurstsParams {
+    int trigger = 0; // Kick, hat, beat, bar, bass note.
+    int every = 1;
+    int keep = 3; // Overlapping bursts (grid triggers and kicks; the others keep one).
+    double speed_m_per_s = 3.0;
+    double width_m = 0.25;
+    double decay_s = 0.3;
+    double sparks = 0.0; // 0: whole rings; towards 1: broken into sparks.
+    double level = 0.9;
+};
+
+struct SpiralParams {
+    int arms = 3;
+    double twist = 1.0; // Turns across the radius.
+    int clock = 2;      // Beat.
+    double rate = 0.25; // Turns per clock division.
+    double width = 0.35;
+    double level = 0.8;
+    double colour_spread = 1.0;
+};
+
+struct BassBarsParams {
+    int mapping = 1;    // Across x.
+    int low_midi = 24;  // C1 at u = 0.
+    int high_midi = 48; // C3 at u = 1.
+    int mode = 0;       // Marker, bar.
+    double width = 0.1; // Marker width, of the mapping.
+    double release_s = 0.08;
+    double level = 1.0;
+    int colours = 0; // Pitch hue (as the conveyor), palette.
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -187,11 +225,15 @@ enum class EffectType {
     strobe,
     stutter,
     noise,
-    fire
+    fire,
+    bursts,
+    spiral,
+    bass_bars
 };
-using EffectParams = std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams,
-                                  ShimmerParams, BuildParams, DropBurstParams, ChaseParams,
-                                  WaveParams, StrobeParams, StutterParams, NoiseParams, FireParams>;
+using EffectParams =
+    std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
+                 BuildParams, DropBurstParams, ChaseParams, WaveParams, StrobeParams, StutterParams,
+                 NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -210,6 +252,9 @@ std::unique_ptr<Effect> make_strobe(const StrobeParams &params = {});
 std::unique_ptr<Effect> make_stutter(const StutterParams &params = {});
 std::unique_ptr<Effect> make_noise(const NoiseParams &params = {});
 std::unique_ptr<Effect> make_fire(const FireParams &params = {});
+std::unique_ptr<Effect> make_bursts(const BurstsParams &params = {});
+std::unique_ptr<Effect> make_spiral(const SpiralParams &params = {});
+std::unique_ptr<Effect> make_bass_bars(const BassBarsParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

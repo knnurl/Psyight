@@ -253,6 +253,68 @@ template <> const std::vector<Field<FireParams>> &fields<FireParams>() {
     return f;
 }
 
+template <> const std::vector<Field<BurstsParams>> &fields<BurstsParams>() {
+    using P = BurstsParams;
+    static const std::vector<Field<P>> f = {
+        {{"trigger", "Trigger", "", 0.0, 4.0, true, "What sets off a burst",
+          "Kick|Hat|Beat|Bar|Bass note"},
+         nullptr,
+         &P::trigger},
+        {{"every", "Every", "", 1.0, 16.0, true, "Every nth trigger"}, nullptr, &P::every},
+        {{"keep", "Overlap", "", 1.0, 6.0, true, "Bursts alive at once (grid triggers and kicks)"},
+         nullptr,
+         &P::keep},
+        {{"speed_m_per_s", "Speed", "m/s", 0.2, 20.0, false, "Ring speed"}, &P::speed_m_per_s},
+        {{"width_m", "Width", "m", 0.02, 1.0, false, "Ring width"}, &P::width_m},
+        {{"decay_s", "Decay", "s", 0.05, 3.0, false, "Burst time constant"}, &P::decay_s},
+        {{"sparks", "Sparks", "", 0.0, 0.95, false, "Break the rings into sparks"}, &P::sparks},
+        {{"level", "Level", "", 0.0, 1.0, false, "Burst brightness"}, &P::level},
+    };
+    return f;
+}
+
+template <> const std::vector<Field<SpiralParams>> &fields<SpiralParams>() {
+    using P = SpiralParams;
+    static const std::vector<Field<P>> f = {
+        {{"arms", "Arms", "", 1.0, 12.0, true, "Spiral arms"}, nullptr, &P::arms},
+        {{"twist", "Twist", "", -4.0, 4.0, false, "Turns across the radius"}, &P::twist},
+        clock_field<P>(),
+        {{"rate", "Rate", "x", -4.0, 4.0, false, "Turns per clock division (Hz when free)"},
+         &P::rate},
+        {{"width", "Width", "", 0.02, 1.0, false, "Arm width, as a share of the gap"}, &P::width},
+        {{"level", "Level", "", 0.0, 1.0, false, "Spiral brightness"}, &P::level},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span from centre to edge"},
+         &P::colour_spread},
+    };
+    return f;
+}
+
+template <> const std::vector<Field<BassBarsParams>> &fields<BassBarsParams>() {
+    using P = BassBarsParams;
+    static const std::vector<Field<P>> f = {
+        mapping_field<P>(),
+        {{"low_midi", "Low", "MIDI", 12.0, 72.0, true, "The pitch at the start of the mapping"},
+         nullptr,
+         &P::low_midi},
+        {{"high_midi", "High", "MIDI", 13.0, 84.0, true, "The pitch at the end of the mapping"},
+         nullptr,
+         &P::high_midi},
+        {{"mode", "Mode", "", 0.0, 1.0, true, "A marker at the pitch, or a bar up to it",
+          "Marker|Bar"},
+         nullptr,
+         &P::mode},
+        {{"width", "Width", "", 0.01, 0.5, false, "Marker width, as a share of the mapping"},
+         &P::width},
+        {{"release_s", "Release", "s", 0.0, 1.0, false, "Fade after the note ends"}, &P::release_s},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+        {{"colours", "Colours", "", 0.0, 1.0, true, "Hue from pitch, or the palette",
+          "Pitch|Palette"},
+         nullptr,
+         &P::colours},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -304,6 +366,12 @@ EffectSpec default_spec(EffectType type) {
         return {NoiseParams{}};
     case EffectType::fire:
         return {FireParams{}};
+    case EffectType::bursts:
+        return {BurstsParams{}};
+    case EffectType::spiral:
+        return {SpiralParams{}};
+    case EffectType::bass_bars:
+        return {BassBarsParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -336,8 +404,14 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_stutter(p);
             } else if constexpr (std::is_same_v<P, NoiseParams>) {
                 return make_noise(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, FireParams>) {
                 return make_fire(p);
+            } else if constexpr (std::is_same_v<P, BurstsParams>) {
+                return make_bursts(p);
+            } else if constexpr (std::is_same_v<P, SpiralParams>) {
+                return make_spiral(p);
+            } else {
+                return make_bass_bars(p);
             }
         },
         spec.params);
@@ -375,6 +449,12 @@ const char *effect_type_id(EffectType type) {
         return "noise";
     case EffectType::fire:
         return "fire";
+    case EffectType::bursts:
+        return "bursts";
+    case EffectType::spiral:
+        return "spiral";
+    case EffectType::bass_bars:
+        return "bass_bars";
     }
     return "plasma";
 }
