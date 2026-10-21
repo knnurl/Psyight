@@ -14,10 +14,16 @@
 //   to left (the usual zigzag wiring). Groups: "matrix", "top" or "bottom" (by half),
 //   "even" or "odd" rows.
 // Pixels per strip: the length times pixels_per_m, rounded down.
+//
+// Rig presets: named, fixed stage shapes, each within the 1,500-pixel budget (SPEC 2.1). Shapes
+// with mirror symmetry run each half from the centre outwards, so mirrored and radial mappings
+// line up. Every strip is tagged "left" and/or "right" by the centre of its bounding box (both
+// when centred), plus its shape's own groups, listed in each preset's description.
 #pragma once
 
 #include "engine/rig.h"
 
+#include <string>
 #include <vector>
 
 namespace psyight {
@@ -46,5 +52,13 @@ inline constexpr int kMaxTemplateStrips = 128;
 
 std::vector<StripSpec> pillars_strips(const PillarsTemplate &t);
 std::vector<StripSpec> matrix_strips(const MatrixTemplate &t);
+
+struct RigPreset {
+    std::string name;
+    std::string description; // One line for the list: the shape, its size and its groups.
+    std::vector<StripSpec> strips;
+};
+
+std::vector<RigPreset> builtin_rig_presets();
 
 } // namespace psyight

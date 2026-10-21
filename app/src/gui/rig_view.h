@@ -1,5 +1,6 @@
 // Rig panel (SPEC sections 7.1, 9.4 and 10, M3): the project file (load and save), templates
-// (pillars, matrix panel: engine/rig_templates.h) that replace the strips after a confirmation, the
+// (pillars, matrix panel and the named rig presets: engine/rig_templates.h) that replace the strips
+// after a confirmation, the
 // strips (name, polyline, density, pixel count, colour order, groups), the patch layout and checks:
 // strips running past their polyline, the 1,500-pixel budget, and the supply current at full
 // white against the power budget. Tabbed with the preview, which shows the result.
@@ -36,11 +37,13 @@ class RigView {
     std::vector<std::string> polyline_texts_;
     std::vector<std::string> group_texts_;
     std::uint64_t texts_version_ = 0;
-    int template_ = 0; // 0: pillars, 1: matrix panel.
+    int template_ = 0; // 0: pillars, 1: matrix panel, 2: a rig preset.
     int hovered_strip_ = -1;
     int highlighted_strip_ = -1;
     PillarsTemplate pillars_;
     MatrixTemplate matrix_;
+    std::vector<RigPreset> presets_ = builtin_rig_presets();
+    int preset_ = 0;
 };
 
 } // namespace psyight

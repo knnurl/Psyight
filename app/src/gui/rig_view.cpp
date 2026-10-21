@@ -117,10 +117,27 @@ void RigView::draw_templates() {
 void RigView::draw_template_controls() {
     const float em = ImGui::GetFontSize();
     ImGui::SetNextItemWidth(9.0f * em);
-    ImGui::Combo("##template", &template_, "Pillars\0Matrix panel\0");
+    ImGui::Combo("##template", &template_, "Pillars\0Matrix panel\0Preset\0");
     const float field = 7.0f * em;
     std::vector<StripSpec> strips;
-    if (template_ == 0) {
+    if (template_ == 2) {
+        preset_ = std::clamp(preset_, 0, static_cast<int>(presets_.size()) - 1);
+        ImGui::SetNextItemWidth(14.0f * em);
+        if (ImGui::BeginCombo("Rig preset", presets_[static_cast<size_t>(preset_)].name.c_str())) {
+            for (size_t i = 0; i < presets_.size(); ++i) {
+                if (ImGui::Selectable(presets_[i].name.c_str(), static_cast<int>(i) == preset_)) {
+                    preset_ = static_cast<int>(i);
+                }
+                ImGui::SetItemTooltip("%s", presets_[i].description.c_str());
+            }
+            ImGui::EndCombo();
+        }
+        const RigPreset &preset = presets_[static_cast<size_t>(preset_)];
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 28.0f * em);
+        ImGui::TextDisabled("%s", preset.description.c_str());
+        ImGui::PopTextWrapPos();
+        strips = preset.strips;
+    } else if (template_ == 0) {
         PillarsTemplate &t = pillars_;
         ImGui::SetNextItemWidth(field);
         drag_int("Pillars", &t.count, 0.1f, 1, kMaxTemplateStrips);
