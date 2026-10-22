@@ -196,3 +196,36 @@ TEST_CASE("presets: the choreographed packs cover every section, grooves by ener
               scene_for_label(pack->scenes, "groove", 0, 0));
     }
 }
+
+TEST_CASE("presets: the user's rigs are files in presets/rigs, geometry and groups kept") {
+    const std::filesystem::path dir = fresh_dir("psyight_rig_presets_test");
+    CHECK(load_user_presets(dir).rigs.empty());
+    RigPreset rig = builtin_rig_presets()[0]; // The DJ booth chevron.
+    rig.name = "Garden stage";
+    rig.description = "3 strips, 408 pixels, saved from Test.";
+    REQUIRE(save_rig_preset(dir, rig).ok());
+    CHECK(std::filesystem::exists(dir / "rigs" / "Garden stage.json"));
+    const UserPresets user = load_user_presets(dir);
+    REQUIRE(user.rigs.size() == 1);
+    const RigPreset &loaded = user.rigs[0];
+    CHECK(loaded.name == rig.name);
+    CHECK(loaded.description == rig.description);
+    REQUIRE(loaded.strips.size() == rig.strips.size());
+    for (size_t i = 0; i < rig.strips.size(); ++i) {
+        CHECK(loaded.strips[i].name == rig.strips[i].name);
+        CHECK(loaded.strips[i].count == rig.strips[i].count);
+        CHECK(loaded.strips[i].pixels_per_m == rig.strips[i].pixels_per_m);
+        CHECK(loaded.strips[i].groups == rig.strips[i].groups);
+        REQUIRE(loaded.strips[i].polyline.size() == rig.strips[i].polyline.size());
+        CHECK(loaded.strips[i].polyline.back().x ==
+              doctest::Approx(rig.strips[i].polyline.back().x));
+    }
+    // A rig without strips is refused, and named among the errors.
+    std::ofstream(dir / "rigs" / "empty.json")
+        << "{\"format\": \"psyight rig preset\", \"name\": \"Empty\", \"strips\": []}";
+    const UserPresets again = load_user_presets(dir);
+    CHECK(again.rigs.size() == 1);
+    REQUIRE(again.errors.size() == 1);
+    CHECK(again.errors[0].find("empty.json") != std::string::npos);
+    std::filesystem::remove_all(dir);
+}

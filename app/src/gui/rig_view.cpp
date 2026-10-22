@@ -4,6 +4,7 @@
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/widgets.h"
+#include "io/presets.h"
 
 #include <imgui.h>
 #include <imgui_internal.h> // TableGetHoveredRow.
@@ -114,36 +115,58 @@ void RigView::draw_project() {
 }
 
 void RigView::draw_templates() {
-    if (ImGui::TreeNode("Templates")) {
+    if (ImGui::TreeNode("New rig")) {
         draw_template_controls();
         ImGui::TreePop();
     }
 }
 
 void RigView::draw_template_controls() {
-    const float em = ImGui::GetFontSize();
-    ImGui::SetNextItemWidth(9.0f * em);
-    ImGui::Combo("##template", &template_, "Pillars\0Matrix panel\0Preset\0");
-    const float field = 7.0f * em;
+    // Three sources at one level: templates made from a few numbers, the built-in presets, and
+    // the rigs saved by the user. Each gives strips; the summary and Replace below are shared.
     std::vector<StripSpec> strips;
-    if (template_ == 2) {
-        preset_ = std::clamp(preset_, 0, static_cast<int>(presets_.size()) - 1);
-        ImGui::SetNextItemWidth(14.0f * em);
-        if (ImGui::BeginCombo("Rig preset", presets_[static_cast<size_t>(preset_)].name.c_str())) {
-            for (size_t i = 0; i < presets_.size(); ++i) {
-                if (ImGui::Selectable(presets_[i].name.c_str(), static_cast<int>(i) == preset_)) {
-                    preset_ = static_cast<int>(i);
-                }
-                ImGui::SetItemTooltip("%s", presets_[i].description.c_str());
-            }
-            ImGui::EndCombo();
+    bool mine = false;
+    // Tabs inside a panel: the chosen one lighter with an accent line, the others blending in
+    // (the theme's tab colours are for docked windows, whose chosen tab merges into the window).
+    const ThemeTokens &t = theme();
+    ImGui::PushStyleColor(ImGuiCol_Tab, t.panel);
+    ImGui::PushStyleColor(ImGuiCol_TabDimmed, t.panel);
+    ImGui::PushStyleColor(ImGuiCol_TabSelected, t.frame_hover);
+    ImGui::PushStyleColor(ImGuiCol_TabDimmedSelected, t.frame_hover);
+    ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, t.accent);
+    ImGui::PushStyleColor(ImGuiCol_TabDimmedSelectedOverline, t.accent);
+    if (ImGui::BeginTabBar("##rig source", ImGuiTabBarFlags_DrawSelectedOverline)) {
+        if (ImGui::BeginTabItem("Templates")) {
+            draw_generators(strips);
+            ImGui::EndTabItem();
         }
-        const RigPreset &preset = presets_[static_cast<size_t>(preset_)];
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 28.0f * em);
-        ImGui::TextDisabled("%s", preset.description.c_str());
-        ImGui::PopTextWrapPos();
-        strips = preset.strips;
-    } else if (template_ == 0) {
+        if (ImGui::BeginTabItem("Presets")) {
+            draw_presets(strips);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("My rigs")) {
+            mine = true;
+            draw_user_rigs(strips);
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+    ImGui::PopStyleColor(6); // Read as each tab is drawn: kept until the bar ends.
+    if (!strips.empty()) {
+        draw_replace(std::move(strips));
+    }
+    if (mine) {
+        draw_save_rig();
+    }
+}
+
+void RigView::draw_generators(std::vector<StripSpec> &strips) {
+    const float em = ImGui::GetFontSize();
+    const float field = 7.0f * em;
+    ImGui::RadioButton("Pillars", &generator_, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Matrix panel", &generator_, 1);
+    if (generator_ == 0) {
         PillarsTemplate &t = pillars_;
         ImGui::SetNextItemWidth(field);
         drag_int("Pillars", &t.count, 0.1f, 1, kMaxTemplateStrips);
@@ -177,7 +200,45 @@ void RigView::draw_template_controls() {
         ImGui::Checkbox("Serpentine (alternate rows run right to left)", &t.serpentine);
         strips = matrix_strips(t);
     }
+}
 
+// A list of rigs with their category headings (consecutive rigs of one category share one);
+// hovering a name shows its description. Returns the chosen index.
+int RigView::rig_list(const char *id, const std::vector<RigPreset> &rigs, int chosen) {
+    chosen = std::clamp(chosen, 0, static_cast<int>(rigs.size()) - 1);
+    const float rows = std::min(static_cast<float>(rigs.size()) + 4.0f, 12.0f);
+    if (ImGui::BeginListBox(id, ImVec2(-FLT_MIN, rows * ImGui::GetTextLineHeightWithSpacing()))) {
+        for (size_t i = 0; i < rigs.size(); ++i) {
+            if (!rigs[i].category.empty() && (i == 0 || rigs[i].category != rigs[i - 1].category)) {
+                ImGui::SeparatorText(rigs[i].category.c_str());
+            }
+            const bool selected = static_cast<int>(i) == chosen;
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::Selectable(rigs[i].name.c_str(), selected)) {
+                chosen = static_cast<int>(i);
+            }
+            ImGui::SetItemTooltip("%s", rigs[i].description.c_str());
+            if (selected && ImGui::IsWindowAppearing()) {
+                ImGui::SetScrollHereY();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndListBox();
+    }
+    return chosen;
+}
+
+void RigView::draw_presets(std::vector<StripSpec> &strips) {
+    preset_ = rig_list("##presets", presets_, preset_);
+    const RigPreset &preset = presets_[static_cast<size_t>(preset_)];
+    ImGui::TextUnformatted(preset.name.c_str());
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", preset.description.c_str());
+    ImGui::PopTextWrapPos();
+    strips = preset.strips;
+}
+
+void RigView::draw_replace(std::vector<StripSpec> strips) {
     // What it would make, against the budgets.
     const Project &p = project_.project();
     const ColourOrder order = p.strips.empty() ? ColourOrder::grb : p.strips.front().order;
@@ -185,6 +246,7 @@ void RigView::draw_template_controls() {
     const Patch patch = build_patch(rig, p.first_universe, p.pixels_per_universe,
                                     std::vector<ColourOrder>(strips.size(), order));
     const auto pixels = static_cast<int>(rig.pixels.size());
+    ImGui::Spacing();
     mono_text("%zu strips, %d pixels, universes %d to %d, %.1f A at full white", strips.size(),
               pixels, patch.universes.empty() ? 0 : patch.universes.front(),
               patch.universes.empty() ? 0 : patch.universes.back(),
@@ -214,6 +276,98 @@ void RigView::draw_template_controls() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
+    }
+}
+
+void RigView::reload_user_rigs() {
+    user_rigs_ = load_user_presets(kUserPresetsDir).rigs;
+    user_rigs_loaded_ = true;
+}
+
+void RigView::draw_user_rigs(std::vector<StripSpec> &strips) {
+    if (!user_rigs_loaded_) {
+        reload_user_rigs();
+    }
+    if (user_rigs_.empty()) {
+        ImGui::TextDisabled("No rigs of your own yet. Name the current rig below and save it, to "
+                            "start any project from it.");
+        return;
+    }
+    user_rig_ = rig_list("##my rigs", user_rigs_, user_rig_);
+    const RigPreset &chosen = user_rigs_[static_cast<size_t>(user_rig_)];
+    ImGui::TextUnformatted(chosen.name.c_str());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Delete")) {
+        ImGui::OpenPopup("Delete the rig?");
+    }
+    bool deleted = false;
+    if (ImGui::BeginPopupModal("Delete the rig?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Delete \"%s\" from your rigs?", chosen.name.c_str());
+        ImGui::TextDisabled("Projects keep their own strips; only this saved rig goes.");
+        if (ImGui::Button("Delete")) {
+            std::error_code error;
+            std::filesystem::remove(preset_path(kUserPresetsDir, PresetKind::rig, chosen.name),
+                                    error);
+            rig_status_ = error ? "Not deleted: " + error.message() : "Deleted " + chosen.name;
+            deleted = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", chosen.description.c_str());
+    ImGui::PopTextWrapPos();
+    if (deleted) {
+        reload_user_rigs(); // After the last use of `chosen`.
+        return;
+    }
+    strips = chosen.strips;
+}
+
+void RigView::draw_save_rig() {
+    const float em = ImGui::GetFontSize();
+    ImGui::SeparatorText("Save the current rig");
+    ImGui::SetNextItemWidth(14.0f * em);
+    ImGui::InputTextWithHint("##rig name", "Name", &rig_name_);
+    ImGui::SameLine();
+    const Project &p = project_.project();
+    std::string name = rig_name_;
+    while (!name.empty() && name.back() == ' ') {
+        name.pop_back();
+    }
+    ImGui::BeginDisabled(name.empty() || p.strips.empty());
+    if (primary_button("Save to my rigs")) {
+        RigPreset preset;
+        preset.name = name;
+        for (const ProjectStrip &s : p.strips) {
+            preset.strips.push_back(s.spec);
+        }
+        const Rig rig = build_rig(preset.strips);
+        preset.description = std::to_string(preset.strips.size()) + " strips, " +
+                             std::to_string(rig.pixels.size()) + " pixels, saved from " +
+                             project_.name() + ".";
+        if (const Result<void> saved = save_rig_preset(kUserPresetsDir, preset); saved) {
+            rig_status_ = "Saved " + name + " to your rigs";
+            reload_user_rigs();
+            for (size_t i = 0; i < user_rigs_.size(); ++i) {
+                if (user_rigs_[i].name == name) {
+                    user_rig_ = static_cast<int>(i);
+                }
+            }
+            rig_name_.clear();
+        } else {
+            rig_status_ = saved.error().message;
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Saves the current strips (shape, density and groups) to presets/rigs, "
+                          "to start any project from. A rig of the same name is replaced.");
+    if (!rig_status_.empty()) {
+        ImGui::TextDisabled("%s", rig_status_.c_str());
     }
 }
 

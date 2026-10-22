@@ -562,23 +562,20 @@ RigPreset hive_temple() {
 } // namespace
 
 std::vector<RigPreset> builtin_rig_presets() {
-    return {dj_booth_chevron(),
-            triple_arch_tunnel(),
-            sunburst(),
-            hexagon_mandala(),
-            goalpost_truss(),
-            triangle_row(),
-            pixel_curtain(),
-            pixel_wall(),
-            hive_temple(),
-            hive_portal(),
-            honeycomb(),
-            lotus(),
-            third_eye(),
-            string_art_star(),
-            alien_ribcage(),
-            fractal_tree(),
-            vortex()};
+    std::vector<RigPreset> presets;
+    const auto add = [&](const char *category, std::initializer_list<RigPreset> rigs) {
+        for (RigPreset rig : rigs) {
+            rig.category = category;
+            presets.push_back(std::move(rig));
+        }
+    };
+    add("Stage builds", {dj_booth_chevron(), triple_arch_tunnel(), goalpost_truss(), triangle_row(),
+                         pixel_curtain(), pixel_wall()});
+    add("Hive", {hive_temple(), hive_portal(), honeycomb()});
+    add("Sacred geometry",
+        {sunburst(), hexagon_mandala(), string_art_star(), vortex(), third_eye()});
+    add("Organic", {lotus(), alien_ribcage(), fractal_tree()});
+    return presets;
 }
 
 std::vector<StripSpec> pillars_strips(const PillarsTemplate &t) {

@@ -19,6 +19,8 @@ const char *folder_of(PresetKind kind) {
         return "palettes";
     case PresetKind::show:
         return "shows";
+    case PresetKind::rig:
+        return "rigs";
     }
     return "scenes";
 }
@@ -86,6 +88,7 @@ UserPresets load_user_presets(const std::filesystem::path &dir) {
     load(PresetKind::scene, parse_scene_preset, out.scenes);
     load(PresetKind::palette, parse_palette_preset, out.palettes);
     load(PresetKind::show, parse_show_pack, out.shows);
+    load(PresetKind::rig, parse_rig_preset, out.rigs);
     return out;
 }
 
@@ -117,6 +120,10 @@ Result<void> save_palette_preset(const std::filesystem::path &dir, const Palette
 
 Result<void> save_show_pack(const std::filesystem::path &dir, const ShowPack &pack) {
     return write(preset_path(dir, PresetKind::show, pack.name), show_pack_json(pack));
+}
+
+Result<void> save_rig_preset(const std::filesystem::path &dir, const RigPreset &preset) {
+    return write(preset_path(dir, PresetKind::rig, preset.name), rig_preset_json(preset));
 }
 
 int apply_scene_preset(Project &project, const ScenePreset &preset, int index) {

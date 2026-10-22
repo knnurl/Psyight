@@ -60,8 +60,9 @@ void SetupAssistant::draw() {
         const Project &p = project_.project();
         const auto pixels = static_cast<int>(project_.rig().pixels.size());
         ImGui::Text("The rig now: %zu strips, %d pixels.", p.strips.size(), pixels);
-        help("Build it from a template that matches your strips (pillars or a matrix panel), or "
-             "keep it and edit the strips by hand in the Rig tab. The preview (top right) shows "
+        help("Start from a template that matches your strips (pillars or a matrix panel), a "
+             "preset shape or one of your own saved rigs, or keep it and edit the strips by hand "
+             "in the Rig tab. The preview (top right) shows "
              "the result; hover it to see each strip's name and where its data comes in.");
         ImGui::Spacing();
         rig_.draw_template_controls();

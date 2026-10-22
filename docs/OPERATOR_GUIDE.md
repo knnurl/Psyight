@@ -32,7 +32,7 @@ The window: the transport (play, loop, half speed, time, volume, the track's wav
 Hover the rig preview to see each strip's name and an arrow at its first pixel (where its data comes in); the strip under the mouse is outlined, and its row lights up in the Rig tab (and hovering a row there outlines the strip).
 
 
-Rig tab (Engineer depth) > Templates builds a rig from a few numbers: **Pillars** (how many, height, spacing or a circle, density, serpentine wiring) or a **Matrix panel** (rows, width, row spacing, density, zigzag wiring), or a **Preset**: one of 17 ready-made shapes, from a DJ booth chevron, an arch tunnel and a goalpost truss to a honeycomb, a lotus, a third eye and a fractal tree (hover a name for its size and groups). The line under them shows strips, pixels, universes and the current at full white. "Replace the rig..." swaps the strips after a confirmation; scenes, palettes and settings stay. The strips get group tags (left and right, top and bottom, even and odd) that layers can be limited to. Each strip can still be edited by hand below.
+Rig tab (Engineer depth) > New rig starts the rig from one of three sources, side by side as tabs. **Templates** build it from a few numbers: **Pillars** (how many, height, spacing or a circle, density, serpentine wiring) or a **Matrix panel** (rows, width, row spacing, density, zigzag wiring). **Presets** are 17 ready-made shapes, listed under Stage builds, Hive, Sacred geometry and Organic (hover a name for its size and groups). **My rigs** are the ones you saved: name the current rig at the bottom of that tab and press "Save to my rigs" to start any project from it later; Delete removes one. The line under them shows strips, pixels, universes and the current at full white. "Replace the rig..." swaps the strips after a confirmation; scenes, palettes and settings stay. The strips get group tags (left and right, top and bottom, even and odd) that layers can be limited to. Each strip can still be edited by hand below.
 
 ## Before the show: Preflight
 
@@ -126,7 +126,7 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 
 **Browser** (View > Browser, or Ctrl+B): search every preset; hover one (or click to select it) to see it on the rig preview while the lights keep the show, then load it from the bottom of the browser.
 
-Your presets are JSON files in the `presets` folder beside the project (`scenes`, `palettes`, `shows`), easy to copy to another machine.
+Your presets are JSON files in the `presets` folder in Psyight's folder (`scenes`, `palettes`, `shows`, and `rigs` for your rigs), easy to copy to another machine.
 
 ## MIDI controller
 

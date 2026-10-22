@@ -338,6 +338,45 @@ Patch patch_of(const Project &project) {
                        orders);
 }
 
+namespace {
+
+// A strip's geometry and groups, as the project and rig presets write them (the project adds the
+// colour order).
+json strip_spec_json(const StripSpec &s) {
+    json polyline = json::array();
+    for (const Vec3 &q : s.polyline) {
+        polyline.push_back({finite(q.x, "x"), finite(q.y, "y"), finite(q.z, "z")});
+    }
+    return {{"name", s.name},
+            {"polyline", polyline},
+            {"pixels_per_m", finite(s.pixels_per_m, "pixels_per_m")},
+            {"count", s.count},
+            {"groups", s.groups}};
+}
+
+StripSpec parse_strip_spec(const json &item) {
+    StripSpec spec;
+    spec.name = optional<std::string>(item, "name", "");
+    for (const json &point : item.at("polyline").get_ref<const json::array_t &>()) {
+        const auto &xyz = point.get_ref<const json::array_t &>();
+        if (xyz.size() != 3) {
+            throw FieldError{"polyline points need x, y and z"};
+        }
+        spec.polyline.push_back({finite(xyz[0].get<double>(), "x"),
+                                 finite(xyz[1].get<double>(), "y"),
+                                 finite(xyz[2].get<double>(), "z")});
+    }
+    if (spec.polyline.size() < 2) {
+        throw FieldError{"strip " + spec.name + " needs two polyline points"};
+    }
+    spec.pixels_per_m = number(item, "pixels_per_m", 60.0, 1.0, 1000.0);
+    spec.count = integer(item, "count", 0, 0, 10000);
+    spec.groups = optional<std::vector<std::string>>(item, "groups", {});
+    return spec;
+}
+
+} // namespace
+
 Result<Project> parse_project_json(std::string_view json_text) {
     try {
         const json root = json::parse(json_text);
@@ -351,22 +390,7 @@ Result<Project> parse_project_json(std::string_view json_text) {
             p.strips.clear();
             for (const json &item : rig->at("strips").get_ref<const json::array_t &>()) {
                 ProjectStrip strip;
-                strip.spec.name = optional<std::string>(item, "name", "");
-                for (const json &point : item.at("polyline").get_ref<const json::array_t &>()) {
-                    const auto &xyz = point.get_ref<const json::array_t &>();
-                    if (xyz.size() != 3) {
-                        throw FieldError{"polyline points need x, y and z"};
-                    }
-                    strip.spec.polyline.push_back({finite(xyz[0].get<double>(), "x"),
-                                                   finite(xyz[1].get<double>(), "y"),
-                                                   finite(xyz[2].get<double>(), "z")});
-                }
-                if (strip.spec.polyline.size() < 2) {
-                    throw FieldError{"strip " + strip.spec.name + " needs two polyline points"};
-                }
-                strip.spec.pixels_per_m = number(item, "pixels_per_m", 60.0, 1.0, 1000.0);
-                strip.spec.count = integer(item, "count", 0, 0, 10000);
-                strip.spec.groups = optional<std::vector<std::string>>(item, "groups", {});
+                strip.spec = parse_strip_spec(item);
                 strip.order = parse_order(optional<std::string>(item, "colour_order", "grb"));
                 p.strips.push_back(std::move(strip));
             }
@@ -471,16 +495,9 @@ Result<std::string> to_project_json(const Project &p) {
     try {
         json strips = json::array();
         for (const ProjectStrip &s : p.strips) {
-            json polyline = json::array();
-            for (const Vec3 &q : s.spec.polyline) {
-                polyline.push_back({finite(q.x, "x"), finite(q.y, "y"), finite(q.z, "z")});
-            }
-            strips.push_back({{"name", s.spec.name},
-                              {"polyline", polyline},
-                              {"pixels_per_m", finite(s.spec.pixels_per_m, "pixels_per_m")},
-                              {"count", s.spec.count},
-                              {"groups", s.spec.groups},
-                              {"colour_order", colour_order_name(s.order)}});
+            json strip = strip_spec_json(s.spec);
+            strip["colour_order"] = colour_order_name(s.order);
+            strips.push_back(std::move(strip));
         }
         const LimiterParams &l = p.limiter;
         const AutomationParams &a = p.automation;
@@ -620,6 +637,36 @@ Result<ScenePreset> parse_scene_preset(std::string_view text) {
         preset.scene = parse_scene(root.at("scene"));
         preset.scene.palette = 0;
         preset.palette = parse_palette(root.at("palette"));
+        return preset;
+    });
+}
+
+Result<std::string> rig_preset_json(const RigPreset &preset) {
+    return write_preset([&] {
+        json strips = json::array();
+        for (const StripSpec &s : preset.strips) {
+            strips.push_back(strip_spec_json(s));
+        }
+        return json{{"format", "psyight rig preset"},
+                    {"schema", kPresetSchemaVersion},
+                    {"name", preset.name},
+                    {"description", preset.description},
+                    {"strips", strips}};
+    });
+}
+
+Result<RigPreset> parse_rig_preset(std::string_view text) {
+    return parse_preset<RigPreset>(text, [](const json &root) {
+        expect_format(root, "psyight rig preset");
+        RigPreset preset;
+        preset.name = root.at("name").get<std::string>();
+        preset.description = optional<std::string>(root, "description", "");
+        for (const json &item : root.at("strips").get_ref<const json::array_t &>()) {
+            preset.strips.push_back(parse_strip_spec(item));
+        }
+        if (preset.strips.empty()) {
+            throw FieldError{"a rig preset needs at least one strip"};
+        }
         return preset;
     });
 }

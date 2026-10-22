@@ -231,3 +231,18 @@ TEST_CASE("rig presets: hive shapes keep their structure") {
         CHECK(s.polyline.front().y == doctest::Approx(s.polyline.back().y));
     }
 }
+
+TEST_CASE("rig presets: every built-in has a category, and each category's presets are together") {
+    const std::vector<RigPreset> presets = builtin_rig_presets();
+    std::vector<std::string> seen;
+    for (size_t i = 0; i < presets.size(); ++i) {
+        CAPTURE(presets[i].name);
+        REQUIRE_FALSE(presets[i].category.empty());
+        if (i == 0 || presets[i].category != presets[i - 1].category) {
+            // A new heading: never one that came before.
+            CHECK(std::find(seen.begin(), seen.end(), presets[i].category) == seen.end());
+            seen.push_back(presets[i].category);
+        }
+    }
+    CHECK(seen.size() == 4);
+}

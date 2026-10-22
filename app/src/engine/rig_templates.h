@@ -57,8 +57,11 @@ struct RigPreset {
     std::string name;
     std::string description; // One line for the list: the shape, its size and its groups.
     std::vector<StripSpec> strips;
+    std::string category; // The list's heading for built-in presets; empty for the user's own.
 };
 
+// Grouped by category, each category's presets together: stage builds, Hive, sacred geometry,
+// organic.
 std::vector<RigPreset> builtin_rig_presets();
 
 } // namespace psyight
