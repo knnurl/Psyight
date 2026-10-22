@@ -187,14 +187,24 @@ void TransportPanel::draw_overview(const LoadedTrack &track) {
     ImPlot::SetNextLineStyle(theme().playhead, 2.0f);
     ImPlot::PlotInfLines("##playhead", &playhead_s, 1);
 
-    // Click to seek, unless the click is on a loop handle. (The plot itself becomes the active
-    // item on click, so ImGui's active-item state cannot tell the two apart.)
+    // Click to seek, and hold to scrub: the playhead follows the mouse until the button is
+    // released, also outside the overview. Not when the click is on a loop handle. (The plot
+    // itself becomes the active item on click, so ImGui's active-item state cannot tell the two
+    // apart.)
     const auto near_handle = [&](double x_s) {
         return std::abs(ImPlot::PlotToPixels(x_s, 0.0).x - ImGui::GetMousePos().x) <
                kHandleGrabPixels;
     };
     if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
         !(loop.enabled && (near_handle(loop.start_s) || near_handle(loop.end_s)))) {
+        scrubbing_ = true;
+        scrub_x_ = -1.0f; // Seek now.
+    }
+    if (scrubbing_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        scrubbing_ = false;
+    }
+    if (scrubbing_ && ImGui::GetMousePos().x != scrub_x_) { // Only when the mouse moved.
+        scrub_x_ = ImGui::GetMousePos().x;
         const double target_s = std::clamp(ImPlot::GetPlotMousePos().x, 0.0, track.duration_s);
         transport.seek(seconds_to_samples(target_s, track.sample_rate_hz));
     }

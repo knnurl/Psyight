@@ -21,6 +21,8 @@ class TransportPanel {
     Session &session_;
     const LoadedTrack *shown_track_ = nullptr; // Detects a newly loaded track.
     float volume_db_ = 0.0f;
+    bool scrubbing_ = false; // The mouse button went down on the overview and is still down.
+    float scrub_x_ = -1.0f;  // Where the last scrub seek was (screen x).
 };
 
 } // namespace psyight
