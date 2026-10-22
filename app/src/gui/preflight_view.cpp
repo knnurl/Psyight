@@ -3,9 +3,11 @@
 #include "gui/theme.h"
 #include "gui/widgets.h"
 #include "output/discovery.h"
+#include "output/node_setup.h"
 #include "output/preflight.h"
 
 #include <imgui.h>
+#include <imgui_stdlib.h>
 
 #include <algorithm>
 
@@ -130,6 +132,7 @@ void PreflightView::draw() {
                            discovery_error_.c_str());
     }
     draw_test_patterns();
+    draw_node_setup();
     const ImGuiTableFlags flags =
         ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollY;
     if (ImGui::BeginTable("checks", 2, flags)) {
@@ -293,6 +296,226 @@ void PreflightView::draw_test_patterns() {
         ImGui::TextColored(theme().danger, "Test pattern on the lights.");
     }
     preview_.set_test_pattern(t);
+}
+
+namespace {
+
+constexpr int kNodeReplyTimeoutMs = 1000;
+constexpr int kNodeSaveTimeoutMs = 4000; // The node pauses 1 to 2 s while its flash sector erases.
+
+// Sends the commands in turn, stopping at the first that fails, then reads the settings back.
+NodeExchange exchange(std::array<std::uint8_t, 4> node, std::vector<std::string> commands) {
+    NodeExchange out;
+    Result<std::unique_ptr<UdpSocket>> socket = open_udp_socket();
+    if (!socket) {
+        out.error = socket.error().message;
+        return out;
+    }
+    for (const std::string &command : commands) {
+        const int timeout = command == "save" ? kNodeSaveTimeoutMs : kNodeReplyTimeoutMs;
+        Result<std::string> reply = node_request(*socket.value(), node, command, timeout);
+        if (!reply) {
+            out.error = reply.error().message;
+            return out;
+        }
+        if (reply.value().rfind("error", 0) == 0) {
+            out.failed_command = command;
+            out.error = reply.value();
+            while (!out.error.empty() && out.error.back() == '\n') {
+                out.error.pop_back();
+            }
+            break; // Read back what the node has now.
+        }
+        ++out.done;
+    }
+    if (out.error.empty() && !commands.empty() && commands.back() == "reboot") {
+        out.restarting = true; // Nothing to read until it is back.
+        return out;
+    }
+    Result<std::string> settings = node_request(*socket.value(), node, "get", kNodeReplyTimeoutMs);
+    if (!settings) {
+        if (out.error.empty()) {
+            out.error = settings.error().message;
+        }
+        return out;
+    }
+    out.settings = parse_node_settings(settings.value());
+    out.read = true;
+    return out;
+}
+
+} // namespace
+
+void PreflightView::start_node_job(std::vector<std::string> commands, const char *what) {
+    const std::optional<std::array<std::uint8_t, 4>> node = parse_ipv4(node_address_);
+    if (!node) {
+        node_status_ = "Type the node's address (a.b.c.d), or discover it first.";
+        return;
+    }
+    node_job_what_ = what;
+    node_status_.clear();
+    node_job_ = std::async(std::launch::async, exchange, *node, std::move(commands));
+}
+
+void PreflightView::draw_node_setup() {
+    if (!ImGui::CollapsingHeader("Node setup")) {
+        return;
+    }
+    if (node_job_.valid() && node_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        node_result_ = node_job_.get();
+    }
+    const Project &project = project_.project();
+    const NodePlan plan = plan_node(project);
+    if (node_address_.empty() && nodes_.has_value() && !nodes_->empty()) {
+        node_address_ = ipv4_text(nodes_->front().ip); // The first node that answered.
+    }
+    const float em = ImGui::GetFontSize();
+    ImGui::TextWrapped("This rig needs %d universes from %d, on %zu data line%s from the node "
+                       "(each a chain of strips in patch order, at most %d pixels):",
+                       plan.universes, plan.first_universe, plan.lanes.size(),
+                       plan.lanes.size() == 1 ? "" : "s", kNodeLanePixels);
+    if (ImGui::BeginTable("##lanes", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("Line");
+        ImGui::TableSetupColumn("Strips", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Pixels");
+        ImGui::TableHeadersRow();
+        for (size_t l = 0; l < plan.lanes.size(); ++l) {
+            const NodeLane &lane = plan.lanes[l];
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            mono_text("%zu (PE%zu)", l + 1, l);
+            ImGui::TableNextColumn();
+            const std::string &first = project.strips[static_cast<size_t>(lane.first_strip)].spec.name;
+            const std::string &last =
+                project.strips[static_cast<size_t>(lane.first_strip + lane.strips - 1)].spec.name;
+            if (lane.strips == 1) {
+                ImGui::TextUnformatted(first.c_str());
+            } else {
+                ImGui::Text("%s to %s (%d strips)", first.c_str(), last.c_str(), lane.strips);
+            }
+            ImGui::TableNextColumn();
+            mono_text("%d", lane.pixels);
+        }
+        ImGui::EndTable();
+    }
+    for (const std::string &problem : plan.problems) {
+        ImGui::TextColored(level_colour(CheckLevel::fail), "%s", problem.c_str());
+    }
+
+    // Which node.
+    ImGui::SetNextItemWidth(9.0f * em);
+    ImGui::InputTextWithHint("Node address", "a.b.c.d", &node_address_);
+    if (nodes_.has_value() && !nodes_->empty()) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(12.0f * em);
+        if (ImGui::BeginCombo("##found", "Found nodes")) {
+            for (const ArtNode &n : *nodes_) {
+                const std::string label = ipv4_text(n.ip) + "  " + n.short_name;
+                if (ImGui::Selectable(label.c_str())) {
+                    node_address_ = ipv4_text(n.ip);
+                }
+            }
+            ImGui::EndCombo();
+        }
+    } else {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(or Discover Art-Net nodes, above)");
+    }
+    // The fallback show's colours.
+    ImGui::Checkbox("Fallback show colours from", &node_send_palette_);
+    ImGui::SetItemTooltip("The node's own show when the signal is lost takes the first four colours "
+                          "of this palette.");
+    ImGui::SameLine();
+    node_palette_ = std::clamp(node_palette_, 0, std::max(0, static_cast<int>(project.palettes.size()) - 1));
+    ImGui::BeginDisabled(!node_send_palette_ || project.palettes.empty());
+    ImGui::SetNextItemWidth(10.0f * em);
+    const char *palette_name = project.palettes.empty()
+                                   ? "(none)"
+                                   : project.palettes[static_cast<size_t>(node_palette_)].name.c_str();
+    if (ImGui::BeginCombo("##palette", palette_name)) {
+        for (size_t i = 0; i < project.palettes.size(); ++i) {
+            if (ImGui::Selectable(project.palettes[i].name.c_str(), static_cast<int>(i) == node_palette_)) {
+                node_palette_ = static_cast<int>(i);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::EndDisabled();
+
+    // Actions.
+    const bool busy = node_job_.valid();
+    ImGui::BeginDisabled(busy);
+    if (ImGui::Button("Read the node")) {
+        start_node_job({}, "read");
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!plan.problems.empty());
+    if (primary_button("Set up the node")) {
+        const Palette *palette = node_send_palette_ && !project.palettes.empty()
+                                     ? &project.palettes[static_cast<size_t>(node_palette_)]
+                                     : nullptr;
+        start_node_job(node_commands(plan, palette), "set up");
+    }
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Sends this rig's universes, lines and outputs (and the colours) and "
+                          "applies them at once. The node forgets them on a restart until saved.");
+    ImGui::SameLine();
+    if (ImGui::Button("Save on the node")) {
+        start_node_job({"save"}, "save");
+    }
+    ImGui::SetItemTooltip("Keeps the node's settings after a restart. Its output pauses for 1 to "
+                          "2 seconds while it writes them.");
+    ImGui::EndDisabled();
+    if (busy) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("Talking to the node...");
+    }
+
+    // What the node said.
+    if (!node_status_.empty()) {
+        ImGui::TextColored(level_colour(CheckLevel::warn), "%s", node_status_.c_str());
+    }
+    if (!node_result_.has_value() || busy) {
+        return;
+    }
+    const NodeExchange &r = *node_result_;
+    if (r.restarting) {
+        ImGui::TextColored(level_colour(CheckLevel::ok),
+                           "Saved; the node is restarting. Read it again in a few seconds.");
+        return;
+    }
+    const bool old_firmware = r.read && node_protocol(r.settings) < kNodeProtocol;
+    if (!r.error.empty() && !(old_firmware && r.failed_command == "apply")) {
+        ImGui::TextColored(level_colour(CheckLevel::fail), "Node: %s", r.error.c_str());
+    }
+    if (!r.read) {
+        return;
+    }
+    const auto name = r.settings.find("name");
+    const std::vector<std::string> differences = node_differences(plan, r.settings);
+    if (differences.empty()) {
+        ImGui::TextColored(level_colour(CheckLevel::ok), "%s matches this rig%s.",
+                           name != r.settings.end() ? name->second.c_str() : "The node",
+                           node_job_what_ == "save" ? ", saved" : "");
+    } else {
+        ImGui::TextColored(level_colour(CheckLevel::warn), "%s does not match this rig:",
+                           name != r.settings.end() ? name->second.c_str() : "The node");
+        for (const std::string &d : differences) {
+            ImGui::BulletText("%s", d.c_str());
+        }
+    }
+    if (old_firmware) {
+        ImGui::TextColored(level_colour(CheckLevel::warn),
+                           "Its firmware is older (protocol %d): the settings take effect after "
+                           "Save on the node and a restart. Updating the firmware applies them at "
+                           "once.",
+                           node_protocol(r.settings));
+        ImGui::BeginDisabled(busy);
+        if (ImGui::Button("Save and restart the node")) {
+            start_node_job({"save", "reboot"}, "save");
+        }
+        ImGui::EndDisabled();
+    }
 }
 
 } // namespace psyight

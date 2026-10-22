@@ -27,7 +27,10 @@ static uint32_t s_dhcp_started;
 static bool s_dhcp_active;
 static bool s_save;
 static bool s_reboot;
+static bool s_apply;
 static uint16_t s_sync_joined;
+static uint16_t s_joined_first; /* The data universes whose groups are joined. */
+static uint16_t s_joined_count;
 static uint8_t s_packet[1024]; /* For the rare chained pbuf. */
 
 u32_t sys_now(void) { /* lwIP's clock for its timeouts. */ return HAL_GetTick(); }
@@ -51,6 +54,28 @@ static void join_group(uint16_t universe) {
     ip4_addr_t group;
     IP4_ADDR(&group, g[0], g[1], g[2], g[3]);
     igmp_joingroup(IP4_ADDR_ANY4, &group);
+}
+
+static void leave_group(uint16_t universe) {
+    uint8_t g[4];
+    psy_sacn_group(universe, g);
+    ip4_addr_t group;
+    IP4_ADDR(&group, g[0], g[1], g[2], g[3]);
+    igmp_leavegroup(IP4_ADDR_ANY4, &group);
+}
+
+void net_set_universes(uint16_t first, uint16_t count) {
+    for (uint16_t u = 0; u < s_joined_count; ++u) {
+        const uint16_t universe = (uint16_t)(s_joined_first + u);
+        if (universe != s_sync_joined) { /* The sync group stays. */
+            leave_group(universe);
+        }
+    }
+    for (uint16_t u = 0; u < count; ++u) {
+        join_group((uint16_t)(first + u));
+    }
+    s_joined_first = first;
+    s_joined_count = count;
 }
 
 void net_join_sync_universe(uint16_t universe) {
@@ -140,6 +165,7 @@ static void on_config(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
             node_config_command(s_config, s_mac, (const char *)data, n, reply, sizeof(reply));
         s_save |= action == NODE_CMD_SAVE;
         s_reboot |= action == NODE_CMD_REBOOT;
+        s_apply |= action == NODE_CMD_APPLY;
         const size_t length = strlen(reply);
         struct pbuf *out = pbuf_alloc(PBUF_TRANSPORT, (u16_t)length, PBUF_RAM);
         if (out != NULL) {
@@ -202,9 +228,7 @@ void net_init(node_config *config, const uint8_t mac[6], net_packet_handler hand
     s_art = listen_on(PSY_ARTNET_PORT, on_art_net);
     s_sacn = listen_on(PSY_SACN_PORT, on_sacn);
     s_cfg = listen_on(NODE_CONFIG_PORT, on_config);
-    for (uint16_t u = 0; u < config->node.universe_count; ++u) {
-        join_group((uint16_t)(config->node.first_universe + u));
-    }
+    net_set_universes(config->node.first_universe, config->node.universe_count);
 }
 
 void net_poll(uint32_t now_ms) {
@@ -256,5 +280,11 @@ bool net_take_save_request(void) {
 bool net_take_reboot_request(void) {
     const bool r = s_reboot;
     s_reboot = false;
+    return r;
+}
+
+bool net_take_apply_request(void) {
+    const bool r = s_apply;
+    s_apply = false;
     return r;
 }

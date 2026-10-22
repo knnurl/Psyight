@@ -19,8 +19,11 @@ bool net_link_up(void);
 void net_address(uint8_t ip[4]);
 /* Joins the multicast group of an sACN sync universe once data names it. */
 void net_join_sync_universe(uint16_t universe);
-/* Set when a config command asked for a save or reboot; the main loop acts on it. */
+/* Set when a config command asked for a save, a reboot or an apply; the main loop acts on it. */
 bool net_take_save_request(void);
 bool net_take_reboot_request(void);
+bool net_take_apply_request(void);
+/* The sACN universes to receive: leaves the groups of the previous range, joins the new ones. */
+void net_set_universes(uint16_t first, uint16_t count);
 
 #endif

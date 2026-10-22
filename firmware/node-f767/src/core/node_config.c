@@ -86,6 +86,7 @@ static void describe(const node_config *c, char *reply, size_t capacity) {
         snprintf(line, sizeof(line), __VA_ARGS__);                                                 \
         used = append(reply, capacity, used, line);                                                \
     } while (0)
+    LINE("protocol %u\n", NODE_PROTOCOL_VERSION);
     LINE("ip %u.%u.%u.%u\n", c->ip[0], c->ip[1], c->ip[2], c->ip[3]);
     LINE("mask %u.%u.%u.%u\n", c->mask[0], c->mask[1], c->mask[2], c->mask[3]);
     LINE("gateway %u.%u.%u.%u\n", c->gateway[0], c->gateway[1], c->gateway[2], c->gateway[3]);
@@ -105,7 +106,58 @@ static void describe(const node_config *c, char *reply, size_t capacity) {
     LINE("fade_ms %lu\n", (unsigned long)c->node.fade_ms);
     LINE("fallback_brightness %u\n", (unsigned)(c->node.fallback_brightness * 1000.0f + 0.5f));
     LINE("fallback_speed %u\n", (unsigned)(c->node.fallback_speed_hz * 1000.0f + 0.5f));
+    used = append(reply, capacity, used, "palette");
+    for (unsigned i = 0; i < c->node.palette_size && i < 4u; ++i) {
+        const uint8_t *grb = c->node.palette[i];
+        snprintf(line, sizeof(line), " %02X%02X%02X", grb[1], grb[0], grb[2]); /* As RGB. */
+        used = append(reply, capacity, used, line);
+    }
+    used = append(reply, capacity, used, "\n");
 #undef LINE
+}
+
+/* "RRGGBB RRGGBB ...": one to four colours, stored in the strip's GRB order. */
+static int parse_palette(const char *value, node_settings *s) {
+    uint8_t colours[4][3];
+    unsigned n = 0;
+    const char *p = value;
+    while (*p != '\0') {
+        while (*p == ' ') {
+            ++p;
+        }
+        if (*p == '\0') {
+            break;
+        }
+        char hex[7];
+        unsigned length = 0;
+        while (p[length] != '\0' && p[length] != ' ' && length < 7u) {
+            ++length;
+        }
+        if (length != 6u || n == 4u) {
+            return 0;
+        }
+        for (unsigned i = 0; i < 6u; ++i) {
+            const char ch = p[i];
+            if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
+                  (ch >= 'A' && ch <= 'F'))) {
+                return 0;
+            }
+            hex[i] = ch;
+        }
+        hex[6] = '\0';
+        const unsigned long rgb = strtoul(hex, NULL, 16);
+        colours[n][0] = (uint8_t)(rgb >> 8);  /* G */
+        colours[n][1] = (uint8_t)(rgb >> 16); /* R */
+        colours[n][2] = (uint8_t)rgb;         /* B */
+        ++n;
+        p += 6;
+    }
+    if (n == 0u) {
+        return 0;
+    }
+    memcpy(s->palette, colours, sizeof(colours[0]) * n);
+    s->palette_size = (uint8_t)n;
+    return 1;
 }
 
 /* Applies "key value"; returns 0 with a reason on failure. */
@@ -131,6 +183,10 @@ static int set(node_config *c, const char *key, const char *value, const char **
         memset(dest, 0, cap);
         strcpy(dest, value);
         return 1;
+    }
+    if (strcmp(key, "palette") == 0) {
+        *why = "one to four RRGGBB colours";
+        return parse_palette(value, &c->node);
     }
     if (strcmp(key, "policy") == 0) {
         for (unsigned i = 0; i < 4; ++i) {
@@ -237,6 +293,10 @@ node_command_action node_config_command(node_config *c, const uint8_t mac[6], co
         snprintf(reply, capacity, "ok rebooting\n");
         return NODE_CMD_REBOOT;
     }
+    if (strcmp(text, "apply") == 0) {
+        snprintf(reply, capacity, "ok applied (save keeps it after a restart)\n");
+        return NODE_CMD_APPLY;
+    }
     if (strcmp(text, "defaults") == 0) {
         node_config_defaults(c, mac);
         snprintf(reply, capacity, "ok defaults (not saved)\n");
@@ -256,9 +316,15 @@ node_command_action node_config_command(node_config *c, const uint8_t mac[6], co
             return NODE_CMD_NONE;
         }
         c->crc = node_config_crc(c);
-        snprintf(reply, capacity, "ok %s (save, then reboot, to apply)\n", key);
+        const int network = strcmp(key, "ip") == 0 || strcmp(key, "mask") == 0 ||
+                            strcmp(key, "gateway") == 0 || strcmp(key, "dhcp") == 0;
+        const int live = strcmp(key, "name") == 0 || strcmp(key, "long_name") == 0 ||
+                         strcmp(key, "protocols") == 0;
+        snprintf(reply, capacity, "ok %s%s\n", key,
+                 network ? " (save, then reboot, to use it)"
+                         : live ? "" : " (apply to use it now, save to keep it)");
         return NODE_CMD_NONE;
     }
-    snprintf(reply, capacity, "error unknown command (get, set, save, defaults, reboot)\n");
+    snprintf(reply, capacity, "error unknown command (get, set, apply, save, defaults, reboot)\n");
     return NODE_CMD_NONE;
 }

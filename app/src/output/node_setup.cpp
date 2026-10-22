@@ -1,0 +1,160 @@
+#include "output/node_setup.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <span>
+
+namespace psyight {
+
+int NodePlan::active_mask() const { return (1 << static_cast<int>(lanes.size())) - 1; }
+
+NodePlan plan_node(const Project &project) {
+    NodePlan plan;
+    plan.first_universe = project.first_universe;
+    plan.pixels_per_universe = project.pixels_per_universe;
+    // Strips chained in patch order: a new lane when the next strip would not fit.
+    for (size_t s = 0; s < project.strips.size(); ++s) {
+        const int count = std::max(0, project.strips[s].spec.count);
+        if (count > kNodeLanePixels) {
+            plan.problems.push_back(project.strips[s].spec.name + " has " + std::to_string(count) +
+                                    " pixels: a lane takes at most " +
+                                    std::to_string(kNodeLanePixels) + ".");
+        }
+        if (plan.lanes.empty() || plan.lanes.back().pixels + count > kNodeLanePixels) {
+            plan.lanes.push_back({plan.pixels, 0, static_cast<int>(s), 0});
+        }
+        plan.lanes.back().pixels += count;
+        ++plan.lanes.back().strips;
+        plan.pixels += count;
+    }
+    const int per_universe = std::max(1, plan.pixels_per_universe);
+    plan.universes = (plan.pixels + per_universe - 1) / per_universe;
+    if (static_cast<int>(plan.lanes.size()) > kNodeLanes) {
+        plan.problems.push_back("The strips need " + std::to_string(plan.lanes.size()) +
+                                " data lines; the node has " + std::to_string(kNodeLanes) + ".");
+    }
+    if (plan.universes > kNodeMaxUniverses) {
+        plan.problems.push_back("The rig needs " + std::to_string(plan.universes) +
+                                " universes; the node takes " + std::to_string(kNodeMaxUniverses) +
+                                ".");
+    }
+    return plan;
+}
+
+namespace {
+
+std::string hex_colour(const Rgb &c) {
+    const auto byte = [](float v) {
+        return static_cast<unsigned>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f));
+    };
+    char text[8];
+    std::snprintf(text, sizeof(text), "%02X%02X%02X", byte(c.r), byte(c.g), byte(c.b));
+    return text;
+}
+
+} // namespace
+
+std::vector<std::string> node_commands(const NodePlan &plan, const Palette *palette) {
+    std::vector<std::string> commands;
+    for (int l = 0; l < kNodeLanes; ++l) {
+        const bool used = l < static_cast<int>(plan.lanes.size());
+        const NodeLane lane = used ? plan.lanes[static_cast<size_t>(l)] : NodeLane{};
+        commands.push_back("set lane" + std::to_string(l) + " " + std::to_string(lane.first_pixel) +
+                           " " + std::to_string(lane.pixels));
+    }
+    commands.push_back("set active " + std::to_string(plan.active_mask()));
+    commands.push_back("set universe " + std::to_string(plan.first_universe));
+    commands.push_back("set universes " + std::to_string(plan.universes));
+    commands.push_back("set pixels_per_universe " + std::to_string(plan.pixels_per_universe));
+    if (palette != nullptr && !palette->colours.empty()) {
+        std::string line = "set palette";
+        const size_t n =
+            std::min(palette->colours.size(), static_cast<size_t>(kNodePaletteColours));
+        for (size_t i = 0; i < n; ++i) {
+            line += " " + hex_colour(palette->colours[i]);
+        }
+        commands.push_back(line);
+    }
+    commands.push_back("apply");
+    return commands;
+}
+
+std::map<std::string, std::string> parse_node_settings(std::string_view reply) {
+    std::map<std::string, std::string> settings;
+    while (!reply.empty()) {
+        const size_t end = reply.find('\n');
+        std::string_view line = reply.substr(0, end);
+        reply = end == std::string_view::npos ? std::string_view() : reply.substr(end + 1);
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.remove_suffix(1);
+        }
+        const size_t space = line.find(' ');
+        if (line.empty() || space == 0) {
+            continue;
+        }
+        settings[std::string(line.substr(0, space))] =
+            space == std::string_view::npos ? std::string() : std::string(line.substr(space + 1));
+    }
+    return settings;
+}
+
+int node_protocol(const std::map<std::string, std::string> &settings) {
+    const auto it = settings.find("protocol");
+    return it == settings.end() ? 1 : std::max(1, std::atoi(it->second.c_str()));
+}
+
+std::vector<std::string> node_differences(const NodePlan &plan,
+                                          const std::map<std::string, std::string> &settings) {
+    std::vector<std::string> out;
+    const auto check = [&](const std::string &key, const std::string &want, const char *what) {
+        const auto it = settings.find(key);
+        const std::string have = it == settings.end() ? "(none)" : it->second;
+        if (have != want) {
+            out.push_back(std::string(what) + ": the node has " + have + ", the rig needs " + want);
+        }
+    };
+    check("universe", std::to_string(plan.first_universe), "First universe");
+    check("universes", std::to_string(plan.universes), "Universes");
+    check("pixels_per_universe", std::to_string(plan.pixels_per_universe), "Pixels per universe");
+    check("active", std::to_string(plan.active_mask()), "Outputs");
+    for (int l = 0; l < kNodeLanes; ++l) {
+        if (l >= static_cast<int>(plan.lanes.size())) {
+            break; // Unused lanes are off (the outputs mask): what they hold does not matter.
+        }
+        const NodeLane &lane = plan.lanes[static_cast<size_t>(l)];
+        check("lane" + std::to_string(l),
+              std::to_string(lane.first_pixel) + " " + std::to_string(lane.pixels),
+              ("Lane " + std::to_string(l + 1)).c_str());
+    }
+    return out;
+}
+
+Result<std::string> node_request(UdpSocket &socket, const std::array<std::uint8_t, 4> &node,
+                                 const std::string &command, int timeout_ms) {
+    const auto *bytes = reinterpret_cast<const std::uint8_t *>(command.data());
+    if (Result<void> sent = socket.send_to(std::span<const std::uint8_t>(bytes, command.size()),
+                                           {node, kNodeConfigPort});
+        !sent) {
+        return sent.error();
+    }
+    std::array<std::uint8_t, 2048> buffer{};
+    Ipv4Endpoint from;
+    // Replies from elsewhere (another node, a stray packet) are skipped.
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        Result<size_t> got = socket.receive(buffer, timeout_ms, &from);
+        if (!got) {
+            return got.error();
+        }
+        if (got.value() == 0) {
+            return Error{"no reply from " + ipv4_text(node) + " (is it a Psyight node, and on?)"};
+        }
+        if (from.address == node) {
+            return std::string(reinterpret_cast<const char *>(buffer.data()), got.value());
+        }
+    }
+    return Error{"no reply from " + ipv4_text(node)};
+}
+
+} // namespace psyight

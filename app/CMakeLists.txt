@@ -81,6 +81,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/ml/student.cpp src/analysis/live_analysis.cpp
                                src/audio/capture.cpp src/audio/live_input.cpp
                                src/io/midi_map.cpp src/io/png.cpp src/io/recent_files.cpp src/io/recovery.cpp
+                               src/output/node_setup.cpp
                                src/io/user_settings.cpp src/io/presets.cpp src/output/test_patterns.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json

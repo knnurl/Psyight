@@ -3,7 +3,10 @@
 // and the node's ArtPollReply must parse in the app's discovery.
 
 #include "engine/rig.h"
+#include "engine/rig_templates.h"
+#include "io/project.h"
 #include "output/art_poll.h"
+#include "output/node_setup.h"
 #include "output/packets.h"
 #include "output/patch.h"
 #include "output/sender.h"
@@ -361,4 +364,125 @@ TEST_CASE("node firmware: the configuration text protocol") {
     run("defaults");
     CHECK(node_config_valid(&c));
     CHECK(c.ip[0] == 2);
+}
+
+TEST_CASE("node firmware: protocol 2: apply, the fallback palette, the version line") {
+    const std::uint8_t mac[6] = {0x02, 0x50, 0x12, 0x34, 0x56, 0x78};
+    node_config c{};
+    node_config_defaults(&c, mac);
+    char reply[2048];
+    const auto run = [&](const char *command) {
+        return node_config_command(&c, mac, command, std::strlen(command), reply, sizeof(reply));
+    };
+    run("get");
+    CHECK(std::string(reply).rfind("protocol 2\n", 0) == 0); // First, so old and new tell apart.
+    // The palette: RGB in, the strip's GRB stored, RGB out again.
+    CHECK(run("set palette FF0080 00ff00") == NODE_CMD_NONE);
+    CHECK(std::string(reply).rfind("ok palette", 0) == 0);
+    REQUIRE(c.node.palette_size == 2);
+    CHECK(c.node.palette[0][0] == 0x00); // G
+    CHECK(c.node.palette[0][1] == 0xFF); // R
+    CHECK(c.node.palette[0][2] == 0x80); // B
+    CHECK(c.node.palette[1][0] == 0xFF);
+    run("get");
+    CHECK(std::string(reply).find("palette FF0080 00FF00\n") != std::string::npos);
+    CHECK(node_config_valid(&c));
+    for (const char *bad :
+         {"set palette", "set palette FF00", "set palette GG0000",
+          "set palette 111111 222222 333333 444444 555555", "set palette FF00801"}) {
+        CAPTURE(bad);
+        run(bad);
+        CHECK(std::string(reply).rfind("error", 0) == 0);
+        CHECK(c.node.palette_size == 2); // Unchanged by a bad value.
+    }
+    // Rig settings say apply; network settings still need a restart; names act at once.
+    run("set universes 9");
+    CHECK(std::string(reply).find("apply") != std::string::npos);
+    run("set dhcp 0");
+    CHECK(std::string(reply).find("reboot") != std::string::npos);
+    run("set name Stage left");
+    CHECK(std::string(reply) == "ok name\n");
+    CHECK(run("apply") == NODE_CMD_APPLY);
+    CHECK(std::string(reply).rfind("ok applied", 0) == 0);
+}
+
+TEST_CASE("node setup: the app's limits are the firmware's, and the default frame's plan is its "
+          "defaults") {
+    CHECK(kNodeLanes == NODE_LANES);
+    CHECK(kNodeLanePixels == NODE_MAX_PIXELS_PER_LANE);
+    CHECK(kNodeMaxUniverses == NODE_MAX_UNIVERSES);
+    CHECK(kNodeConfigPort == NODE_CONFIG_PORT);
+    CHECK(kNodeProtocol == static_cast<int>(NODE_PROTOCOL_VERSION));
+    const NodePlan plan = plan_node(default_project());
+    CHECK(plan.problems.empty());
+    const node_settings defaults = node_default_settings();
+    CHECK(plan.universes == defaults.universe_count);
+    CHECK(plan.first_universe == defaults.first_universe);
+    REQUIRE(plan.lanes.size() == 1); // 444 pixels chain on one data line...
+    // ...which the firmware's defaults spread over four (one per side of the frame): both work, and
+    // the comparison says where they differ.
+    const std::uint8_t mac[6] = {2, 0, 0, 0, 0, 1};
+    node_config c{};
+    node_config_defaults(&c, mac);
+    char reply[2048];
+    node_config_command(&c, mac, "get", 3, reply, sizeof(reply));
+    const auto settings = parse_node_settings(reply);
+    CHECK(node_protocol(settings) == 2);
+    CHECK(settings.at("universes") == "3");
+    CHECK_FALSE(node_differences(plan, settings).empty());
+    CHECK(node_protocol(parse_node_settings("ip 2.0.0.1\nuniverses 3\n")) == 1); // Old firmware.
+}
+
+TEST_CASE("node setup: every built-in rig, set up by the app's commands, reaches the right lanes") {
+    for (const RigPreset &preset : builtin_rig_presets()) {
+        CAPTURE(preset.name);
+        Project project = default_project();
+        project.strips.clear();
+        for (const StripSpec &s : preset.strips) {
+            project.strips.push_back({s, ColourOrder::grb});
+        }
+        const NodePlan plan = plan_node(project);
+        REQUIRE(plan.problems.empty());
+        CHECK(plan.lanes.size() <= static_cast<size_t>(NODE_LANES));
+        // The node takes the app's commands, every one answered "ok".
+        const std::uint8_t mac[6] = {2, 0, 0, 0, 0, 1};
+        node_config c{};
+        node_config_defaults(&c, mac);
+        char reply[2048];
+        const Palette palette = default_palettes().front();
+        for (const std::string &command : node_commands(plan, &palette)) {
+            CAPTURE(command);
+            node_config_command(&c, mac, command.c_str(), command.size(), reply, sizeof(reply));
+            CHECK(std::string(reply).rfind("ok", 0) == 0);
+        }
+        node_config_command(&c, mac, "get", 3, reply, sizeof(reply));
+        CHECK(node_differences(plan, parse_node_settings(reply)).empty());
+        CHECK(c.node.palette_size == std::min<size_t>(palette.colours.size(), 4));
+        // Frames from the app land on the planned lanes: each lane, its strips' pixels in turn.
+        const Rig rig = rig_of(project);
+        const Patch patch = patch_of(project);
+        auto node = std::make_unique<node_state>();
+        node_init(node.get(), &c.node);
+        OutputSettings out;
+        OutputSender sender;
+        NodeSink sink(node.get());
+        auto lane_buffer = std::make_unique<LaneBuffer>();
+        const std::vector<std::uint8_t> rgb = rig_bytes(1, rig.pixels.size());
+        sink.now_ms = 100;
+        sender.send_frame(out, patch_frame(patch, rgb), sink);
+        REQUIRE(node_frame(node.get(), sink.now_ms, lane_buffer->lanes));
+        for (size_t l = 0; l < plan.lanes.size(); ++l) {
+            CAPTURE(l);
+            std::vector<std::uint8_t> want;
+            for (int s = 0; s < plan.lanes[l].strips; ++s) {
+                const std::vector<std::uint8_t> strip =
+                    expected_lane(rig, rgb, plan.lanes[l].first_strip + s);
+                want.insert(want.end(), strip.begin(), strip.end());
+            }
+            CHECK(want.size() == static_cast<size_t>(plan.lanes[l].pixels) * 3);
+            CHECK(std::equal(want.begin(), want.end(), lane_buffer->lanes[l]));
+        }
+        CHECK(sink.bad == 0);
+        CHECK(node->ignored == 0);
+    }
 }

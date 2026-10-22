@@ -2,16 +2,23 @@
  * set over the network"). Portable: the app's tests compile it; flash storage is in
  * board/config_store.c.
  *
- * Protocol: one command per UDP datagram to port 6455, answered with text:
- *   get                      every setting, one "key value" line each
- *   set <key> <value>        change a setting in RAM (most take effect after save and reboot)
+ * Protocol (version NODE_PROTOCOL_VERSION): one command per UDP datagram to port 6455, answered
+ * with text:
+ *   get                      "protocol N", then every setting, one "key value" line each
+ *   set <key> <value>        change a setting in RAM
+ *   apply                    use the rig settings now: universes, lanes, outputs, signal loss,
+ *                            fallback show (no flash write, no restart; save keeps them)
  *   save                     write to flash (the node pauses 1 to 2 s while the sector erases)
  *   defaults                 reset to defaults in RAM
  *   reboot                   restart
- * Keys: ip, mask, gateway (a.b.c.d), dhcp (0 or 1), name, long_name, universe (first),
- * universes (count), pixels_per_universe, lane0..lane7 ("first_pixel count"), active (lane bit
- * mask, decimal), loss_ms, policy (hold, fade, fallback, blackout), fade_ms, fallback_brightness
- * and fallback_speed (thousandths), protocols (1 Art-Net, 2 sACN, 3 both).
+ * Keys: ip, mask, gateway (a.b.c.d), dhcp (0 or 1): after save and reboot; name, long_name,
+ * protocols (1 Art-Net, 2 sACN, 3 both): at once; the rig settings, on apply (or after a
+ * restart): universe (first), universes (count), pixels_per_universe, lane0..lane7
+ * ("first_pixel count"), active (lane bit mask, decimal), loss_ms, policy (hold, fade, fallback,
+ * blackout), fade_ms, fallback_brightness and fallback_speed (thousandths), palette (the fallback
+ * show's colours: one to four RRGGBB, space separated).
+ * Version 1 had no apply, no palette and no protocol line: its rig settings took effect after
+ * save and reboot.
  */
 #ifndef PSY_NODE_CONFIG_H
 #define PSY_NODE_CONFIG_H
@@ -28,6 +35,7 @@ extern "C" {
 #define NODE_CONFIG_MAGIC 0x50535931u /* "PSY1" */
 #define NODE_CONFIG_VERSION 1u
 #define NODE_CONFIG_PORT 6455
+#define NODE_PROTOCOL_VERSION 2u
 #define NODE_PROTOCOL_ART_NET 1u
 #define NODE_PROTOCOL_SACN 2u
 
@@ -47,7 +55,7 @@ typedef struct {
     uint32_t crc; /* CRC-32 of everything before it. */
 } node_config;
 
-typedef enum { NODE_CMD_NONE, NODE_CMD_SAVE, NODE_CMD_REBOOT } node_command_action;
+typedef enum { NODE_CMD_NONE, NODE_CMD_SAVE, NODE_CMD_REBOOT, NODE_CMD_APPLY } node_command_action;
 
 void node_config_defaults(node_config *c, const uint8_t mac[6]);
 uint32_t node_config_crc(const node_config *c);

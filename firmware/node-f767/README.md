@@ -15,7 +15,7 @@ Firmware for the custom Art-Net and sACN pixel node of SPEC section 12: up to 8 
 
 ## Build
 
-Needs STM32CubeIDE 1.19 (for its arm-none-eabi-gcc 13.3), CMake 3.25 or later and Ninja. From `firmware/node-f767`:
+Needs arm-none-eabi-gcc 13.3 (the one in STM32CubeIDE 1.19 is found by itself; otherwise unzip the Arm GNU Toolchain 13.3.rel1 and pass its `bin` folder as `-DARM_TOOLCHAIN_DIR=...` or in the `ARM_TOOLCHAIN_DIR` environment variable), CMake 3.25 or later and Ninja. From `firmware/node-f767`:
 
 ```
 powershell -ExecutionPolicy Bypass -File fetch_deps.ps1
@@ -87,7 +87,9 @@ node "reboot"
 
 Replace the address with the node's. The keys are listed in `src/core/node_config.h`.
 
-`save` erases a 256 KB flash sector, which pauses output and network for 1 to 2 s. Most settings apply after the reboot.
+The easy way: the app's Preflight tab > Node setup works out the universes and data lines the current rig needs, sends them (with the fallback show's colours), applies them and reads them back; Save on the node keeps them.
+
+Protocol 2 (`get` starts with `protocol 2`): `apply` puts the rig settings to use at once, between two frames, with no flash write and no restart: universes, lanes, `active`, the signal-loss settings and the fallback show, including `palette` (one to four `RRGGBB`). Names and `protocols` act at once; the network settings (ip, mask, gateway, dhcp) after save and reboot. `save` erases a 256 KB flash sector, which pauses output and network for 1 to 2 s.
 
 Lanes are mapped by global pixel index, the way the app patches (170 pixels a universe, strips running across universe boundaries). Each lane is `first_pixel count`.
 

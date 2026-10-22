@@ -3,7 +3,8 @@
  *   1  F1: a test pattern on the strips, no network. Check the waveform on a scope.
  *   2  F2: network only. Prints each universe's packets, sequence and size once a second.
  *   3  F3: the node: Art-Net and sACN to the strips, sync, watchdog, flash config, signal-loss
- *      policy and fallback show, ArtPollReply, the UDP config protocol on port 6455.
+ *      policy and fallback show, ArtPollReply, the UDP config protocol on port 6455 (with apply:
+ *      new rig settings take effect between two frames, without a restart).
  * Status LEDs: green blinks at 1 Hz (alive); blue on while data arrives; red on without a link
  * (stages 2 and 3) or after a fault. */
 #include "board.h"
@@ -138,7 +139,8 @@ static void stage3_packet(const psy_packet *p, bool art_net, uint32_t now_ms) {
 }
 
 static void stage3_loop(void) {
-    const uint16_t pixels = node_max_lane_pixels(&s_node.s);
+    uint16_t pixels = node_max_lane_pixels(&s_node.s);
+    bool apply = false;
     uint32_t last_frame = 0;
     uint32_t last_stats = 0;
     uint32_t frames_since = 0;
@@ -155,6 +157,17 @@ static void stage3_loop(void) {
             node_frame(&s_node, now, s_lanes) && ws2812_send(s_lanes, pixels)) {
             last_frame = now;
             ++frames_since;
+        }
+        apply |= net_take_apply_request();
+        if (apply && ws2812_ready()) { /* Between two frames: no DMA running. */
+            apply = false;
+            node_init(&s_node, &s_config.node);
+            ws2812_init(s_config.active_mask);
+            net_set_universes(s_config.node.first_universe, s_config.node.universe_count);
+            pixels = node_max_lane_pixels(&s_node.s);
+            printf("config: applied, %u universes from %u, outputs %u, %u pixels per lane\r\n",
+                   s_config.node.universe_count, s_config.node.first_universe, s_config.active_mask,
+                   pixels);
         }
         if (net_take_save_request()) {
             printf("config: saving (output pauses)\r\n");
