@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 
@@ -21,6 +22,7 @@ TEST_CASE("user settings: defaults without a file, kept across runs") {
     changed.spectrogram_colours = "viridis";
     changed.spectrogram_min_db = -75.5f;
     changed.spectrogram_max_db = -5.0f;
+    changed.analysis_plot_shares = {0.3f, 0.4f, 0.25f, 0.5f};
     changed.volume_db = -12.0f;
     changed.show_detections = false;
     changed.show_pitch = false;
@@ -44,5 +46,14 @@ TEST_CASE("user settings: a damaged file keeps the defaults it cannot say") {
     CHECK(loaded.snap == UserSettings{}.snap);
     std::ofstream(file, std::ios::binary) << "not json";
     CHECK(load_user_settings(file) == UserSettings{});
+    // Plot shares: only four positive numbers replace the default.
+    for (const char *shares : {"[0.5, 0.5, 0.5]", "[0.5, 0.5, 0.5, 0]", "[0.5, \"a\", 0.5, 0.5]",
+                               "[0.5, 0.5, 0.5, -1]", "0.5"}) {
+        CAPTURE(shares);
+        std::ofstream(file, std::ios::binary) << "{\"analysis_plot_shares\": " << shares << "}";
+        CHECK(load_user_settings(file).analysis_plot_shares == UserSettings{}.analysis_plot_shares);
+    }
+    std::ofstream(file, std::ios::binary) << "{\"analysis_plot_shares\": [1, 2, 3, 4]}";
+    CHECK(load_user_settings(file).analysis_plot_shares == std::array<float, 4>{1, 2, 3, 4});
     std::filesystem::remove(file);
 }

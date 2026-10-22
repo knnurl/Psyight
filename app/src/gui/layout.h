@@ -14,6 +14,11 @@ namespace psyight {
 
 void apply_default_layout(ImGuiID dockspace_id);
 
+// Thin lines (theme pane_divider) over the splitters between panels docked side by side, so the
+// columns read apart; call after the dock space each frame. Drawn in the dock space's host window,
+// under the panels and popups.
+void draw_pane_dividers(ImGuiID dockspace_id);
+
 // Window classes for the pinned panels: set with ImGui::SetNextWindowClass before Begin.
 // The transport strip: no tab bar, not undockable, nothing docks over it.
 const ImGuiWindowClass &transport_window_class();

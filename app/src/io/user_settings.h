@@ -1,11 +1,12 @@
 // The operator's preferences that outlive a session (theme, interface depth, spectrogram colours,
-// volume, bass roll display, rig preview, show mode), kept in a small JSON file
-// (psyight.settings.json in the working directory by default). Not the project (rig, scenes:
-// io/project.h) and not the window layout (imgui.ini). A missing file gives the defaults; a field
-// that is missing or has the wrong type keeps its default, so an older or damaged file loses only
-// what it cannot say.
+// the analysis plots' heights, volume, bass roll display, rig preview, show mode), kept in a small
+// JSON file (psyight.settings.json in the working directory by default). Not the project (rig,
+// scenes: io/project.h) and not the window layout (imgui.ini). A missing file gives the defaults;
+// a field that is missing or has the wrong type keeps its default, so an older or damaged file
+// loses only what it cannot say.
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <string>
 
@@ -17,6 +18,9 @@ struct UserSettings {
     std::string spectrogram_colours = "magma"; // magma, inferno, viridis.
     float spectrogram_min_db = -90.0f;
     float spectrogram_max_db = -10.0f;
+    // Shares of the analysis view's height: spectrogram, band energy, flux, residual (dragged
+    // with the splitters between the plots). Kept only as four positive numbers.
+    std::array<float, 4> analysis_plot_shares{0.55f, 0.25f, 0.20f, 0.30f};
     float volume_db = 0.0f;
     bool show_detections = true; // Bass roll.
     bool show_pitch = true;      // Bass roll pitch background.

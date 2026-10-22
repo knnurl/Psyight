@@ -5,6 +5,7 @@
 #include "gui/widgets.h"
 
 #include <imgui.h>
+#include <imgui_internal.h> // SplitterBehavior.
 #include <implot.h>
 
 #include <algorithm>
@@ -24,10 +25,8 @@ constexpr float kMinDisplayDb = -120.0f;
 constexpr float kMaxDisplayDb = 0.0f;
 constexpr double kFrequencyTicksHz[] = {50, 100, 200, 500, 1000, 2000, 5000, 10000};
 constexpr const char *kFrequencyTickLabels[] = {"50", "100", "200", "500", "1k", "2k", "5k", "10k"};
-// Shares of the height for the spectrogram, band energy and flux plots, and a plot's minimum
-// height in lines of text.
-constexpr std::array<float, 4> kPlotRatios{0.55f, 0.25f, 0.20f, 0.30f};
-constexpr float kMinPlotHeight = 4.0f;
+constexpr float kMinPlotHeight = 4.0f; // A plot's minimum height in lines of text.
+constexpr float kSplitterThickness = 2.0f; // The line drawn across the gap between plots.
 int kWholeNumbers = 0; // Decimals for format_fixed_width (ImPlot takes a non-const pointer).
 int kHundredths = 2;
 constexpr double kMaxRestSlots = 2000.0; // Rests are shaded only when this few slots are in view.
@@ -71,38 +70,39 @@ void AnalysisView::draw() {
     const double playhead_s = session_.playhead_s();
     const Grid grid = session_.grid();
 
-    // Each plot folds under its own header; the open ones share the height by their ratios. The
-    // heights use the previous frame's open states (a one-frame lag when folding).
-    float open_ratio = 0.0f;
+    // Each plot folds under its own header; the open ones share the height by their shares, which
+    // the splitters between them change. The heights use the previous frame's open states (a
+    // one-frame lag when folding).
+    float open_share = 0.0f;
     int open_count = 0;
-    for (size_t i = 0; i < kPlotRatios.size(); ++i) {
-        open_ratio += open_[i] ? kPlotRatios[i] : 0.0f;
+    for (size_t i = 0; i < kPlots; ++i) {
+        open_share += open_[i] ? shares_[i] : 0.0f;
         open_count += open_[i];
     }
     const float available =
         ImGui::GetContentRegionAvail().y -
-        static_cast<float>(kPlotRatios.size()) * ImGui::GetFrameHeightWithSpacing() -
+        static_cast<float>(kPlots) * ImGui::GetFrameHeightWithSpacing() -
         static_cast<float>(open_count) * ImGui::GetStyle().ItemSpacing.y;
     // Plots whose share falls below the minimum get the minimum; the rest share what is left by
-    // their ratios, so the open plots always fit (unless even the minimums do not).
-    std::array<float, kPlotRatios.size()> heights{};
+    // their shares, so the open plots always fit (unless even the minimums do not).
+    std::array<float, kPlots> heights{};
     {
         const float minimum = kMinPlotHeight * plot_font_size(); // Lines of axis labels.
         float rest = available;
-        float rest_ratio = open_ratio;
-        std::array<bool, kPlotRatios.size()> fixed{};
-        for (size_t i = 0; i < kPlotRatios.size(); ++i) {
-            if (open_[i] && available * kPlotRatios[i] / std::max(open_ratio, 1e-3f) < minimum) {
+        float rest_share = open_share;
+        std::array<bool, kPlots> fixed{};
+        for (size_t i = 0; i < kPlots; ++i) {
+            if (open_[i] && available * shares_[i] / std::max(open_share, 1e-3f) < minimum) {
                 fixed[i] = true;
                 rest -= minimum;
-                rest_ratio -= kPlotRatios[i];
+                rest_share -= shares_[i];
             }
         }
-        for (size_t i = 0; i < kPlotRatios.size(); ++i) {
+        for (size_t i = 0; i < kPlots; ++i) {
             heights[i] = fixed[i] ? minimum
                          : rest > minimum
-                             ? rest * kPlotRatios[i] / std::max(rest_ratio, 1e-3f)
-                             : available * kPlotRatios[i] / std::max(open_ratio, 1e-3f);
+                             ? rest * shares_[i] / std::max(rest_share, 1e-3f)
+                             : available * shares_[i] / std::max(open_share, 1e-3f);
         }
     }
     const auto height = [&](size_t i) { return heights[i]; };
@@ -204,6 +204,7 @@ void AnalysisView::draw() {
         handles.insert(handles.end(), section_handles.begin(), section_handles.end());
         seek_on_click(session_, handles);
         end_plot();
+        draw_plot_splitter(0, heights);
     }
     draw_section_menu(track);
     open_[1] = ImGui::CollapsingHeader("Band energy", ImGuiTreeNodeFlags_DefaultOpen);
@@ -226,6 +227,7 @@ void AnalysisView::draw() {
         draw_playhead(playhead_s);
         seek_on_click(session_, draw_loop(session_, false, 20));
         end_plot();
+        draw_plot_splitter(1, heights);
     }
     open_[2] = ImGui::CollapsingHeader("Spectral flux", ImGuiTreeNodeFlags_DefaultOpen);
     if (open_[2] && begin_plot("##spectral flux", ImVec2(-1, height(2)), ImPlotFlags_NoLegend)) {
@@ -238,6 +240,7 @@ void AnalysisView::draw() {
         draw_playhead(playhead_s);
         seek_on_click(session_, draw_loop(session_, false, 30));
         end_plot();
+        draw_plot_splitter(2, heights);
     }
     open_[3] = ImGui::CollapsingHeader("Residual (non-bass) and hats");
     if (open_[3] && begin_plot("##residual", ImVec2(-1, height(3)), ImPlotFlags_None)) {
@@ -334,6 +337,7 @@ void AnalysisView::apply_settings(const UserSettings &settings) {
         min_db_ = std::max(settings.spectrogram_min_db, kMinDisplayDb);
         max_db_ = std::min(settings.spectrogram_max_db, kMaxDisplayDb);
     }
+    shares_ = settings.analysis_plot_shares;
     colours_changed_ = true;
 }
 
@@ -341,6 +345,50 @@ void AnalysisView::store_settings(UserSettings &settings) const {
     settings.spectrogram_colours = colormap_id(colormap_);
     settings.spectrogram_min_db = min_db_;
     settings.spectrogram_max_db = max_db_;
+    settings.analysis_plot_shares = shares_;
+}
+
+void AnalysisView::draw_plot_splitter(size_t above, std::array<float, kPlots> &heights) {
+    size_t below = above + 1;
+    while (below < kPlots && !open_[below]) {
+        ++below;
+    }
+    if (below == kPlots) {
+        return; // The last open plot: nothing to share with.
+    }
+    // The gap between this plot and the next header: the cursor is one item spacing below the
+    // plot. The line sits in the middle; the whole gap takes the mouse.
+    const float gap = ImGui::GetStyle().ItemSpacing.y;
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float y = cursor.y - 0.5f * gap;
+    const ImRect line(ImVec2(cursor.x, y - 0.5f * kSplitterThickness),
+                      ImVec2(cursor.x + ImGui::GetContentRegionAvail().x,
+                             y + 0.5f * kSplitterThickness));
+    // ImGui draws nothing (transparent separator colours); the faded line is drawn below.
+    const ImVec4 none(0.0f, 0.0f, 0.0f, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_Separator, none);
+    ImGui::PushStyleColor(ImGuiCol_SeparatorHovered, none);
+    ImGui::PushStyleColor(ImGuiCol_SeparatorActive, none);
+    const ImGuiID id = ImGui::GetID(static_cast<int>(1000 + above));
+    const float minimum = kMinPlotHeight * plot_font_size();
+    const float grab = std::max(0.5f * (gap - kSplitterThickness), 3.0f); // Either side.
+    if (ImGui::SplitterBehavior(line, id, ImGuiAxis_Y, &heights[above], &heights[below], minimum,
+                                minimum, grab)) {
+        // The pair keeps its total share, split as the dragged heights are.
+        const float total = shares_[above] + shares_[below];
+        shares_[above] = total * heights[above] / std::max(heights[above] + heights[below], 1.0f);
+        shares_[below] = total - shares_[above];
+    }
+    if (ImGui::GetActiveID() == id && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        shares_ = UserSettings{}.analysis_plot_shares;
+    }
+    ImGui::PopStyleColor(3);
+    // Brighter while hovered or dragged, so the grip shows.
+    const ThemeTokens &t = theme();
+    const ImVec4 colour = ImGui::GetActiveID() == id    ? with_alpha(t.accent, 0.9f)
+                          : ImGui::GetHoveredID() == id ? with_alpha(t.accent, 0.6f)
+                                                        : t.pane_divider;
+    fill_faded(*ImGui::GetWindowDrawList(), line.Min, line.Max, colour);
 }
 
 double AnalysisView::snap_to_bar(double t_s) const {

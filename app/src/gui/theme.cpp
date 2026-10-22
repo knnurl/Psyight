@@ -59,6 +59,7 @@ void data_tokens(ThemeTokens &t) {
     t.note_slide = t.accent;
     t.selection_fill = with_alpha(t.accent, 0.12f);
     t.selected_outline = mix(t.text, ImVec4(1, 1, 1, 1), 0.6f);
+    t.pane_divider = with_alpha(t.accent, 0.3f);
     // Devices sit a step lighter than the panel, with a frame-coloured title bar; knob value arcs
     // are neutral (the accent stays for active states), modulation rings take the info blue.
     t.device_bg = mix(t.panel, t.frame, 0.5f);
@@ -219,6 +220,7 @@ const std::vector<std::pair<const char *, ImVec4 ThemeTokens::*>> &token_names()
         {"hat_tick", &ThemeTokens::hat_tick},
         {"downbeat_handle", &ThemeTokens::downbeat_handle},
         {"preview_bg", &ThemeTokens::preview_bg},
+        {"pane_divider", &ThemeTokens::pane_divider},
         {"pitch_low", &ThemeTokens::pitch_low},
         {"pitch_high", &ThemeTokens::pitch_high},
     };
@@ -500,6 +502,22 @@ void push_filled_button(const ImVec4 &fill) {
 }
 
 void pop_filled_button() { ImGui::PopStyleColor(4); }
+
+void fill_faded(ImDrawList &draw_list, ImVec2 min, ImVec2 max, const ImVec4 &colour) {
+    const ImU32 solid = to_u32(colour);
+    const ImU32 clear = to_u32(with_alpha(colour, 0.0f));
+    // Two halves, each a gradient from the middle to an end (corners: upper left, upper right,
+    // lower right, lower left).
+    if (max.x - min.x >= max.y - min.y) {
+        const float middle = 0.5f * (min.x + max.x);
+        draw_list.AddRectFilledMultiColor(min, ImVec2(middle, max.y), clear, solid, solid, clear);
+        draw_list.AddRectFilledMultiColor(ImVec2(middle, min.y), max, solid, clear, clear, solid);
+    } else {
+        const float middle = 0.5f * (min.y + max.y);
+        draw_list.AddRectFilledMultiColor(min, ImVec2(max.x, middle), clear, clear, solid, solid);
+        draw_list.AddRectFilledMultiColor(ImVec2(min.x, middle), max, solid, solid, clear, clear);
+    }
+}
 
 bool begin_plot(const char *title_id, const ImVec2 &size, int flags) {
     // Pushed outside the plot's child window (ImGui checks the font stack per window).

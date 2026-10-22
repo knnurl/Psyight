@@ -1,6 +1,8 @@
 #include "gui/layout.h"
 
-#include <imgui_internal.h> // DockBuilder API, private dock node flags.
+#include "gui/theme.h"
+
+#include <imgui_internal.h> // DockBuilder API, private dock node flags, dock nodes.
 
 #include <algorithm>
 
@@ -22,7 +24,37 @@ ImGuiWindowClass pinned_class(ImGuiDockNodeFlags extra) {
     return c;
 }
 
+// Fills the splitter gap of every visible left-right split under node, over the split's height,
+// fading towards its top and bottom.
+void draw_vertical_dividers(const ImGuiDockNode *node, ImDrawList &draw_list,
+                            const ImVec4 &colour) {
+    if (node == nullptr || !node->IsSplitNode()) {
+        return;
+    }
+    const ImGuiDockNode *first = node->ChildNodes[0];
+    const ImGuiDockNode *second = node->ChildNodes[1];
+    if (node->SplitAxis == ImGuiAxis_X && first->IsVisible && second->IsVisible) {
+        const float left = first->Pos.x + first->Size.x;
+        const float right = std::max(second->Pos.x, left + 1.0f);
+        fill_faded(draw_list, ImVec2(left, node->Pos.y), ImVec2(right, node->Pos.y + node->Size.y),
+                   colour);
+    }
+    draw_vertical_dividers(first, draw_list, colour);
+    draw_vertical_dividers(second, draw_list, colour);
+}
+
 } // namespace
+
+void draw_pane_dividers(ImGuiID dockspace_id) {
+    const ImGuiDockNode *root = ImGui::DockBuilderGetNode(dockspace_id);
+    if (root == nullptr || root->HostWindow == nullptr) {
+        return;
+    }
+    ImDrawList &draw_list = *root->HostWindow->DrawList;
+    draw_list.PushClipRectFullScreen();
+    draw_vertical_dividers(root, draw_list, theme().pane_divider);
+    draw_list.PopClipRect();
+}
 
 const ImGuiWindowClass &transport_window_class() {
     static const ImGuiWindowClass c =

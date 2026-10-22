@@ -46,6 +46,9 @@ struct ThemeTokens {
     ImVec4 section_groove, section_breakdown, section_build, section_drop, section_other;
     ImVec4 section_boundary, section_text, phrase_tick, rest_shade, hat_tick, downbeat_handle;
     ImVec4 preview_bg;
+    // The thin lines between panels side by side, and between the analysis plots (their
+    // splitters): the accent at their middle, mostly transparent, fading out towards their ends.
+    ImVec4 pane_divider;
     // Devices and knobs (the Show tab's rack): the device panel and its title bar, a knob's track,
     // value arc and pointer, and the modulation ring (where routes move a value right now).
     ImVec4 device_bg, device_title, knob_track, knob_value, knob_pointer, mod_ring;
@@ -79,6 +82,10 @@ inline ImVec4 with_alpha(ImVec4 c, float alpha) {
 // pop_filled_button().
 void push_filled_button(const ImVec4 &fill);
 void pop_filled_button();
+
+// Fills the rectangle with colour at its middle, fading linearly to nothing at both ends of its
+// longer side: a divider line that fades outwards.
+void fill_faded(ImDrawList &draw_list, ImVec2 min, ImVec2 max, const ImVec4 &colour);
 
 // ImPlot::BeginPlot and EndPlot with the plots' smaller font (axis labels, legends, drawn text).
 // ImPlot measures and draws tick labels in EndPlot, so the font stays pushed until then.

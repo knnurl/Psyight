@@ -2,7 +2,8 @@
 // spectral flux on one shared time axis that follows the playhead, with the manual grid (BPM and
 // a draggable first downbeat) drawn on every plot, and the residual view (SPEC 9.4, M2): non-bass
 // level, centroid and flatness with bass rests shaded and hats marked. Each plot folds under its
-// own header.
+// own header; a splitter between two open plots moves height between them (double-click: the
+// default shares again), and the shares persist in the user settings.
 #pragma once
 
 #include <array>
@@ -46,8 +47,14 @@ class AnalysisView {
     FieldGesture field_gesture_;                  // The grid fields: one undo step per drag.
     AnalysisSource source_ = AnalysisSource::mix; // For the next re-analysis.
     bool source_chosen_ = false;                  // Until chosen, it follows the loaded analysis.
-    // Which of the spectrogram, band energy, flux and residual plots are unfolded.
-    std::array<bool, 4> open_{true, true, true, false}; // The residual starts folded.
+    // The spectrogram, band energy, flux and residual plots: which are unfolded, and their shares
+    // of the height.
+    static constexpr size_t kPlots = 4;
+    std::array<bool, kPlots> open_{true, true, true, false}; // The residual starts folded.
+    std::array<float, kPlots> shares_ = UserSettings{}.analysis_plot_shares;
+    // Under plot `above` (call right after it), the splitter shared with the next open plot, if
+    // any: a pane_divider line across the gap; dragging it changes both heights and shares.
+    void draw_plot_splitter(size_t above, std::array<float, kPlots> &heights);
 };
 
 } // namespace psyight

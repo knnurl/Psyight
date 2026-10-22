@@ -462,6 +462,7 @@ int main() {
                 focus_preview = true;
             }
             ImGui::DockSpaceOverViewport(dockspace_id);
+            psyight::draw_pane_dividers(dockspace_id);
             session.update();
             if (!capture && session.has_track() && session.track().path != recent_path) {
                 recent_path = session.track().path; // Loaded (from the menu, a drop or the

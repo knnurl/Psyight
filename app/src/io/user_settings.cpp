@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cmath>
 #include <fstream>
 #include <type_traits>
 
@@ -27,6 +28,27 @@ template <typename T> void read(const nlohmann::json &root, const char *key, T &
     }
 }
 
+// An array of N positive, finite numbers, or nothing (the default stays).
+template <size_t N>
+void read_shares(const nlohmann::json &root, const char *key, std::array<float, N> &value) {
+    const auto found = root.find(key);
+    if (found == root.end() || !found->is_array() || found->size() != N) {
+        return;
+    }
+    std::array<float, N> shares{};
+    for (size_t i = 0; i < N; ++i) {
+        const nlohmann::json &item = (*found)[i];
+        if (!item.is_number()) {
+            return;
+        }
+        shares[i] = item.get<float>();
+        if (!std::isfinite(shares[i]) || shares[i] <= 0.0f) {
+            return;
+        }
+    }
+    value = shares;
+}
+
 } // namespace
 
 UserSettings load_user_settings(const std::filesystem::path &file) {
@@ -44,6 +66,7 @@ UserSettings load_user_settings(const std::filesystem::path &file) {
     read(root, "spectrogram_colours", settings.spectrogram_colours);
     read(root, "spectrogram_min_db", settings.spectrogram_min_db);
     read(root, "spectrogram_max_db", settings.spectrogram_max_db);
+    read_shares(root, "analysis_plot_shares", settings.analysis_plot_shares);
     read(root, "volume_db", settings.volume_db);
     read(root, "show_detections", settings.show_detections);
     read(root, "show_pitch", settings.show_pitch);
@@ -61,6 +84,7 @@ void save_user_settings(const std::filesystem::path &file, const UserSettings &s
         {"spectrogram_colours", settings.spectrogram_colours},
         {"spectrogram_min_db", settings.spectrogram_min_db},
         {"spectrogram_max_db", settings.spectrogram_max_db},
+        {"analysis_plot_shares", settings.analysis_plot_shares},
         {"volume_db", settings.volume_db},
         {"show_detections", settings.show_detections},
         {"show_pitch", settings.show_pitch},
