@@ -9,6 +9,7 @@
 #include <array>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace psyight {
 
@@ -29,6 +30,10 @@ struct UserSettings {
     // Show mode (React and Show on the top bar): the Show theme, and the editing panels hidden.
     bool show_mode_theme = true;
     bool show_mode_hides_editing = true;
+    // The labelling mode (gui/labelling_view.h): its music folders (UTF-8 paths) and which
+    // tracks its list shows (all, not started, in progress, done).
+    std::vector<std::string> label_folders;
+    std::string label_filter = "all";
 
     bool operator==(const UserSettings &) const = default;
 };

@@ -2,6 +2,7 @@
 //
 //   psyight_analyse [--kicks] [--tempo] [--bars] [--stems] <audio> [more audio...]
 //   psyight_analyse --sections-report <audio or folder> [more...]
+//   psyight_analyse --sections-eval <audio or folder> [more...]
 //
 // Runs the front end, the beat tracker and bass tracker v0 on the automatic grid, and prints
 // tempo, grid, downbeat and phrase (with confidences), kick coverage of the beats, and bass note
@@ -19,6 +20,10 @@
 // (builds aside), the share of boundaries within half a bar of the 8-bar phrase grid, and kick
 // state flips per minute; then the medians over the tracks. It measures how fragmented the
 // section structure is, the problem docs/PLAN_SECTIONS_EFFECTS.md part 1 addresses.
+// --sections-eval scores the detection against the sections labelled in the labelling mode, for
+// every track marked done (folders searched as the labelling mode does): boundary precision,
+// recall and F within one bar, the share of bars with the same label, and whether the detected
+// phrase grid lines up with a labelled one; then the totals over the tracks.
 
 #include "analysis/bass_tracker.h"
 #include "analysis/beat_tracker.h"
@@ -30,7 +35,9 @@
 #include "core/paths.h"
 #include "core/pitch.h"
 #include "io/labels.h"
+#include "io/section_marks.h"
 #include "io/stems.h"
+#include "io/track_library.h"
 
 #include <algorithm>
 #include <array>
@@ -458,11 +465,92 @@ int sections_report(const std::vector<std::wstring> &paths) {
     return per_minute.empty() ? 1 : 0;
 }
 
+int sections_eval(const std::vector<std::wstring> &paths) {
+    std::vector<std::filesystem::path> folders;
+    std::vector<TrackEntry> tracks;
+    for (const std::wstring &p : paths) {
+        const std::filesystem::path path(p);
+        if (std::filesystem::is_directory(path)) {
+            folders.push_back(path);
+        } else {
+            TrackEntry entry;
+            entry.path = path;
+            entry.name = path_to_utf8(path.filename());
+            entry.status = label_status(path, &entry.sections);
+            tracks.push_back(entry);
+        }
+    }
+    for (TrackEntry &t : scan_track_folders(folders)) {
+        tracks.push_back(std::move(t));
+    }
+    SectionScore total;
+    int phrase_tracks = 0;
+    int phrase_agree = 0;
+    int scored = 0;
+    for (const TrackEntry &track : tracks) {
+        if (track.status != LabelStatus::done) {
+            continue;
+        }
+        const Result<Labels> labels = load_labels(labels_path_for(track.path));
+        if (!labels || labels.value().sections.empty()) {
+            continue;
+        }
+        const Labels &l = labels.value();
+        TrackAnalysisOptions options;
+        options.source = analysis_stems_exist(stem_paths_for(track.path)) ? AnalysisSource::stems
+                                                                          : AnalysisSource::mix;
+        const Result<TrackAnalysis> analysis = analyse_track(track.path, options);
+        if (!analysis) {
+            std::printf("%-50s  %s\n", track.name.substr(0, 50).c_str(),
+                        analysis.error().message.c_str());
+            continue;
+        }
+        const TrackAnalysis &a = analysis.value();
+        const std::vector<SectionLabel> detected = sections_from_detection(a.sections, l.grid);
+        const SectionScore s = score_sections(l.sections, detected, l.grid, a.duration_s);
+        total += s;
+        ++scored;
+        std::string phrase = "phrase grid not labelled";
+        if (l.phrases.set && a.beats.bpm > 0.0) {
+            const double bar_s = 4.0 * 60.0 / a.beats.bpm;
+            const double detected_start =
+                samples_to_seconds(a.beats.grid.first_downbeat, a.beats.grid.sample_rate_hz) +
+                a.beats.phrase_bar_offset * bar_s;
+            const long long off = bar_index_at(l.grid, detected_start + 1e-6) -
+                                  bar_index_at(l.grid, l.phrases.start_s + 1e-6);
+            const long long bars = std::max(1, l.phrases.bars);
+            const long long wrapped = ((off % bars) + bars) % bars;
+            const long long shift = wrapped > bars / 2 ? wrapped - bars : wrapped;
+            ++phrase_tracks;
+            phrase_agree += shift == 0;
+            phrase = shift == 0 ? "phrase grid agrees"
+                                : "phrase grid off by " + std::to_string(shift) + " bars";
+        }
+        std::printf("%-50s  boundaries P %.2f R %.2f F %.2f (%d labelled, %d detected)  bars %.0f%%"
+                    "  %s  (%s)\n",
+                    track.name.substr(0, 50).c_str(), s.precision(), s.recall(), s.f1(),
+                    s.labelled_boundaries, s.detected_boundaries, 100.0 * s.bar_accuracy(),
+                    phrase.c_str(), options.source == AnalysisSource::stems ? "stems" : "mix");
+        std::fflush(stdout);
+    }
+    if (scored == 0) {
+        std::printf("No track marked done (label sections in the app: View > Label sections, then "
+                    "Done).\n");
+        return 1;
+    }
+    std::printf("\nOver %d track%s: boundaries within a bar P %.2f R %.2f F %.2f; %.0f%% of bars "
+                "labelled alike; phrase grid agrees on %d of %d labelled\n",
+                scored, scored == 1 ? "" : "s", total.precision(), total.recall(), total.f1(),
+                100.0 * total.bar_accuracy(), phrase_agree, phrase_tracks);
+    return 0;
+}
+
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
     bool bar_table = false;
     bool report = false;
+    bool evaluate = false;
     TrackAnalysisOptions options;
     std::vector<std::wstring> paths;
     for (int i = 1; i < argc; ++i) {
@@ -472,6 +560,8 @@ int wmain(int argc, wchar_t **argv) {
             local_tempo = true;
         } else if (std::wcscmp(argv[i], L"--sections-report") == 0) {
             report = true;
+        } else if (std::wcscmp(argv[i], L"--sections-eval") == 0) {
+            evaluate = true;
         } else if (std::wcscmp(argv[i], L"--bars") == 0) {
             bar_table = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
@@ -488,6 +578,9 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (report) {
         return sections_report(paths);
+    }
+    if (evaluate) {
+        return sections_eval(paths);
     }
     int status = 0;
     for (const std::wstring &path : paths) {

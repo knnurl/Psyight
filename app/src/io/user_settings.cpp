@@ -74,6 +74,14 @@ UserSettings load_user_settings(const std::filesystem::path &file) {
     read(root, "preview_open", settings.preview_open);
     read(root, "show_mode_theme", settings.show_mode_theme);
     read(root, "show_mode_hides_editing", settings.show_mode_hides_editing);
+    if (const auto it = root.find("label_folders"); it != root.end() && it->is_array()) {
+        for (const nlohmann::json &item : *it) {
+            if (item.is_string()) {
+                settings.label_folders.push_back(item.get<std::string>());
+            }
+        }
+    }
+    read(root, "label_filter", settings.label_filter);
     return settings;
 }
 
@@ -92,6 +100,8 @@ void save_user_settings(const std::filesystem::path &file, const UserSettings &s
         {"preview_open", settings.preview_open},
         {"show_mode_theme", settings.show_mode_theme},
         {"show_mode_hides_editing", settings.show_mode_hides_editing},
+        {"label_folders", settings.label_folders},
+        {"label_filter", settings.label_filter},
     };
     std::ofstream(file, std::ios::binary) << root.dump(2) << "\n";
 }

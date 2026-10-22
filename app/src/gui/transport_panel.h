@@ -14,6 +14,7 @@ class TransportPanel {
     void draw();
     void apply_settings(const UserSettings &settings); // The volume.
     void store_settings(UserSettings &settings) const { settings.volume_db = volume_db_; }
+    void set_keys_enabled(bool on) { keys_enabled_ = on; } // Space plays and pauses.
 
   private:
     void draw_overview(const LoadedTrack &track);
@@ -23,6 +24,7 @@ class TransportPanel {
     float volume_db_ = 0.0f;
     bool scrubbing_ = false; // The mouse button went down on the overview and is still down.
     float scrub_x_ = -1.0f;  // Where the last scrub seek was (screen x).
+    bool keys_enabled_ = true;
 };
 
 } // namespace psyight

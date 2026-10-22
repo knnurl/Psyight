@@ -56,6 +56,7 @@ target_include_directories(signalsmith_stretch SYSTEM INTERFACE
 # Platform-independent app code, shared by the app and the tests.
 add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/labels.cpp
                                src/io/label_editor.cpp src/io/note_pattern.cpp
+                               src/io/section_marks.cpp src/io/track_library.cpp
                                src/analysis/scoring.cpp
                                src/audio/audio_file.cpp src/audio/transport.cpp
                                src/audio/transport_render.cpp src/audio/stretch_renderer.cpp
@@ -95,6 +96,7 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/spectrogram_image.cpp src/gui/preview_view.cpp
                        src/gui/project_state.cpp src/gui/rig_view.cpp
                        src/gui/preflight_view.cpp src/gui/tier.cpp
+                       src/gui/labelling_view.cpp
                        src/gui/scoring_view.cpp src/gui/log_view.cpp src/io/midi_input.cpp
                        src/gui/crash_guard_win32.cpp src/gui/capture.cpp src/gui/theme.cpp
                        src/gui/file_dialog_win32.cpp src/gui/settings_view.cpp
@@ -191,7 +193,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/rig_templates_test.cpp tests/presets_test.cpp
                              tests/test_patterns_test.cpp tests/scene_launch_test.cpp
                              tests/undo_history_test.cpp tests/sections_edit_test.cpp
-                             tests/pattern_effects_test.cpp
+                             tests/pattern_effects_test.cpp tests/labelling_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)

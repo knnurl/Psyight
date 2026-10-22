@@ -50,6 +50,8 @@ class PreviewView {
     void draw_browser(bool *open);
     // Inside the main menu bar.
     void draw_top_bar();
+    // B, H, 0 and 1 to 9 (blackout, hold, scenes); off while another mode owns the keys.
+    void set_keys_enabled(bool on) { keys_enabled_ = on; }
     bool sending() const { return config_.send_to_network; }
     double measured_fps() const { return measured_fps_; }
     bool recording() const { return recorder_ != nullptr; }
@@ -173,6 +175,7 @@ class PreviewView {
     std::chrono::steady_clock::time_point rate_since_ = std::chrono::steady_clock::now();
     std::int64_t rate_index_ = -1;
     double measured_fps_ = 0.0;
+    bool keys_enabled_ = true;
     ShowThread show_; // Last, so it is joined first on destruction.
 };
 

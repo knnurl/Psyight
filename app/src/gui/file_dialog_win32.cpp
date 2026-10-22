@@ -18,6 +18,7 @@ struct DialogSpec {
     const wchar_t *title;
     const wchar_t *default_extension; // Save: appended when the name has none.
     std::filesystem::path suggested;  // Save: the starting name and folder.
+    bool folder = false;              // Open: pick a folder instead of a file.
 };
 
 // Shows the open (FileOpenDialog) or save (FileSaveDialog) dialog and returns the chosen path.
@@ -60,11 +61,16 @@ std::optional<std::filesystem::path> show_dialog(void *owner, bool save, const D
                               : CoCreateInstance(CLSID_FileOpenDialog, nullptr,
                                                  CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
     if (SUCCEEDED(made)) {
-        dialog->SetFileTypes(spec.filter_count, spec.filters);
+        if (!spec.folder) {
+            dialog->SetFileTypes(spec.filter_count, spec.filters);
+        }
         dialog->SetTitle(spec.title);
         DWORD options = 0;
         dialog->GetOptions(&options);
         options |= FOS_FORCEFILESYSTEM;
+        if (spec.folder) {
+            options |= FOS_PICKFOLDERS;
+        }
         options |= save ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST;
         dialog->SetOptions(options);
         if (spec.default_extension != nullptr) {
@@ -113,6 +119,10 @@ std::optional<std::filesystem::path> open_audio_file_dialog(void *owner) {
 
 std::optional<std::filesystem::path> open_project_file_dialog(void *owner) {
     return show_dialog(owner, false, {kProjectFilters, 2, L"Open a project", nullptr, {}});
+}
+
+std::optional<std::filesystem::path> pick_folder_dialog(void *owner) {
+    return show_dialog(owner, false, {nullptr, 0, L"Add a music folder", nullptr, {}, true});
 }
 
 std::optional<std::filesystem::path>

@@ -55,6 +55,16 @@ struct SectionLabel {
     bool operator==(const SectionLabel &) const = default;
 };
 
+// The phrase grid, labelled by ear: phrases of `bars` bars on the grid's bars, one of them
+// starting at start_s (a downbeat). Unset: phrases come from the detection.
+struct LabelPhrases {
+    bool set = false;
+    double start_s = 0.0;
+    int bars = 8;
+
+    bool operator==(const LabelPhrases &) const = default;
+};
+
 struct Labels {
     std::string audio; // Audio file name, without directory.
     int sample_rate = 48000;
@@ -68,13 +78,18 @@ struct Labels {
     // The sections were edited by hand: the show follows them instead of the detection. (Drafted
     // sections, never edited, leave it false.)
     bool sections_edited = false;
+    LabelPhrases phrases;
+    // The owner checked the whole track's sections and phrases (the labelling mode's "Done"):
+    // ground truth for the section metrics.
+    bool sections_done = false;
 
     bool operator==(const Labels &) const = default;
 };
 
 // Parses labels JSON. Fails on malformed JSON, a schema other than kLabelsSchemaVersion, or a
 // missing or wrongly typed field (integer fields must not have a fractional part). Optional fields:
-// slide_in, slide_out (false), velocity (1.0), cents (0) and every event list (empty).
+// slide_in, slide_out (false), velocity (1.0), cents (0), every event list (empty), phrases
+// (unset) and sections_done (false).
 Result<Labels> parse_labels_json(std::string_view json);
 
 // Serialises labels as schema-1 JSON. Fails on a non-finite number or a string that is not valid

@@ -14,6 +14,8 @@ namespace psyight {
 // owner: the native window handle (HWND on Windows), or null. Empty when cancelled.
 std::optional<std::filesystem::path> open_audio_file_dialog(void *owner);
 std::optional<std::filesystem::path> open_project_file_dialog(void *owner);
+// A folder (the labelling mode's music folders).
+std::optional<std::filesystem::path> pick_folder_dialog(void *owner);
 // suggested: the file name (and folder, when it has one) to start from. The chosen path always
 // ends in .psyproj; the dialog asks before replacing an existing file.
 std::optional<std::filesystem::path>

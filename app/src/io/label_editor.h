@@ -49,6 +49,8 @@ class LabelEditor {
     void delete_notes(const std::vector<int> &indices);
 
     void set_grid(const LabelGrid &grid);
+    void set_phrases(const LabelPhrases &phrases);
+    void set_sections_done(bool done);
     // Replaces the sections (sorted by start) and the edited flag; one undo step (or part of a
     // gesture).
     void set_sections(std::vector<SectionLabel> sections, bool edited);

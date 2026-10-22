@@ -9,6 +9,7 @@
 #include "gui/file_dialog.h"
 #include "gui/file_flow.h"
 #include "gui/frame_pacing.h"
+#include "gui/labelling_view.h"
 #include "gui/layout.h"
 #include "gui/log_view.h"
 #include "gui/preflight_view.h"
@@ -264,6 +265,7 @@ int main() {
         psyight::ScoringView scoring_view(session);
         psyight::ProjectState project;
         psyight::PreviewView preview_view(session, project);
+        psyight::LabellingView labelling_view(session);
         psyight::RigView rig_view(project);
         psyight::PreflightView preflight_view(session, project, preview_view);
         psyight::SettingsView settings_view(project);
@@ -293,6 +295,7 @@ int main() {
             analysis_view.apply_settings(settings);
             bass_roll_view.apply_settings(settings);
             preview_view.apply_settings(settings);
+            labelling_view.apply_settings(settings);
         }
         psyight::UserSettings prefs = settings;
         // Show mode (React or Show on the top bar): the Show theme and the editing panels hidden,
@@ -301,8 +304,9 @@ int main() {
         psyight::ThemeMode theme_before_show = psyight::theme_mode();
         std::filesystem::path recent_path; // The track last added to the recent list.
         bool show_settings = false;
-        bool perform = false; // The Perform view (F11) over the workspace.
-        bool browser = false; // The preset browser (View > Browser, Ctrl+B).
+        bool perform = false;   // The Perform view (F11) over the workspace.
+        bool labelling = false; // The labelling mode (F9) over the workspace.
+        bool browser = false;   // The preset browser (View > Browser, Ctrl+B).
         bool open_requested = false;
         glfwSetWindowUserPointer(window, &session);
         glfwSetDropCallback(window, on_files_dropped);
@@ -432,6 +436,7 @@ int main() {
                     ImGui::MenuItem("Reset layout", nullptr, &reset_layout);
                     ImGui::MenuItem("Rig preview", nullptr, &preview_view.preview_open());
                     ImGui::MenuItem("Perform view", "F11", &perform);
+                    ImGui::MenuItem("Label sections", "F9", &labelling);
                     ImGui::MenuItem("Browser", "Ctrl+B", &browser);
                     if (ImGui::BeginMenu("Theme")) {
                         const psyight::ThemeMode mode = psyight::theme_mode();
@@ -481,6 +486,10 @@ int main() {
                                                            : theme_before_show);
                 }
             }
+            // The labelling mode has its own keys (Space, numbers, letters): the panels under it
+            // leave theirs.
+            transport_panel.set_keys_enabled(!labelling);
+            preview_view.set_keys_enabled(!labelling);
             transport_panel.draw();
             if (!(show_mode && prefs.show_mode_hides_editing)) {
                 analysis_view.draw();
@@ -522,6 +531,12 @@ int main() {
             if (perform) {
                 preview_view.draw_perform(&perform);
             }
+            if (ImGui::IsKeyPressed(ImGuiKey_F9, false)) {
+                labelling = !labelling;
+            }
+            if (labelling) {
+                labelling_view.draw(&labelling);
+            }
             project.autosave();
             if (!capture && !ImGui::IsAnyItemActive()) { // Not on every step of a drag.
                 psyight::UserSettings now = prefs;
@@ -534,6 +549,7 @@ int main() {
                 analysis_view.store_settings(now);
                 bass_roll_view.store_settings(now);
                 preview_view.store_settings(now);
+                labelling_view.store_settings(now);
                 if (now != settings) {
                     settings = now;
                     psyight::save_user_settings(kSettingsFile, settings);
@@ -568,6 +584,7 @@ int main() {
                 glfwSwapBuffers(window);
                 psyight::wait_for_display_refresh();
                 file_flow.after_frame(glfwGetWin32Window(window)); // Its file dialogs.
+                labelling_view.after_frame(glfwGetWin32Window(window));
                 if (open_requested) { // After the frame is shown, not halfway through it.
                     open_requested = false;
                     if (const auto chosen =

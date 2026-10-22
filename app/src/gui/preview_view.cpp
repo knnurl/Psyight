@@ -255,7 +255,7 @@ void PreviewView::draw_top_bar() {
     toggle("Blackout (B)", config_.blackout, theme().danger); // Safety: red, not the accent.
     ImGui::SameLine();
     toggle("Hold (H)", config_.hold, theme().accent);
-    if (!ImGui::GetIO().WantTextInput) {
+    if (keys_enabled_ && !ImGui::GetIO().WantTextInput) {
         if (ImGui::IsKeyPressed(ImGuiKey_B, false)) {
             config_.blackout = !config_.blackout;
             dirty_ = true;

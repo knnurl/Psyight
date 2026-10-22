@@ -78,6 +78,17 @@ The second line shows the analysis delay (about 15 ms), the load, the input leve
 
 The show picks scenes by section (groove, breakdown, build, drop). When the detection gets one wrong on a prepared track, right-click the section strip along the top of the spectrogram and choose "Edit the sections by hand". Then drag a boundary to move it (it snaps to bars; hold Alt for free), and right-click a section to change its label, split it at a bar, or merge it with the one before. The show follows your sections from then on; "Follow the detection again" switches back. The edits are saved with the track's labels and undo with Ctrl+Z.
 
+## Labelling sections (View > Label sections, F9)
+
+A full-window mode for labelling many tracks' sections and phrases quickly. Labelled tracks make the section detection measurable and tunable (`psyight_analyse --sections-eval <folder>` scores the detection against every track marked done).
+
+- **Tracks** (left): Add folder... adds a music folder (subfolders included; remembered). Each track shows its status: grey not started, amber in progress, green done. Search and filter the list; click a track to load it. Next unfinished (N) saves and moves on.
+- **The views** (right): the whole track, and a zoomed view that follows the playhead (mouse wheel or the slider: 8 to 128 bars). Each shows your sections (the wide strip), the detection (the thin strip under it), and the bar and phrase grid (bright lines start phrases). The zoomed view adds a row per bar for the kick (bright when kicked), the loudness, and the riser through builds. Click or drag to move the playhead.
+- **Starting point:** a track starts from the detection (shown faded). The first edit copies it into your labels; Back to the detection drops them.
+- **Keys:** Space plays or pauses. Press 1 intro, 2 groove, 3 breakdown, 4 build, 5 drop or 6 outro as the music changes: the boundary goes to the nearest bar (Shift: nearest phrase start; Alt: exactly at the playhead), and a boundary within half a bar is relabelled instead. Delete removes the nearest boundary. Left and Right step a bar (Shift: a phrase); [ and ] jump between boundaries. Drag a boundary to move it, or right-click a section to relabel, split or remove it.
+- **Phrases and grid:** P makes the nearest bar a phrase start; choose 8 or 16 bars. D makes the nearest beat a downbeat when the grid's "one" is wrong. Use detected phrases drops the labelled phrase grid.
+- **Done:** tick Done (Enter) once the whole track's sections and phrases are right; only done tracks count as ground truth. Save (Ctrl+S) writes `<track>.labels.json` beside the audio; Save and next saves and opens the next unfinished track. Esc leaves the mode.
+
 ## Latency: make the lights land on the beat
 
 The lights should flash when the audience hears the kick, not when the computer does. Set the latency offset (Show tab, in ms) one of three ways:

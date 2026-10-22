@@ -176,6 +176,22 @@ void LabelEditor::set_grid(const LabelGrid &grid) {
     labels_.grid = grid;
 }
 
+void LabelEditor::set_phrases(const LabelPhrases &phrases) {
+    if (phrases == labels_.phrases) {
+        return;
+    }
+    before_edit();
+    labels_.phrases = phrases;
+}
+
+void LabelEditor::set_sections_done(bool done) {
+    if (done == labels_.sections_done) {
+        return;
+    }
+    before_edit();
+    labels_.sections_done = done;
+}
+
 void LabelEditor::set_sections(std::vector<SectionLabel> sections, bool edited) {
     std::sort(sections.begin(), sections.end(),
               [](const SectionLabel &a, const SectionLabel &b) { return a.start_s < b.start_s; });
@@ -204,6 +220,9 @@ double LabelEditor::shift_all(double delta_s) {
     for (const LabelRegion &r : labels_.regions) {
         earliest_s = std::min(earliest_s, r.start_s);
     }
+    if (labels_.phrases.set) {
+        earliest_s = std::min(earliest_s, labels_.phrases.start_s);
+    }
     if (std::isfinite(earliest_s)) {
         delta_s = std::max(delta_s, -earliest_s);
     }
@@ -226,6 +245,9 @@ double LabelEditor::shift_all(double delta_s) {
     for (LabelRegion &r : labels_.regions) {
         r.start_s += delta_s;
         r.end_s += delta_s;
+    }
+    if (labels_.phrases.set) {
+        labels_.phrases.start_s += delta_s;
     }
     labels_.grid.first_downbeat_s += delta_s;
     if (labels_.grid.first_downbeat_s < 0.0 && labels_.grid.bpm > 0.0) {

@@ -75,7 +75,8 @@ void TransportPanel::draw() {
     const bool play_clicked =
         primary_button(icon_label(playing ? kIconPause : kIconPlay, "play").c_str());
     ImGui::SetItemTooltip(playing ? "Pause (Space)" : "Play (Space)");
-    if (play_clicked || (ImGui::IsKeyPressed(ImGuiKey_Space, false) && !io.WantTextInput)) {
+    if (play_clicked ||
+        (keys_enabled_ && ImGui::IsKeyPressed(ImGuiKey_Space, false) && !io.WantTextInput)) {
         playing ? transport.pause() : transport.play();
     }
     ImGui::SameLine();

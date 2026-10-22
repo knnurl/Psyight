@@ -105,6 +105,15 @@ Result<Labels> parse_labels_json(std::string_view json_text) {
             }
         }
         labels.sections_edited = optional_field(root, "sections_edited", false);
+        if (const auto it = root.find("phrases"); it != root.end()) {
+            labels.phrases.set = true;
+            labels.phrases.start_s = it->at("start_s").get<double>();
+            labels.phrases.bars = integer_field(*it, "bars");
+            if (labels.phrases.bars < 1) {
+                throw FieldError{"phrases.bars must be at least 1"};
+            }
+        }
+        labels.sections_done = optional_field(root, "sections_done", false);
         return labels;
     } catch (const json::exception &e) {
         return Error{std::string("invalid labels JSON: ") + e.what()};
@@ -136,7 +145,7 @@ Result<std::string> to_labels_json(const Labels &labels) {
             sections.push_back(
                 {{"start_s", finite(section.start_s, "start_s")}, {"label", section.label}});
         }
-        const json root = {
+        json root = {
             {"schema", kLabelsSchemaVersion},
             {"audio", labels.audio},
             {"sample_rate", labels.sample_rate},
@@ -150,7 +159,12 @@ Result<std::string> to_labels_json(const Labels &labels) {
             {"beats", events_to_json(labels.beats)},
             {"downbeats", events_to_json(labels.downbeats)},
             {"sections", sections},
+            {"sections_done", labels.sections_done},
         };
+        if (labels.phrases.set) {
+            root["phrases"] = {{"start_s", finite(labels.phrases.start_s, "phrases.start_s")},
+                               {"bars", labels.phrases.bars}};
+        }
         return root.dump(2) + "\n"; // Throws on strings that are not valid UTF-8.
     } catch (const json::exception &e) {
         return Error{std::string("cannot write labels: ") + e.what()};
