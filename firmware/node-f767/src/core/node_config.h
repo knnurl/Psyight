@@ -16,9 +16,13 @@
  * restart): universe (first), universes (count), pixels_per_universe, lane0..lane7
  * ("first_pixel count"), active (lane bit mask, decimal), loss_ms, policy (hold, fade, fallback,
  * blackout), fade_ms, fallback_brightness and fallback_speed (thousandths), palette (the fallback
- * show's colours: one to four RRGGBB, space separated).
+ * show's colours: one to four RRGGBB, space separated), order0..order7 (each lane's colour order:
+ * rgb, grb, brg, rbg, gbr or bgr, for the fallback show; live data comes ordered by the app).
  * Version 1 had no apply, no palette and no protocol line: its rig settings took effect after
- * save and reboot.
+ * save and reboot. Version 2 had no lane orders (its fallback show assumed GRB).
+ *
+ * Stored layout (NODE_CONFIG_VERSION): version 1 lacked lane_order and kept the palette as GRB;
+ * node_config_upgrade reads it, so a node keeps its settings across the firmware update.
  */
 #ifndef PSY_NODE_CONFIG_H
 #define PSY_NODE_CONFIG_H
@@ -33,9 +37,9 @@ extern "C" {
 #endif
 
 #define NODE_CONFIG_MAGIC 0x50535931u /* "PSY1" */
-#define NODE_CONFIG_VERSION 1u
+#define NODE_CONFIG_VERSION 2u
 #define NODE_CONFIG_PORT 6455
-#define NODE_PROTOCOL_VERSION 2u
+#define NODE_PROTOCOL_VERSION 3u
 #define NODE_PROTOCOL_ART_NET 1u
 #define NODE_PROTOCOL_SACN 2u
 
@@ -60,6 +64,12 @@ typedef enum { NODE_CMD_NONE, NODE_CMD_SAVE, NODE_CMD_REBOOT, NODE_CMD_APPLY } n
 void node_config_defaults(node_config *c, const uint8_t mac[6]);
 uint32_t node_config_crc(const node_config *c);
 int node_config_valid(const node_config *c); /* Magic, version and CRC. */
+
+/* A valid version 1 config at `stored` (at least node_config_v1_size() bytes) as the current
+ * one: the palette from GRB to RGB, every lane GRB. Returns 0 (out untouched) when it is not a
+ * valid version 1 config. */
+int node_config_upgrade(const void *stored, node_config *out);
+size_t node_config_v1_size(void);
 
 /* Handles one command; writes the reply (null-terminated) and returns what the caller must do
  * next (save to flash, reboot) beyond what the reply says. */

@@ -230,6 +230,20 @@ std::string macro_name(const Project &project, int index) {
     return name.empty() ? "Macro " + std::to_string(index + 1) : name;
 }
 
+const char *node_loss_policy_id(NodeLossPolicy policy) {
+    switch (policy) {
+    case NodeLossPolicy::hold:
+        return "hold";
+    case NodeLossPolicy::fade:
+        return "fade";
+    case NodeLossPolicy::fallback:
+        return "fallback";
+    case NodeLossPolicy::blackout:
+        return "blackout";
+    }
+    return "fallback";
+}
+
 const char *colour_order_name(ColourOrder order) {
     switch (order) {
     case ColourOrder::rgb:
@@ -417,6 +431,22 @@ Result<Project> parse_project_json(std::string_view json_text) {
             static_cast<std::uint16_t>(integer(out, "sync_universe", 1000, 1, 63999));
         p.output.priority = static_cast<std::uint8_t>(integer(out, "priority", 100, 0, 200));
         p.source_name = optional<std::string>(out, "source_name", "Psyight");
+        const json &node = section(root, "node");
+        const std::string policy = optional<std::string>(node, "policy", "fallback");
+        bool known = false;
+        for (const NodeLossPolicy candidate : kNodeLossPolicies) {
+            if (policy == node_loss_policy_id(candidate)) {
+                p.node.policy = candidate;
+                known = true;
+            }
+        }
+        if (!known) {
+            throw FieldError{"unknown node policy " + policy};
+        }
+        p.node.loss_ms = integer(node, "loss_ms", 2000, 0, 600000);
+        p.node.fade_ms = integer(node, "fade_ms", 3000, 0, 600000);
+        p.node.brightness = number(node, "fallback_brightness", 0.25, 0.0, 1.0);
+        p.node.speed_hz = number(node, "fallback_speed_hz", 0.05, 0.0, 10.0);
         p.output.cid = cid_from_name(p.source_name);
 
         const json &lim = section(root, "limiter");
@@ -539,6 +569,12 @@ Result<std::string> to_project_json(const Project &p) {
               {"sync_universe", p.output.sync_universe},
               {"priority", p.output.priority},
               {"source_name", p.source_name}}},
+            {"node",
+             {{"policy", node_loss_policy_id(p.node.policy)},
+              {"loss_ms", p.node.loss_ms},
+              {"fade_ms", p.node.fade_ms},
+              {"fallback_brightness", finite(p.node.brightness, "fallback_brightness")},
+              {"fallback_speed_hz", finite(p.node.speed_hz, "fallback_speed_hz")}}},
             {"limiter",
              {{"brightness_cap", finite(l.brightness_cap, "brightness_cap")},
               {"flash_limiter", l.flash_limiter},

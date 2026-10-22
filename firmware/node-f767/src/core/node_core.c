@@ -23,11 +23,29 @@ node_settings node_default_settings(void) {
     s.fade_ms = 3000;
     s.fallback_brightness = 0.25f;
     s.fallback_speed_hz = 0.05f;
-    /* Violet and magenta, UV-friendly (SPEC 7.5), in GRB order. */
-    const uint8_t palette[4][3] = {{0, 90, 255}, {0, 200, 120}, {20, 120, 255}, {0, 255, 60}};
+    /* Violet and magenta, UV-friendly (SPEC 7.5), as RGB. */
+    const uint8_t palette[4][3] = {{90, 0, 255}, {200, 0, 120}, {120, 20, 255}, {255, 0, 60}};
     memcpy(s.palette, palette, sizeof(palette));
     s.palette_size = 4;
+    for (int l = 0; l < NODE_LANES; ++l) {
+        s.lane_order[l] = NODE_ORDER_GRB; /* WS2812-class strips. */
+    }
     return s;
+}
+
+void node_order_positions(uint8_t order, uint8_t positions[3]) {
+    static const uint8_t kPositions[NODE_ORDER_COUNT][3] = {
+        {0, 1, 2}, /* rgb */
+        {1, 0, 2}, /* grb */
+        {1, 2, 0}, /* brg */
+        {0, 2, 1}, /* rbg */
+        {2, 0, 1}, /* gbr */
+        {2, 1, 0}, /* bgr */
+    };
+    const uint8_t *p = kPositions[order < NODE_ORDER_COUNT ? order : NODE_ORDER_GRB];
+    positions[0] = p[0];
+    positions[1] = p[1];
+    positions[2] = p[2];
 }
 
 void node_init(node_state *n, const node_settings *settings) {
@@ -151,6 +169,8 @@ static void fill_fallback(const node_state *n, uint32_t now_ms,
     const int colours = s->palette_size > 0 ? s->palette_size : 1;
     for (int l = 0; l < NODE_LANES; ++l) {
         uint8_t *out = lanes[l];
+        uint8_t at[3];
+        node_order_positions(s->lane_order[l], at);
         memset(out, 0, NODE_LANE_BYTES);
         for (uint32_t i = 0; i < s->lanes[l].pixels; ++i) {
             const float x = (float)i / 60.0f;
@@ -164,10 +184,10 @@ static void fill_fallback(const node_state *n, uint32_t now_ms,
             const float f = position - floorf(position);
             const float level = s->fallback_brightness * (0.4f + 0.6f * v);
             const float drive = powf(level, 2.2f); /* Perceptual level to LED drive. */
-            for (int c = 0; c < 3; ++c) {
+            for (int c = 0; c < 3; ++c) { /* R, G, B, each to its place in the lane's order. */
                 const float colour =
                     (1.0f - f) * (float)s->palette[c0][c] + f * (float)s->palette[c1][c];
-                out[i * 3u + (uint32_t)c] = (uint8_t)(colour * drive + 0.5f);
+                out[i * 3u + at[c]] = (uint8_t)(colour * drive + 0.5f);
             }
         }
     }

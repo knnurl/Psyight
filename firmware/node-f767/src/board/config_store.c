@@ -21,6 +21,9 @@ bool config_load(node_config *config, const uint8_t mac[6]) {
     if (node_config_valid(config)) {
         return true;
     }
+    if (node_config_upgrade((const void *)address, config)) {
+        return true; /* Saved by older firmware: kept, in the current layout until the next save. */
+    }
     node_config_defaults(config, mac);
     return false;
 }

@@ -17,6 +17,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <random>
@@ -366,7 +367,7 @@ TEST_CASE("node firmware: the configuration text protocol") {
     CHECK(c.ip[0] == 2);
 }
 
-TEST_CASE("node firmware: protocol 2: apply, the fallback palette, the version line") {
+TEST_CASE("node firmware: protocol 2 and 3: apply, the fallback palette, the version line") {
     const std::uint8_t mac[6] = {0x02, 0x50, 0x12, 0x34, 0x56, 0x78};
     node_config c{};
     node_config_defaults(&c, mac);
@@ -375,15 +376,15 @@ TEST_CASE("node firmware: protocol 2: apply, the fallback palette, the version l
         return node_config_command(&c, mac, command, std::strlen(command), reply, sizeof(reply));
     };
     run("get");
-    CHECK(std::string(reply).rfind("protocol 2\n", 0) == 0); // First, so old and new tell apart.
-    // The palette: RGB in, the strip's GRB stored, RGB out again.
+    CHECK(std::string(reply).rfind("protocol 3\n", 0) == 0); // First, so old and new tell apart.
+    // The palette: RGB in, RGB stored (each lane orders it), RGB out again.
     CHECK(run("set palette FF0080 00ff00") == NODE_CMD_NONE);
     CHECK(std::string(reply).rfind("ok palette", 0) == 0);
     REQUIRE(c.node.palette_size == 2);
-    CHECK(c.node.palette[0][0] == 0x00); // G
-    CHECK(c.node.palette[0][1] == 0xFF); // R
+    CHECK(c.node.palette[0][0] == 0xFF); // R
+    CHECK(c.node.palette[0][1] == 0x00); // G
     CHECK(c.node.palette[0][2] == 0x80); // B
-    CHECK(c.node.palette[1][0] == 0xFF);
+    CHECK(c.node.palette[1][1] == 0xFF);
     run("get");
     CHECK(std::string(reply).find("palette FF0080 00FF00\n") != std::string::npos);
     CHECK(node_config_valid(&c));
@@ -427,7 +428,7 @@ TEST_CASE("node setup: the app's limits are the firmware's, and the default fram
     char reply[2048];
     node_config_command(&c, mac, "get", 3, reply, sizeof(reply));
     const auto settings = parse_node_settings(reply);
-    CHECK(node_protocol(settings) == 2);
+    CHECK(node_protocol(settings) == 3);
     CHECK(settings.at("universes") == "3");
     CHECK_FALSE(node_differences(plan, settings).empty());
     CHECK(node_protocol(parse_node_settings("ip 2.0.0.1\nuniverses 3\n")) == 1); // Old firmware.
@@ -485,4 +486,163 @@ TEST_CASE("node setup: every built-in rig, set up by the app's commands, reaches
         CHECK(sink.bad == 0);
         CHECK(node->ignored == 0);
     }
+}
+
+TEST_CASE("node firmware: lane colour orders: set, reported, and used by the fallback show") {
+    const std::uint8_t mac[6] = {2, 0, 0, 0, 0, 1};
+    node_config c{};
+    node_config_defaults(&c, mac);
+    char reply[2048];
+    const auto run = [&](const char *command) {
+        node_config_command(&c, mac, command, std::strlen(command), reply, sizeof(reply));
+        return std::string(reply);
+    };
+    CHECK(run("get").find("order0 grb\n") != std::string::npos); // WS2812 by default.
+    CHECK(run("set order1 rgb").rfind("ok order1", 0) == 0);
+    CHECK(run("set order2 bgr").rfind("ok", 0) == 0);
+    CHECK(run("set order0 xyz").rfind("error", 0) == 0);
+    CHECK(run("set order8 rgb").rfind("error", 0) == 0);
+    CHECK(c.node.lane_order[0] == NODE_ORDER_GRB);
+    const std::string got = run("get");
+    CHECK(got.find("order1 rgb\n") != std::string::npos);
+    CHECK(got.find("order2 bgr\n") != std::string::npos);
+    // One pure red colour: lane 0 (grb) puts it second, lane 1 (rgb) first, lane 2 (bgr) third.
+    run("set palette FF0000");
+    node_settings s = c.node;
+    s.loss_policy = NODE_LOSS_FALLBACK;
+    s.loss_timeout_ms = 100;
+    s.fallback_brightness = 1.0f;
+    for (int l = 0; l < 3; ++l) {
+        s.lanes[l] = {0, 10};
+    }
+    auto node = std::make_unique<node_state>();
+    node_init(node.get(), &s);
+    auto lane_buffer = std::make_unique<LaneBuffer>();
+    auto &lanes = lane_buffer->lanes;
+    REQUIRE(node_frame(node.get(), 1000, lanes));
+    CHECK(lanes[0][1] > 0);
+    CHECK(lanes[0][0] == 0);
+    CHECK(lanes[0][2] == 0);
+    CHECK(lanes[1][0] > 0);
+    CHECK(lanes[1][1] == 0);
+    CHECK(lanes[2][2] > 0);
+    CHECK(lanes[2][0] == 0);
+}
+
+namespace {
+
+std::uint32_t test_crc32(const std::uint8_t *p, size_t n) {
+    std::uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < n; ++i) {
+        crc ^= p[i];
+        for (int b = 0; b < 8; ++b) {
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+        }
+    }
+    return ~crc;
+}
+
+} // namespace
+
+TEST_CASE("node firmware: a config saved by protocol 2 firmware upgrades, keeping its settings") {
+    // Version 1's layout: the current one up to the palette size, without the lane orders, the
+    // palette as GRB, padded, then its CRC.
+    const std::uint8_t mac[6] = {2, 0, 0, 0, 0, 1};
+    node_config current{};
+    node_config_defaults(&current, mac);
+    current.node.universe_count = 7;
+    current.node.lanes[3] = {100, 200};
+    current.node.loss_policy = NODE_LOSS_BLACKOUT;
+    std::snprintf(current.short_name, sizeof(current.short_name), "Stage left");
+    const std::uint8_t grb[3] = {0x00, 0xFF, 0x80}; // R FF, G 00, B 80.
+    std::memcpy(current.node.palette[0], grb, 3);
+    current.node.palette_size = 1;
+    const size_t prefix = offsetof(node_config, node) + offsetof(node_settings, lane_order);
+    std::vector<std::uint8_t> v1(node_config_v1_size(), 0);
+    REQUIRE(v1.size() > prefix + 4);
+    std::memcpy(v1.data(), &current, prefix);
+    const std::uint32_t version = 1;
+    std::memcpy(v1.data() + offsetof(node_config, version), &version, 4);
+    const std::uint32_t crc = test_crc32(v1.data(), v1.size() - 4);
+    std::memcpy(v1.data() + v1.size() - 4, &crc, 4);
+
+    node_config upgraded{};
+    REQUIRE(node_config_upgrade(v1.data(), &upgraded));
+    CHECK(node_config_valid(&upgraded));
+    CHECK(upgraded.version == NODE_CONFIG_VERSION);
+    CHECK(upgraded.node.universe_count == 7);
+    CHECK(upgraded.node.lanes[3].first_pixel == 100);
+    CHECK(upgraded.node.lanes[3].pixels == 200);
+    CHECK(upgraded.node.loss_policy == NODE_LOSS_BLACKOUT);
+    CHECK(std::string(upgraded.short_name) == "Stage left");
+    CHECK(upgraded.node.palette[0][0] == 0xFF); // Now RGB.
+    CHECK(upgraded.node.palette[0][1] == 0x00);
+    CHECK(upgraded.node.palette[0][2] == 0x80);
+    for (int l = 0; l < NODE_LANES; ++l) {
+        CHECK(upgraded.node.lane_order[l] == NODE_ORDER_GRB);
+    }
+    // Not version 1, or corrupt: left alone.
+    v1[v1.size() - 1] ^= 0xFF;
+    node_config untouched{};
+    CHECK_FALSE(node_config_upgrade(v1.data(), &untouched));
+    std::vector<std::uint8_t> newer(sizeof(node_config) + 16, 0);
+    std::memcpy(newer.data(), &current, sizeof(node_config));
+    CHECK_FALSE(node_config_upgrade(newer.data(), &untouched)); // Version 2: not an upgrade.
+}
+
+TEST_CASE("node setup: lane orders, signal-loss settings, notes, and older firmware") {
+    Project project = default_project();
+    project.strips[1].order = ColourOrder::rgb; // Mixed on the one line the frame chains onto.
+    project.node.policy = NodeLossPolicy::fade;
+    project.node.loss_ms = 1500;
+    project.node.fade_ms = 4000;
+    project.node.brightness = 0.4;
+    project.node.speed_hz = 0.1;
+    NodePlan plan = plan_node(project);
+    REQUIRE(plan.lanes.size() == 1);
+    CHECK(plan.lanes[0].order == ColourOrder::grb);
+    REQUIRE(plan.notes.size() == 1);
+    CHECK(plan.notes[0].find("rgb") != std::string::npos);
+    const std::vector<std::string> commands = node_commands(plan, nullptr);
+    const auto has = [&](const std::vector<std::string> &list, const std::string &c) {
+        return std::find(list.begin(), list.end(), c) != list.end();
+    };
+    CHECK(has(commands, "set order0 grb"));
+    CHECK(has(commands, "set policy fade"));
+    CHECK(has(commands, "set loss_ms 1500"));
+    CHECK(has(commands, "set fade_ms 4000"));
+    CHECK(has(commands, "set fallback_brightness 400"));
+    CHECK(has(commands, "set fallback_speed 100"));
+    CHECK(commands.back() == "apply");
+    // Older firmware: the same without the orders.
+    const std::vector<std::string> old = commands_for_protocol(commands, 2);
+    CHECK_FALSE(has(old, "set order0 grb"));
+    CHECK(old.size() == commands.size() - 1);
+    CHECK(commands_for_protocol(commands, 3) == commands);
+    // The node takes them all, and reads back matching.
+    const std::uint8_t mac[6] = {2, 0, 0, 0, 0, 1};
+    node_config c{};
+    node_config_defaults(&c, mac);
+    char reply[2048];
+    for (const std::string &command : commands) {
+        CAPTURE(command);
+        node_config_command(&c, mac, command.c_str(), command.size(), reply, sizeof(reply));
+        CHECK(std::string(reply).rfind("ok", 0) == 0);
+    }
+    node_config_command(&c, mac, "get", 3, reply, sizeof(reply));
+    CHECK(node_differences(plan, parse_node_settings(reply)).empty());
+    CHECK(c.node.loss_policy == NODE_LOSS_FADE);
+    // A different project's settings show as differences.
+    project.node.policy = NodeLossPolicy::hold;
+    CHECK_FALSE(node_differences(plan_node(project), parse_node_settings(reply)).empty());
+    // A long line: a frame-rate note.
+    Project long_line = default_project();
+    long_line.strips.resize(1);
+    long_line.strips[0].spec.count = 600;
+    const NodePlan slow = plan_node(long_line);
+    REQUIRE(slow.notes.size() == 1);
+    CHECK(slow.notes[0].find("600 pixels") != std::string::npos);
+    CHECK(node_lane_max_fps(680) == doctest::Approx(48.3).epsilon(0.01)); // SPEC 12.3.
+    CHECK(node_lane_max_fps(kNodeLanePixelsAt60Fps) >= 60.0);
+    CHECK(node_lane_max_fps(kNodeLanePixelsAt60Fps + 1) < 60.0);
 }

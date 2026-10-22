@@ -235,7 +235,7 @@ TODO:
 - Kick detection: on edited tracks (Alien Army) kicks sit about 50 ms off the constant-tempo grid in some sections and are missed (the detector looks within +-10 ms); a general fix needs the owner's labels (a pickup rule was tried and reverted: it hurt 14 of 61 tracks). Owner to say whether Alien Army's 56 to 123 s "breakdown" has a kick.
 - Section boundaries: snap kick returns to a reliable phrase grid once the owner's section labels exist (docs/PLAN_SECTIONS_EFFECTS.md).
 - README: name the VS 2022 components (MSVC, Windows SDK, C++ CMake tools for Ninja, vcpkg), say VS 2019 does not build, a standalone vcpkg via CMakeUserPresets.json, the first configure's dependency build, and that one transport test needs an audio device.
-- The node's fallback show assumes GRB strips (no colour order on the node).
+- [done 2026-10-22] The node's fallback show assumed GRB: protocol 3 adds lane colour orders (order0..7), the palette is stored as RGB, a protocol 2 config upgrades at start (config version 2). The app also sets the signal-loss policy and fallback show from the project (Project::node, Preflight > Node setup), and notes lines too long for 60 fps. F3 flashed to the bench Nucleo on 2026-10-22 (console: 62 fps out, signal lost, address 0.0.0.0 with no cable). docs/NODE_WIRING_GUIDE.pdf: wiring and pinout from UM1974 Rev 7 (tools/python/make_node_guide.py).
 - YouTube description for the demo video: waiting for what the video shows, the music credit and chapters.
 - Node hardware: F767 for now; ESP32-P4 is the candidate for a node v2 (16 PARLIO lanes, network updates).
 

@@ -32,12 +32,27 @@ struct ProjectStrip {
     ColourOrder order = ColourOrder::grb;
 };
 
+// What the pixel node does when the show's signal stops (SPEC 12.2), set on the node by
+// Preflight > Node setup. Defaults are the firmware's.
+enum class NodeLossPolicy { hold, fade, fallback, blackout };
+struct NodeFallback {
+    NodeLossPolicy policy = NodeLossPolicy::fallback;
+    int loss_ms = 2000;       // Without data this long: the signal is lost.
+    int fade_ms = 3000;       // Fade: to black over this.
+    double brightness = 0.25; // Fallback show, 0 to 1 before gamma.
+    double speed_hz = 0.05;   // Fallback show drift.
+};
+const char *node_loss_policy_id(NodeLossPolicy policy); // "hold", "fade", "fallback", "blackout".
+inline constexpr std::array<NodeLossPolicy, 4> kNodeLossPolicies = {
+    NodeLossPolicy::hold, NodeLossPolicy::fade, NodeLossPolicy::fallback, NodeLossPolicy::blackout};
+
 struct Project {
     std::vector<ProjectStrip> strips;
     int first_universe = 1;
     int pixels_per_universe = 170;
     OutputSettings output;               // cid is derived from source_name.
     std::string source_name = "Psyight"; // sACN source name and CID seed.
+    NodeFallback node;                   // The pixel node's signal-loss settings.
     LimiterParams limiter;
     std::vector<GroupCap> group_caps;
     double latency_offset_ms = 0.0;

@@ -5,6 +5,49 @@
 #include <string.h>
 
 static const char *const kPolicies[] = {"hold", "fade", "fallback", "blackout"};
+static const char *const kOrders[NODE_ORDER_COUNT] = {"rgb", "grb", "brg", "rbg", "gbr", "bgr"};
+
+/* Version 1's stored layout: node_settings without lane_order, its palette GRB. */
+typedef struct {
+    uint16_t first_universe;
+    uint8_t universe_count;
+    uint8_t pixels_per_universe;
+    node_lane lanes[NODE_LANES];
+    uint32_t loss_timeout_ms;
+    node_loss_policy loss_policy;
+    uint32_t fade_ms;
+    float fallback_brightness;
+    float fallback_speed_hz;
+    uint8_t palette[4][3];
+    uint8_t palette_size;
+} node_settings_v1;
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint8_t ip[4];
+    uint8_t mask[4];
+    uint8_t gateway[4];
+    uint8_t dhcp;
+    uint8_t protocols;
+    uint8_t active_mask;
+    uint8_t reserved;
+    char short_name[18];
+    char long_name[64];
+    node_settings_v1 node;
+    uint32_t crc;
+} node_config_v1;
+
+static uint32_t crc32(const uint8_t *p, size_t n) {
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < n; ++i) {
+        crc ^= p[i];
+        for (int b = 0; b < 8; ++b) {
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+        }
+    }
+    return ~crc;
+}
 
 void node_config_defaults(node_config *c, const uint8_t mac[6]) {
     memset(c, 0, sizeof(*c));
@@ -27,16 +70,51 @@ void node_config_defaults(node_config *c, const uint8_t mac[6]) {
 }
 
 uint32_t node_config_crc(const node_config *c) {
-    const uint8_t *p = (const uint8_t *)c;
-    const size_t n = offsetof(node_config, crc);
-    uint32_t crc = 0xFFFFFFFFu;
-    for (size_t i = 0; i < n; ++i) {
-        crc ^= p[i];
-        for (int b = 0; b < 8; ++b) {
-            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
-        }
+    return crc32((const uint8_t *)c, offsetof(node_config, crc));
+}
+
+size_t node_config_v1_size(void) { return sizeof(node_config_v1); }
+
+int node_config_upgrade(const void *stored, node_config *out) {
+    node_config_v1 old;
+    memcpy(&old, stored, sizeof(old));
+    if (old.magic != NODE_CONFIG_MAGIC || old.version != 1u ||
+        old.crc != crc32((const uint8_t *)&old, offsetof(node_config_v1, crc))) {
+        return 0;
     }
-    return ~crc;
+    node_config c;
+    memset(&c, 0, sizeof(c));
+    c.magic = NODE_CONFIG_MAGIC;
+    c.version = NODE_CONFIG_VERSION;
+    memcpy(c.ip, old.ip, 4);
+    memcpy(c.mask, old.mask, 4);
+    memcpy(c.gateway, old.gateway, 4);
+    c.dhcp = old.dhcp;
+    c.protocols = old.protocols;
+    c.active_mask = old.active_mask;
+    memcpy(c.short_name, old.short_name, sizeof(c.short_name));
+    memcpy(c.long_name, old.long_name, sizeof(c.long_name));
+    c.node.first_universe = old.node.first_universe;
+    c.node.universe_count = old.node.universe_count;
+    c.node.pixels_per_universe = old.node.pixels_per_universe;
+    memcpy(c.node.lanes, old.node.lanes, sizeof(c.node.lanes));
+    c.node.loss_timeout_ms = old.node.loss_timeout_ms;
+    c.node.loss_policy = old.node.loss_policy;
+    c.node.fade_ms = old.node.fade_ms;
+    c.node.fallback_brightness = old.node.fallback_brightness;
+    c.node.fallback_speed_hz = old.node.fallback_speed_hz;
+    for (int i = 0; i < 4; ++i) { /* GRB to RGB. */
+        c.node.palette[i][0] = old.node.palette[i][1];
+        c.node.palette[i][1] = old.node.palette[i][0];
+        c.node.palette[i][2] = old.node.palette[i][2];
+    }
+    c.node.palette_size = old.node.palette_size;
+    for (int l = 0; l < NODE_LANES; ++l) {
+        c.node.lane_order[l] = NODE_ORDER_GRB;
+    }
+    c.crc = node_config_crc(&c);
+    *out = c;
+    return 1;
 }
 
 int node_config_valid(const node_config *c) {
@@ -108,15 +186,19 @@ static void describe(const node_config *c, char *reply, size_t capacity) {
     LINE("fallback_speed %u\n", (unsigned)(c->node.fallback_speed_hz * 1000.0f + 0.5f));
     used = append(reply, capacity, used, "palette");
     for (unsigned i = 0; i < c->node.palette_size && i < 4u; ++i) {
-        const uint8_t *grb = c->node.palette[i];
-        snprintf(line, sizeof(line), " %02X%02X%02X", grb[1], grb[0], grb[2]); /* As RGB. */
+        const uint8_t *rgb = c->node.palette[i];
+        snprintf(line, sizeof(line), " %02X%02X%02X", rgb[0], rgb[1], rgb[2]);
         used = append(reply, capacity, used, line);
     }
     used = append(reply, capacity, used, "\n");
+    for (int l = 0; l < NODE_LANES; ++l) {
+        const uint8_t order = c->node.lane_order[l];
+        LINE("order%d %s\n", l, kOrders[order < NODE_ORDER_COUNT ? order : NODE_ORDER_GRB]);
+    }
 #undef LINE
 }
 
-/* "RRGGBB RRGGBB ...": one to four colours, stored in the strip's GRB order. */
+/* "RRGGBB RRGGBB ...": one to four colours, stored as RGB. */
 static int parse_palette(const char *value, node_settings *s) {
     uint8_t colours[4][3];
     unsigned n = 0;
@@ -146,9 +228,9 @@ static int parse_palette(const char *value, node_settings *s) {
         }
         hex[6] = '\0';
         const unsigned long rgb = strtoul(hex, NULL, 16);
-        colours[n][0] = (uint8_t)(rgb >> 8);  /* G */
-        colours[n][1] = (uint8_t)(rgb >> 16); /* R */
-        colours[n][2] = (uint8_t)rgb;         /* B */
+        colours[n][0] = (uint8_t)(rgb >> 16);
+        colours[n][1] = (uint8_t)(rgb >> 8);
+        colours[n][2] = (uint8_t)rgb;
         ++n;
         p += 6;
     }
@@ -192,6 +274,17 @@ static int set(node_config *c, const char *key, const char *value, const char **
         for (unsigned i = 0; i < 4; ++i) {
             if (strcmp(value, kPolicies[i]) == 0) {
                 c->node.loss_policy = (node_loss_policy)i;
+                return 1;
+            }
+        }
+        return 0;
+    }
+    if (strncmp(key, "order", 5) == 0 && key[5] >= '0' && key[5] < '0' + NODE_LANES &&
+        key[6] == '\0') {
+        *why = "rgb, grb, brg, rbg, gbr or bgr";
+        for (unsigned i = 0; i < NODE_ORDER_COUNT; ++i) {
+            if (strcmp(value, kOrders[i]) == 0) {
+                c->node.lane_order[key[5] - '0'] = (uint8_t)i;
                 return 1;
             }
         }

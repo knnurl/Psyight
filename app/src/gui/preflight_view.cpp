@@ -304,12 +304,23 @@ constexpr int kNodeReplyTimeoutMs = 1000;
 constexpr int kNodeSaveTimeoutMs = 4000; // The node pauses 1 to 2 s while its flash sector erases.
 
 // Sends the commands in turn, stopping at the first that fails, then reads the settings back.
+// Setting up asks the node's protocol first and leaves out what older firmware does not know.
 NodeExchange exchange(std::array<std::uint8_t, 4> node, std::vector<std::string> commands) {
     NodeExchange out;
     Result<std::unique_ptr<UdpSocket>> socket = open_udp_socket();
     if (!socket) {
         out.error = socket.error().message;
         return out;
+    }
+    if (std::any_of(commands.begin(), commands.end(),
+                    [](const std::string &c) { return c.rfind("set order", 0) == 0; })) {
+        Result<std::string> first = node_request(*socket.value(), node, "get", kNodeReplyTimeoutMs);
+        if (!first) {
+            out.error = first.error().message;
+            return out;
+        }
+        commands = commands_for_protocol(std::move(commands),
+                                         node_protocol(parse_node_settings(first.value())));
     }
     for (const std::string &command : commands) {
         const int timeout = command == "save" ? kNodeSaveTimeoutMs : kNodeReplyTimeoutMs;
@@ -361,7 +372,8 @@ void PreflightView::draw_node_setup() {
     if (!ImGui::CollapsingHeader("Node setup")) {
         return;
     }
-    if (node_job_.valid() && node_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+    if (node_job_.valid() &&
+        node_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         node_result_ = node_job_.get();
     }
     const Project &project = project_.project();
@@ -374,10 +386,11 @@ void PreflightView::draw_node_setup() {
                        "(each a chain of strips in patch order, at most %d pixels):",
                        plan.universes, plan.first_universe, plan.lanes.size(),
                        plan.lanes.size() == 1 ? "" : "s", kNodeLanePixels);
-    if (ImGui::BeginTable("##lanes", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+    if (ImGui::BeginTable("##lanes", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
         ImGui::TableSetupColumn("Line");
         ImGui::TableSetupColumn("Strips", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Pixels");
+        ImGui::TableSetupColumn("Order");
         ImGui::TableHeadersRow();
         for (size_t l = 0; l < plan.lanes.size(); ++l) {
             const NodeLane &lane = plan.lanes[l];
@@ -385,7 +398,8 @@ void PreflightView::draw_node_setup() {
             ImGui::TableNextColumn();
             mono_text("%zu (PE%zu)", l + 1, l);
             ImGui::TableNextColumn();
-            const std::string &first = project.strips[static_cast<size_t>(lane.first_strip)].spec.name;
+            const std::string &first =
+                project.strips[static_cast<size_t>(lane.first_strip)].spec.name;
             const std::string &last =
                 project.strips[static_cast<size_t>(lane.first_strip + lane.strips - 1)].spec.name;
             if (lane.strips == 1) {
@@ -395,11 +409,53 @@ void PreflightView::draw_node_setup() {
             }
             ImGui::TableNextColumn();
             mono_text("%d", lane.pixels);
+            ImGui::TableNextColumn();
+            mono_text("%s", colour_order_name(lane.order));
         }
         ImGui::EndTable();
     }
     for (const std::string &problem : plan.problems) {
         ImGui::TextColored(level_colour(CheckLevel::fail), "%s", problem.c_str());
+    }
+    for (const std::string &note : plan.notes) {
+        ImGui::TextColored(level_colour(CheckLevel::warn), "%s", note.c_str());
+    }
+
+    // When the show's signal stops: saved with the project, set on the node with the rig.
+    NodeFallback fallback = project.node;
+    bool fallback_changed = false;
+    ImGui::SetNextItemWidth(9.0f * em);
+    if (ImGui::BeginCombo("When the signal stops", node_loss_policy_id(fallback.policy))) {
+        for (const NodeLossPolicy p : kNodeLossPolicies) {
+            if (ImGui::Selectable(node_loss_policy_id(p), p == fallback.policy)) {
+                fallback.policy = p;
+                fallback_changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("The node's own behaviour without the show's data: hold the last frame, "
+                          "fade it out, run its fallback show, or go dark.");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(6.0f * em);
+    fallback_changed |= drag_int("after (ms)", &fallback.loss_ms, 10.0f, 0, 600000, "%d");
+    if (fallback.policy == NodeLossPolicy::fade) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(6.0f * em);
+        fallback_changed |= drag_int("fade (ms)", &fallback.fade_ms, 10.0f, 0, 600000, "%d");
+    }
+    if (fallback.policy == NodeLossPolicy::fallback) {
+        ImGui::SetNextItemWidth(6.0f * em);
+        fallback_changed |=
+            drag_double("Fallback brightness", &fallback.brightness, 0.005f, 0.0, 1.0, "%.2f");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(6.0f * em);
+        fallback_changed |=
+            drag_double("speed (Hz)", &fallback.speed_hz, 0.002f, 0.0, 10.0, "%.3f");
+    }
+    if (fallback_changed) {
+        project_.edit().node = fallback;
+        project_.changed();
     }
 
     // Which node.
@@ -423,18 +479,22 @@ void PreflightView::draw_node_setup() {
     }
     // The fallback show's colours.
     ImGui::Checkbox("Fallback show colours from", &node_send_palette_);
-    ImGui::SetItemTooltip("The node's own show when the signal is lost takes the first four colours "
-                          "of this palette.");
+    ImGui::SetItemTooltip(
+        "The node's own show when the signal is lost takes the first four colours "
+        "of this palette.");
     ImGui::SameLine();
-    node_palette_ = std::clamp(node_palette_, 0, std::max(0, static_cast<int>(project.palettes.size()) - 1));
+    node_palette_ =
+        std::clamp(node_palette_, 0, std::max(0, static_cast<int>(project.palettes.size()) - 1));
     ImGui::BeginDisabled(!node_send_palette_ || project.palettes.empty());
     ImGui::SetNextItemWidth(10.0f * em);
-    const char *palette_name = project.palettes.empty()
-                                   ? "(none)"
-                                   : project.palettes[static_cast<size_t>(node_palette_)].name.c_str();
+    const char *palette_name =
+        project.palettes.empty()
+            ? "(none)"
+            : project.palettes[static_cast<size_t>(node_palette_)].name.c_str();
     if (ImGui::BeginCombo("##palette", palette_name)) {
         for (size_t i = 0; i < project.palettes.size(); ++i) {
-            if (ImGui::Selectable(project.palettes[i].name.c_str(), static_cast<int>(i) == node_palette_)) {
+            if (ImGui::Selectable(project.palettes[i].name.c_str(),
+                                  static_cast<int>(i) == node_palette_)) {
                 node_palette_ = static_cast<int>(i);
             }
         }
@@ -457,8 +517,9 @@ void PreflightView::draw_node_setup() {
         start_node_job(node_commands(plan, palette), "set up");
     }
     ImGui::EndDisabled();
-    ImGui::SetItemTooltip("Sends this rig's universes, lines and outputs (and the colours) and "
-                          "applies them at once. The node forgets them on a restart until saved.");
+    ImGui::SetItemTooltip("Sends this rig's universes, lines, outputs and colour orders, what to "
+                          "do when the signal stops (and the colours), and applies them at once. "
+                          "The node forgets them on a restart until saved.");
     ImGui::SameLine();
     if (ImGui::Button("Save on the node")) {
         start_node_job({"save"}, "save");

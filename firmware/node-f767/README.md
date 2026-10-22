@@ -91,6 +91,10 @@ The easy way: the app's Preflight tab > Node setup works out the universes and d
 
 Protocol 2 (`get` starts with `protocol 2`): `apply` puts the rig settings to use at once, between two frames, with no flash write and no restart: universes, lanes, `active`, the signal-loss settings and the fallback show, including `palette` (one to four `RRGGBB`). Names and `protocols` act at once; the network settings (ip, mask, gateway, dhcp) after save and reboot. `save` erases a 256 KB flash sector, which pauses output and network for 1 to 2 s.
 
+Protocol 3 (`get` starts with `protocol 3`) adds `order0` to `order7`, each lane's colour order (`rgb`, `grb`, `brg`, `rbg`, `gbr`, `bgr`) for the fallback show; live data already arrives in the strip's order from the app. The palette is kept as RGB. A configuration saved by protocol 2 firmware is read and upgraded at start (lanes GRB), so updating the firmware keeps the node's settings. The app sends the orders only to protocol 3 nodes, and sets the signal-loss policy and fallback show from the project.
+
+Wiring, pinout, flashing and set-up as a printable guide: `docs/NODE_WIRING_GUIDE.pdf` (regenerate with `python tools/python/make_node_guide.py`, which needs reportlab).
+
 Lanes are mapped by global pixel index, the way the app patches (170 pixels a universe, strips running across universe boundaries). Each lane is `first_pixel count`.
 
 ## To verify on the bench

@@ -10,6 +10,29 @@
 
 using namespace psyight;
 
+TEST_CASE("project: the node's signal-loss settings round-trip; older files take defaults") {
+    Project p = default_project();
+    p.node.policy = NodeLossPolicy::blackout;
+    p.node.loss_ms = 750;
+    p.node.fade_ms = 1234;
+    p.node.brightness = 0.6;
+    p.node.speed_hz = 0.2;
+    const Result<std::string> text = to_project_json(p);
+    REQUIRE(text.ok());
+    const Result<Project> back = parse_project_json(text.value());
+    REQUIRE(back.ok());
+    CHECK(back.value().node.policy == NodeLossPolicy::blackout);
+    CHECK(back.value().node.loss_ms == 750);
+    CHECK(back.value().node.fade_ms == 1234);
+    CHECK(back.value().node.brightness == doctest::Approx(0.6));
+    CHECK(back.value().node.speed_hz == doctest::Approx(0.2));
+    const Result<Project> old = parse_project_json(R"({"schema": 1})");
+    REQUIRE(old.ok());
+    CHECK(old.value().node.policy == NodeLossPolicy::fallback);
+    CHECK(old.value().node.loss_ms == 2000);
+    CHECK_FALSE(parse_project_json(R"({"schema": 1, "node": {"policy": "explode"}})").ok());
+}
+
 TEST_CASE("project: the default round-trips and builds the default rig and patch") {
     const Project p = default_project();
     REQUIRE(p.strips.size() == 4);

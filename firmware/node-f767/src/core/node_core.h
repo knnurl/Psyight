@@ -56,9 +56,19 @@ typedef struct {
     /* Fallback show: a slow plasma drifting through the palette, dim by default. */
     float fallback_brightness; /* 0 to 1, before gamma. */
     float fallback_speed_hz;
-    uint8_t palette[4][3]; /* GRB as sent to the strip. */
+    uint8_t palette[4][3]; /* RGB; the fallback show writes it in each lane's order. */
     uint8_t palette_size;
+    /* Each lane's wire colour order, as the app's ColourOrder: 0 rgb, 1 grb, 2 brg, 3 rbg, 4 gbr,
+     * 5 bgr. Live data arrives already in it (the app orders the bytes); the node uses it only
+     * for its own fallback show. */
+    uint8_t lane_order[NODE_LANES];
 } node_settings;
+
+#define NODE_ORDER_COUNT 6
+#define NODE_ORDER_GRB 1
+
+/* Where R, G and B go within a pixel's three bytes for a colour order (as the app's patch). */
+void node_order_positions(uint8_t order, uint8_t positions[3]);
 
 node_settings node_default_settings(void);
 
@@ -88,7 +98,8 @@ typedef struct {
 void node_init(node_state *n, const node_settings *settings);
 void node_on_packet(node_state *n, const psy_packet *packet, bool art_net, uint32_t now_ms);
 
-/* Fills the lanes' wire bytes (GRB, as received) for a frame at now_ms. Returns false when
+/* Fills the lanes' wire bytes (as received; the fallback show in each lane's order) for a frame
+ * at now_ms. Returns false when
  * nothing changed since the last frame (no need to send). */
 bool node_frame(node_state *n, uint32_t now_ms, uint8_t lanes[NODE_LANES][NODE_LANE_BYTES]);
 
