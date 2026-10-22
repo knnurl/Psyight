@@ -7,6 +7,7 @@
 #include "gui/command_line.h"
 #include "gui/crash_guard.h"
 #include "gui/file_dialog.h"
+#include "gui/file_flow.h"
 #include "gui/frame_pacing.h"
 #include "gui/layout.h"
 #include "gui/log_view.h"
@@ -78,13 +79,7 @@ void on_files_dropped(GLFWwindow *window, int count, const char *paths[]) {
 }
 
 // Global shortcuts. Text fields keep Ctrl+Z for their own undo: global routing gives way to them.
-void save_labels(psyight::Session &session) {
-    if (const psyight::Result<void> saved = session.save_labels(); saved) {
-        spdlog::info("Saved {}", psyight::path_to_utf8(session.labels_path().filename()));
-    } else {
-        spdlog::error("{}", saved.error().message);
-    }
-}
+// Ctrl+S, Ctrl+N and the project's other keys: gui/file_flow.h.
 
 // What the status bar shows: the worst preflight failure (or the warnings) and short facts.
 psyight::StatusInfo status_info(psyight::Session &session, const psyight::PreviewView &preview,
@@ -178,9 +173,6 @@ bool show_panel_focused() {
 void handle_shortcuts(psyight::Session &session, psyight::ProjectState &project) {
     constexpr ImGuiInputFlags kGlobal = ImGuiInputFlags_RouteGlobal;
     const bool show = show_panel_focused();
-    if (session.has_track() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, kGlobal)) {
-        save_labels(session);
-    }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, kGlobal)) {
         if (show) {
             project.undo();
@@ -276,9 +268,12 @@ int main() {
         psyight::PreflightView preflight_view(session, project, preview_view);
         psyight::SettingsView settings_view(project);
         psyight::SetupAssistant assistant(project, rig_view, preview_view, preflight_view);
-        if (!capture && !std::filesystem::exists(project.path())) {
-            assistant.open(); // No project yet: a first setup.
+        // The last project (or the working directory's psyight.psyproj); nothing: a first run.
+        psyight::FileFlow file_flow(project, session);
+        if (file_flow.start(capture.has_value()) && !capture) {
+            assistant.open();
         }
+        std::string window_title;
         psyight::RecentFiles recent;
         // The operator's preferences: loaded at start, saved when they change (not in capture
         // mode, which always renders the defaults). prefs holds the ones main and the settings
@@ -339,7 +334,17 @@ int main() {
         bool show_imgui_demo = false;
         bool show_implot_demo = false;
         bool show_style_editor = false;
-        while (!glfwWindowShouldClose(window)) {
+        while (true) {
+            // Closing asks first when something is unsaved (gui/file_flow.h).
+            if (file_flow.quit_confirmed()) {
+                break;
+            }
+            if (glfwWindowShouldClose(window)) {
+                if (capture || file_flow.ready_to_quit()) {
+                    break;
+                }
+                glfwSetWindowShouldClose(window, GLFW_FALSE);
+            }
             glfwPollEvents();
             if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
                 ImGui_ImplGlfw_Sleep(
@@ -363,7 +368,7 @@ int main() {
                     if (ImGui::MenuItem("Open track...", "Ctrl+O")) {
                         open_requested = true;
                     }
-                    if (ImGui::BeginMenu("Open recent", !recent.items().empty())) {
+                    if (ImGui::BeginMenu("Open recent track", !recent.items().empty())) {
                         std::optional<std::filesystem::path> chosen;
                         for (const std::filesystem::path &track : recent.items()) {
                             ImGui::PushID(psyight::path_to_utf8(track).c_str());
@@ -387,9 +392,7 @@ int main() {
                         }
                     }
                     ImGui::Separator();
-                    if (ImGui::MenuItem("Save labels", "Ctrl+S", false, session.has_track())) {
-                        save_labels(session);
-                    }
+                    file_flow.draw_menu_items();
                     ImGui::Separator();
                     ImGui::MenuItem("Settings...", nullptr, &show_settings);
                     if (ImGui::MenuItem("Setup assistant...")) {
@@ -498,11 +501,17 @@ int main() {
                 focus_preview = false;
             }
             handle_shortcuts(session, project);
+            file_flow.handle_shortcuts();
             if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
                 open_requested = true;
             }
             settings_view.draw(&show_settings, reset_layout, prefs);
             assistant.draw();
+            file_flow.draw(); // Its questions, over everything else.
+            if (!capture && file_flow.window_title() != window_title) {
+                window_title = file_flow.window_title();
+                glfwSetWindowTitle(window, window_title.c_str());
+            }
             if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_B, ImGuiInputFlags_RouteGlobal)) {
                 browser = !browser;
             }
@@ -558,6 +567,7 @@ int main() {
             if (!capture) {
                 glfwSwapBuffers(window);
                 psyight::wait_for_display_refresh();
+                file_flow.after_frame(glfwGetWin32Window(window)); // Its file dialogs.
                 if (open_requested) { // After the frame is shown, not halfway through it.
                     open_requested = false;
                     if (const auto chosen =

@@ -1,6 +1,7 @@
 #include "gui/session.h"
 
 #include "core/paths.h"
+#include "io/recovery.h"
 #include "io/stems.h"
 
 #include <spdlog/spdlog.h>
@@ -14,7 +15,7 @@ namespace psyight {
 namespace {
 
 constexpr int kOverviewBuckets = 4000;
-constexpr auto kAutosaveInterval = std::chrono::seconds(60);
+constexpr auto kRecoveryInterval = std::chrono::seconds(60);
 constexpr double kPlayheadLead = 0.3; // Fraction of the view shown before the playhead.
 constexpr double kMinViewS = 0.25;
 constexpr double kMaxViewS = 120.0;
@@ -22,6 +23,32 @@ constexpr double kMaxViewS = 120.0;
 } // namespace
 
 void Session::open_file(const std::filesystem::path &path) {
+    if (has_track() && labels_.dirty()) {
+        pending_open_ = path; // The GUI asks what to do with the unsaved labels first.
+        return;
+    }
+    start_loading(path);
+}
+
+void Session::resolve_pending_open(PendingChoice choice) {
+    const std::filesystem::path path = std::move(pending_open_);
+    pending_open_.clear();
+    if (choice == PendingChoice::cancel || path.empty()) {
+        return;
+    }
+    if (choice == PendingChoice::save) {
+        if (const Result<void> saved = save_labels(); !saved) {
+            status_ = saved.error().message;
+            spdlog::error("{}", status_);
+            return; // Not saved: stay on this track.
+        }
+    } else {
+        discard_label_changes();
+    }
+    start_loading(path);
+}
+
+void Session::start_loading(const std::filesystem::path &path) {
     if (loading_.valid()) {
         status_ = "Still loading " + loading_name_;
         return;
@@ -152,7 +179,7 @@ Session::LoadResult Session::load(std::filesystem::path path,
 
 Session::~Session() {
     stop_live();
-    autosave("on exit");
+    write_labels_recovery("on exit");
 }
 
 Result<void> Session::start_live(const CaptureOptions &options) {
@@ -182,16 +209,19 @@ void Session::stop_live() {
     spdlog::info("Live input stopped");
 }
 
-void Session::autosave(const char *reason) {
+void Session::write_labels_recovery(const char *reason) {
     if (!has_track() || !labels_.dirty()) {
         return;
     }
-    if (const Result<void> saved = save_labels(); saved) {
-        spdlog::info("Saved labels {} ({})", path_to_utf8(labels_path().filename()), reason);
-    } else {
-        spdlog::error("Autosave failed: {}", saved.error().message);
-        last_save_ = std::chrono::steady_clock::now(); // Retry after the interval, not per frame.
+    last_save_ = std::chrono::steady_clock::now(); // Also on failure: retry after the interval.
+    if (const Result<void> saved =
+            psyight::save_labels(recovery_path(labels_path()), labels_.labels());
+        !saved) {
+        spdlog::error("Labels recovery copy not written: {}", saved.error().message);
+        return;
     }
+    spdlog::debug("Labels recovery copy of {} ({})", path_to_utf8(labels_path().filename()),
+                  reason);
 }
 
 Result<void> Session::save_labels() {
@@ -202,9 +232,35 @@ Result<void> Session::save_labels() {
     const Result<void> saved = psyight::save_labels(labels_path(), labels_.labels());
     if (saved) {
         labels_.mark_saved();
+        remove_recovery(labels_path());
+        labels_recovery_available_ = false;
         last_save_ = std::chrono::steady_clock::now();
     }
     return saved;
+}
+
+void Session::discard_label_changes() {
+    if (has_track()) {
+        remove_recovery(labels_path());
+    }
+    labels_.mark_saved();
+}
+
+Result<void> Session::restore_labels_recovery() {
+    labels_recovery_available_ = false;
+    Result<Labels> loaded = load_labels(recovery_path(labels_path()));
+    if (!loaded) {
+        return loaded.error();
+    }
+    labels_ = LabelEditor(std::move(loaded.value()));
+    labels_.mark_unsaved(); // Restored, not saved: the copy stays until a save or a discard.
+    spdlog::info("Restored the unsaved labels of {}", track_->name);
+    return {};
+}
+
+void Session::discard_labels_recovery() {
+    labels_recovery_available_ = false;
+    remove_recovery(labels_path());
 }
 
 std::shared_ptr<const SectionTimeline> Session::edited_sections() {
@@ -331,8 +387,8 @@ void Session::update() {
     }
     expected_view_min_s_ = view.min_s;
     expected_view_max_s_ = view.max_s;
-    if (labels_.dirty() && std::chrono::steady_clock::now() - last_save_ > kAutosaveInterval) {
-        autosave("periodic");
+    if (labels_.dirty() && std::chrono::steady_clock::now() - last_save_ > kRecoveryInterval) {
+        write_labels_recovery("periodic");
     }
     if (!loading_.valid() ||
         loading_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
@@ -344,7 +400,8 @@ void Session::update() {
         spdlog::error("{}", status_);
         return;
     }
-    autosave("switching track");
+    // Edits made while the new track loaded: kept in the old track's recovery copy.
+    write_labels_recovery("switching track");
     const Result<void> opened = transport_.open(std::move(result.audio.value()));
     if (!opened) {
         status_ = opened.error().message;
@@ -357,8 +414,9 @@ void Session::update() {
     spdlog::info("Loaded {} ({:.2f} s), device period {} frames", track_->name, track_->duration_s,
                  transport_.device_period_frames());
 
-    // Labels: load the file next to the audio, or start empty.
+    // Labels: load the file next to the audio, or start empty; a newer recovery copy is offered.
     labels_file_unreadable_ = false;
+    labels_recovery_available_ = recovery_newer(labels_path());
     if (std::filesystem::exists(labels_path())) {
         Result<Labels> loaded = load_labels(labels_path());
         if (loaded) {

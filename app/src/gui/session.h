@@ -6,6 +6,10 @@
 // data/m4/student.weights.{json,bin} in the working directory (never in the repository): its
 // notes can replace the DSP tracker's in the bass roll and the scoring panel, for A/B on the same
 // audio (SPEC 6.9). The show always uses the DSP analysis.
+// Labels files change only on save_labels(): while the labels have unsaved changes, a recovery
+// copy goes beside the file (io/recovery.h) at most once a minute and on exit. Opening another
+// track then waits for a decision (pending_open(), resolve_pending_open()), and a track whose
+// recovery copy is newer than its labels offers it back (labels_recovery_available()).
 #pragma once
 
 #include "engine/inputs.h"
@@ -63,9 +67,13 @@ struct TimeView {
 
 class Session {
   public:
-    ~Session(); // Saves unsaved labels.
+    ~Session(); // Writes a recovery copy of unsaved labels; never the labels file itself.
 
+    // Loads a track. With unsaved labels it only becomes pending, until resolve_pending_open().
     void open_file(const std::filesystem::path &path);
+    const std::filesystem::path &pending_open() const { return pending_open_; } // Empty: none.
+    enum class PendingChoice { save, discard, cancel };
+    void resolve_pending_open(PendingChoice choice);
     // Re-runs the track analysis in the background on the labels' current grid (for example
     // after the grid was set by ear), from the mix or the stems.
     void reanalyse(AnalysisSource source);
@@ -90,9 +98,14 @@ class Session {
     std::shared_ptr<const SectionTimeline> edited_sections();
     Grid grid() const; // The labels' grid on the sample clock.
     std::filesystem::path labels_path() const;
-    // Also clears the dirty flag. Refused while an existing labels file could not be read, so a
-    // damaged file is never overwritten.
+    // Also clears the dirty flag and removes the recovery copy. Refused while an existing labels
+    // file could not be read, so a damaged file is never overwritten.
     Result<void> save_labels();
+    void discard_label_changes(); // Unsaved label changes are dropped on purpose.
+    // A recovery copy newer than the loaded track's labels file, found when the track loaded.
+    bool labels_recovery_available() const { return labels_recovery_available_; }
+    Result<void> restore_labels_recovery(); // Its contents become the unsaved labels.
+    void discard_labels_recovery();
 
     // The shown detections: the DSP tracker's, or the student's when chosen and available. Null
     // before an analysis exists.
@@ -119,7 +132,8 @@ class Session {
         std::shared_ptr<LoadedTrack> track;
     };
     static LoadResult load(std::filesystem::path path, std::shared_ptr<const StudentModel> student);
-    void autosave(const char *reason);
+    void start_loading(const std::filesystem::path &path);
+    void write_labels_recovery(const char *reason);
 
     Transport transport_;
     std::shared_ptr<const StudentModel> student_model_ = load_student_model();
@@ -139,6 +153,8 @@ class Session {
     SampleIndex timeline_downbeat_ = 0;
     const TrackAnalysis *timeline_analysis_ = nullptr;
     bool labels_file_unreadable_ = false;
+    bool labels_recovery_available_ = false;
+    std::filesystem::path pending_open_;
     LoopRegion loop_;
     double expected_view_min_s_ = 0.0; // The view as update() set it, to detect user changes.
     double expected_view_max_s_ = 0.0;

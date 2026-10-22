@@ -4,7 +4,9 @@ For whoever runs the lights: at home or at an event, from prepared files or from
 
 ## Start
 
-Run Psyight from the folder that holds `psyight.psyproj` (the project file: rig, patch, output, limiters, scenes, palettes, MIDI bindings). Settings save by themselves, a minute after any change and on exit.
+A project (a `.psyproj` file) holds the rig, patch, output, limiters, scenes, palettes and MIDI bindings. Psyight opens the last project you used; File has New project (Ctrl+N), Open project (Ctrl+Shift+O), Open recent project and Save project as (Ctrl+Shift+S), and the Rig tab has the same buttons beside the project's name. The window title shows the project and "(unsaved)" while it has changes.
+
+Files change only when you save. Ctrl+S (File > Save) saves whatever has changes: the project and the loaded track's labels. Before anything would be lost (a new or another project, another track, quitting) Psyight asks: Save, Don't save or Cancel. Unsaved changes are also kept in a recovery copy beside the file (`show.psyproj.autosave`, `track.mp3.labels.json.autosave`) once a minute; if Psyight closes without saving them (a crash, a power cut), it offers them back the next time the project or track opens. Interface preferences (theme, depth, plot heights, volume) save by themselves.
 
 The top bar has three parts:
 

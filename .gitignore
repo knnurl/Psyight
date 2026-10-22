@@ -7,6 +7,9 @@ vcpkg_installed/
 CMakeUserPresets.json
 imgui.ini
 psyight.recent.json
+psyight.recent-projects.json
+# Recovery copies of unsaved projects and labels (io/recovery.h)
+*.autosave
 psyight.settings.json
 # The user's own presets, beside the project (io/presets.h)
 /presets/

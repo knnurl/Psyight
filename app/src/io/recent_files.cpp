@@ -23,16 +23,17 @@ bool same_file(const std::filesystem::path &a, const std::filesystem::path &b) {
 
 } // namespace
 
-RecentFiles::RecentFiles(std::filesystem::path file) : file_(std::move(file)) {
+RecentFiles::RecentFiles(std::filesystem::path file, std::string key)
+    : file_(std::move(file)), key_(std::move(key)) {
     std::ifstream in(file_, std::ios::binary);
     if (!in) {
         return;
     }
     const nlohmann::json root = nlohmann::json::parse(in, nullptr, false);
-    if (!root.is_object() || !root.contains("tracks") || !root["tracks"].is_array()) {
+    if (!root.is_object() || !root.contains(key_) || !root[key_].is_array()) {
         return;
     }
-    for (const nlohmann::json &t : root["tracks"]) {
+    for (const nlohmann::json &t : root[key_]) {
         if (t.is_string() && items_.size() < kMaxRecent) {
             const std::string utf8 = t.get<std::string>();
             items_.push_back(std::filesystem::path(
@@ -61,11 +62,11 @@ void RecentFiles::clear() {
 }
 
 void RecentFiles::save() const {
-    nlohmann::json tracks = nlohmann::json::array();
+    nlohmann::json list = nlohmann::json::array();
     for (const std::filesystem::path &p : items_) {
-        tracks.push_back(path_to_utf8(p));
+        list.push_back(path_to_utf8(p));
     }
-    std::ofstream(file_, std::ios::binary) << nlohmann::json{{"tracks", tracks}}.dump(2) << "\n";
+    std::ofstream(file_, std::ios::binary) << nlohmann::json{{key_, list}}.dump(2) << "\n";
 }
 
 } // namespace psyight

@@ -63,7 +63,6 @@ void RigView::draw() {
             polyline_texts_.push_back(polyline_text(s.spec.polyline));
             group_texts_.push_back(groups_text(s.spec.groups));
         }
-        path_text_ = path_to_utf8(project_.path());
         texts_version_ = project_.version();
     }
     const bool engineer = tier_at_least(Tier::engineer);
@@ -82,20 +81,27 @@ void RigView::draw() {
 }
 
 void RigView::draw_project() {
-    const float em = ImGui::GetFontSize();
-    ImGui::SetNextItemWidth(14.0f * em);
-    if (ImGui::InputText("Project file", &path_text_)) {
-        const std::u8string text(path_text_.begin(), path_text_.end());
-        project_.path() = std::filesystem::path(text);
+    // The project: its name, and the File menu's commands (gui/file_flow.h carries them out,
+    // asking first when there are unsaved changes).
+    ImGui::Text("Project: %s%s", project_.name().c_str(), project_.dirty() ? " (unsaved)" : "");
+    ImGui::SetItemTooltip("%s", project_.untitled() ? "Not saved to a file yet."
+                                                    : path_to_utf8(project_.path()).c_str());
+    if (ImGui::Button("New")) {
+        project_.request(ProjectRequest::new_project);
     }
-    if (ImGui::Button("Load")) {
-        (void)project_.load(); // The status line shows the outcome.
+    ImGui::SameLine();
+    if (ImGui::Button("Open...")) {
+        project_.request(ProjectRequest::open);
     }
     ImGui::SameLine();
     if (primary_button(project_.dirty() ? "Save *###save" : "Save###save")) {
-        (void)project_.save();
+        project_.request(project_.untitled() ? ProjectRequest::save_as : ProjectRequest::save);
     }
-    ImGui::SetItemTooltip("Also saved on exit when changed.");
+    ImGui::SetItemTooltip("Ctrl+S. The project changes on disk only when you save.");
+    ImGui::SameLine();
+    if (ImGui::Button("Save as...")) {
+        project_.request(ProjectRequest::save_as);
+    }
     ImGui::SameLine();
     if (ImGui::Button("Default frame")) {
         project_.reset_to_default();

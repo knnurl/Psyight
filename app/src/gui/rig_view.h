@@ -32,7 +32,6 @@ class RigView {
     void draw_patch();
 
     ProjectState &project_;
-    std::string path_text_;
     // Text being edited per strip (polyline and groups), refreshed when the project changes.
     std::vector<std::string> polyline_texts_;
     std::vector<std::string> group_texts_;

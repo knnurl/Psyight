@@ -1,30 +1,15 @@
 #include "gui/project_state.h"
 
 #include "core/paths.h"
+#include "io/recovery.h"
 
 #include <spdlog/spdlog.h>
 
 namespace psyight {
 
-ProjectState::ProjectState() {
-    rebuild();
-    if (std::filesystem::exists(path_)) {
-        if (const Result<void> loaded = load(); !loaded) {
-            file_unreadable_ = true;
-            spdlog::error("{}", loaded.error().message);
-        }
-    }
-}
-
-ProjectState::~ProjectState() {
-    if (dirty_ && !file_unreadable_) {
-        if (const Result<void> saved = save(); !saved) {
-            spdlog::error("{}", saved.error().message);
-        }
-    }
-}
-
 namespace {
+
+constexpr auto kRecoveryInterval = std::chrono::minutes(1);
 
 double now_s() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
@@ -32,6 +17,18 @@ double now_s() {
 }
 
 } // namespace
+
+ProjectState::ProjectState() { rebuild(); }
+
+ProjectState::~ProjectState() {
+    if (dirty_) {
+        write_recovery();
+    }
+}
+
+std::string ProjectState::name() const {
+    return untitled() ? "Untitled" : path_to_utf8(path_.stem());
+}
 
 void ProjectState::changed() {
     history_.record(committed_, now_s());
@@ -46,45 +43,116 @@ void ProjectState::rebuild() {
     patch_ = patch_of(project_);
 }
 
-Result<void> ProjectState::load() {
-    Result<Project> loaded = load_project(path_);
+void ProjectState::replace(Project project) {
+    project_ = std::move(project);
+    committed_ = project_;
+    history_.clear();
+    rebuild();
+    ++version_;
+}
+
+std::filesystem::path ProjectState::recovery_file() const {
+    return untitled() ? std::filesystem::path(kUntitledFile) : path_;
+}
+
+void ProjectState::write_recovery() {
+    if (const Result<void> saved = save_project(recovery_path(recovery_file()), project_); !saved) {
+        spdlog::error("Recovery copy not written: {}", saved.error().message);
+    }
+}
+
+Result<void> ProjectState::open(const std::filesystem::path &path) {
+    Result<Project> loaded = load_project(path);
     if (!loaded) {
         status_ = loaded.error().message;
         return loaded.error();
     }
-    project_ = std::move(loaded.value());
-    committed_ = project_;
-    history_.clear(); // Another file: its own history.
-    rebuild();
-    ++version_;
+    path_ = path;
+    replace(std::move(loaded.value()));
     dirty_ = false;
-    file_unreadable_ = false;
-    status_ = "Loaded " + path_to_utf8(path_);
-    spdlog::info("{}", status_);
+    status_ = "Opened " + path_to_utf8(path_.filename());
+    spdlog::info("Opened project {}", path_to_utf8(path_));
     return {};
 }
 
 Result<void> ProjectState::save() {
+    if (untitled()) {
+        return Error{"the project has no file yet: use Save as"};
+    }
     if (const Result<void> saved = save_project(path_, project_); !saved) {
         status_ = saved.error().message;
         return saved;
     }
+    remove_recovery(path_);
     dirty_ = false;
-    file_unreadable_ = false;
-    status_ = "Saved " + path_to_utf8(path_);
-    spdlog::info("{}", status_);
+    status_ = "Saved " + path_to_utf8(path_.filename());
+    spdlog::info("Saved project {}", path_to_utf8(path_));
     return {};
+}
+
+Result<void> ProjectState::save_as(const std::filesystem::path &path) {
+    const std::filesystem::path before = recovery_file();
+    const std::filesystem::path previous = path_;
+    path_ = path;
+    if (Result<void> saved = save(); !saved) {
+        path_ = previous;
+        return saved;
+    }
+    remove_recovery(before); // The untitled copy, or the old file's.
+    return {};
+}
+
+void ProjectState::new_project() {
+    discard_changes();
+    path_.clear();
+    replace(default_project());
+    status_ = "New project";
+}
+
+void ProjectState::discard_changes() {
+    remove_recovery(recovery_file());
+    dirty_ = false;
 }
 
 void ProjectState::autosave() {
     const auto now = std::chrono::steady_clock::now();
-    if (!dirty_ || file_unreadable_ || now - last_save_ < std::chrono::minutes(1)) {
+    if (!dirty_ || now - last_recovery_ < kRecoveryInterval) {
         return;
     }
-    last_save_ = now;
-    if (const Result<void> saved = save(); !saved) {
-        spdlog::error("{}", saved.error().message);
+    last_recovery_ = now;
+    write_recovery();
+}
+
+bool ProjectState::recovery_available() const { return recovery_newer(recovery_file()); }
+
+std::string ProjectState::recovery_age() const { return psyight::recovery_age(recovery_file()); }
+
+Result<void> ProjectState::restore_recovery() {
+    Result<Project> loaded = load_project(recovery_path(recovery_file()));
+    if (!loaded) {
+        status_ = loaded.error().message;
+        return loaded.error();
     }
+    replace(std::move(loaded.value()));
+    dirty_ = true; // Restored, not saved: the copy stays until a save or a discard.
+    status_ = "Restored unsaved changes";
+    spdlog::info("Restored the unsaved changes of {}", name());
+    return {};
+}
+
+void ProjectState::discard_recovery() { remove_recovery(recovery_file()); }
+
+void ProjectState::request(ProjectRequest r, std::filesystem::path path) {
+    request_ = r;
+    request_path_ = std::move(path);
+}
+
+ProjectRequest ProjectState::take_request(std::filesystem::path &path) {
+    const ProjectRequest r = request_;
+    path = std::move(request_path_);
+    request_ = ProjectRequest::none;
+    request_path_.clear();
+    return r;
 }
 
 bool ProjectState::undo() {

@@ -23,6 +23,7 @@ class LabelEditor {
     const Labels &labels() const { return labels_; }
     bool dirty() const { return dirty_; }
     void mark_saved() { dirty_ = false; }
+    void mark_unsaved() { dirty_ = true; } // Labels restored from a recovery copy.
 
     void begin_gesture();
     void end_gesture();

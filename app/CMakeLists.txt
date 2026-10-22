@@ -80,7 +80,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/output/discovery.cpp src/output/preflight.cpp
                                src/ml/student.cpp src/analysis/live_analysis.cpp
                                src/audio/capture.cpp src/audio/live_input.cpp
-                               src/io/midi_map.cpp src/io/png.cpp src/io/recent_files.cpp
+                               src/io/midi_map.cpp src/io/png.cpp src/io/recent_files.cpp src/io/recovery.cpp
                                src/io/user_settings.cpp src/io/presets.cpp src/output/test_patterns.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
@@ -88,7 +88,7 @@ target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohman
                                           ws2_32 iphlpapi)
 
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
-                       src/gui/session.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
+                       src/gui/session.cpp src/gui/file_flow.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
                        src/gui/analysis_view.cpp src/gui/bass_roll_view.cpp src/gui/time_plot.cpp
                        src/gui/spectrogram_textures.cpp
                        src/gui/spectrogram_image.cpp src/gui/preview_view.cpp
@@ -169,6 +169,7 @@ include(CPack)
 
 enable_testing()
 add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp tests/core_test.cpp
+                             tests/recovery_test.cpp
                              tests/audio_test.cpp tests/front_end_test.cpp
                              tests/labels_test.cpp tests/scoring_test.cpp
                              tests/synth_generator.cpp tests/synth_generator_test.cpp

@@ -64,26 +64,32 @@ void SettingsView::draw(bool *open, bool &reset_layout, UserSettings &prefs) {
          "drawn large in their place. Leaving show mode restores the theme and panels.");
 
     ImGui::SeparatorText("Project");
-    std::error_code error;
-    const std::filesystem::path where = std::filesystem::absolute(project_.path(), error);
-    ImGui::TextWrapped("%s%s", path_to_utf8(error ? project_.path() : where).c_str(),
-                       project_.dirty() ? " (unsaved changes)" : "");
-    help("The rig, patch, output, limiters, scenes, palettes and MIDI. Saved by itself a minute "
-         "after a change and on exit.");
-    if (primary_button("Save now")) {
-        if (const Result<void> saved = project_.save(); !saved) {
-            spdlog::error("{}", saved.error().message);
-        }
+    if (project_.untitled()) {
+        ImGui::TextWrapped("Untitled (not saved to a file yet)%s",
+                           project_.dirty() ? ", unsaved changes" : "");
+    } else {
+        std::error_code error;
+        const std::filesystem::path where = std::filesystem::absolute(project_.path(), error);
+        ImGui::TextWrapped("%s%s", path_to_utf8(error ? project_.path() : where).c_str(),
+                           project_.dirty() ? " (unsaved changes)" : "");
+    }
+    help("The rig, patch, output, limiters, scenes, palettes and MIDI. The file changes only when "
+         "you save (Ctrl+S); until then a recovery copy is kept beside it, and offered back if "
+         "Psyight closes without saving.");
+    if (primary_button("Save")) {
+        project_.request(project_.untitled() ? ProjectRequest::save_as : ProjectRequest::save);
     }
     ImGui::SameLine();
-    ImGui::BeginDisabled(!std::filesystem::exists(project_.path()));
-    if (ImGui::Button("Reload from disk")) {
-        if (const Result<void> loaded = project_.load(); !loaded) {
-            spdlog::error("{}", loaded.error().message);
-        }
+    if (ImGui::Button("Save as...")) {
+        project_.request(ProjectRequest::save_as);
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(project_.untitled() || !project_.dirty());
+    if (ImGui::Button("Revert to saved")) {
+        project_.request(ProjectRequest::open_path, project_.path());
     }
     ImGui::EndDisabled();
-    ImGui::SetItemTooltip("Discards changes since the last save.");
+    ImGui::SetItemTooltip("Opens the file again; you are asked before the changes are dropped.");
 
     ImGui::SeparatorText("Layout");
     if (ImGui::Button("Reset layout")) {
