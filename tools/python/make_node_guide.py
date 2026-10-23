@@ -417,7 +417,9 @@ def main():
         "node's subnet.",
         "Preflight &gt; Node setup shows the data lines "
         "the current rig needs (pixels and colour order per line), keeping each line at or under "
-        "545 pixels (60 fps) when the eight lines allow it.",
+        "545 pixels (60 fps) when the eight lines allow it. Tick One strip per data line to give "
+        "each strip its own pin with no chaining (rigs of up to 8 strips). Rig &gt; Patch by strip "
+        "shows each strip's line, pin and header position.",
         "Choose what the node does when the signal stops (hold, fade, fallback show or blackout), "
         "after how long, and the fallback show's colours, brightness and speed. These are saved "
         "with the project.",

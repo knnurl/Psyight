@@ -500,6 +500,10 @@ void PreflightView::draw_node_setup() {
         fallback_changed |=
             drag_double("speed (Hz)", &fallback.speed_hz, 0.002f, 0.0, 10.0, "%.3f");
     }
+    fallback_changed |= ImGui::Checkbox("One strip per data line", &fallback.one_strip_per_line);
+    ImGui::SetItemTooltip("Each strip gets its own pin (PD0, PD1, ...) with no chaining, when the "
+                          "rig has at most 8 strips. Off: strips chain, as many to a line as "
+                          "keep 60 fps.");
     if (fallback_changed) {
         project_.edit().node = fallback;
         project_.changed();

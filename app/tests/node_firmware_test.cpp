@@ -695,3 +695,36 @@ TEST_CASE("node setup: each lane's pin and header position (port D, UM1974 table
     CHECK(std::string(node_lane_pin(8)).empty());
     CHECK(std::string(node_lane_pin(-1)).empty());
 }
+
+TEST_CASE("node setup: one strip per data line when the strips fit the eight") {
+    Project project = default_project();
+    project.strips.clear();
+    for (int i = 0; i < 8; ++i) {
+        StripSpec s;
+        s.name = "Pillar " + std::to_string(i + 1);
+        s.polyline = {{i * 1.0, 1.0, 0.0}, {i * 1.0, 2.0, 0.0}};
+        s.count = 60;
+        project.strips.push_back({s, ColourOrder::grb});
+    }
+    CHECK(plan_node(project).lanes.size() == 1); // Chained: 480 pixels fit one 60 fps line.
+    project.node.one_strip_per_line = true;
+    NodePlan plan = plan_node(project);
+    REQUIRE(plan.lanes.size() == 8);
+    for (size_t l = 0; l < 8; ++l) {
+        CHECK(plan.lanes[l].strips == 1);
+        CHECK(plan.lanes[l].first_strip == static_cast<int>(l));
+        CHECK(plan.lanes[l].first_pixel == static_cast<int>(l) * 60);
+        CHECK(plan.lanes[l].pixels == 60);
+    }
+    CHECK(plan.notes.empty());
+    CHECK(plan.active_mask() == 0xFF);
+    project.strips.push_back(project.strips.back()); // A ninth strip: chained, with a note.
+    plan = plan_node(project);
+    CHECK(plan.lanes.size() == 1);
+    REQUIRE(plan.notes.size() == 1);
+    CHECK(plan.notes[0].find("at most 8 strips") != std::string::npos);
+    // Saved with the project.
+    const Result<Project> back = parse_project_json(to_project_json(project).value());
+    REQUIRE(back.ok());
+    CHECK(back.value().node.one_strip_per_line);
+}

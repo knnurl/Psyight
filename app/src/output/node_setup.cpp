@@ -36,9 +36,19 @@ NodePlan plan_node(const Project &project) {
     plan.pixels_per_universe = project.pixels_per_universe;
     // Strips chained in patch order. Lines short enough for the show's 60 fps when the node's 8
     // lines allow it (fewer pixels a line refresh faster), else as full as a line takes.
-    plan.lanes = chain(project, kNodeLanePixelsAt60Fps);
-    if (static_cast<int>(plan.lanes.size()) > kNodeLanes) {
-        plan.lanes = chain(project, kNodeLanePixels);
+    const bool own_lines = project.node.one_strip_per_line;
+    if (own_lines && static_cast<int>(project.strips.size()) <= kNodeLanes) {
+        plan.lanes = chain(project, 0); // A limit of 0: every strip starts a line.
+    } else {
+        plan.lanes = chain(project, kNodeLanePixelsAt60Fps);
+        if (static_cast<int>(plan.lanes.size()) > kNodeLanes) {
+            plan.lanes = chain(project, kNodeLanePixels);
+        }
+        if (own_lines) {
+            plan.notes.push_back("One strip per line needs at most " + std::to_string(kNodeLanes) +
+                                 " strips; this rig has " + std::to_string(project.strips.size()) +
+                                 ", so they are chained.");
+        }
     }
     for (size_t s = 0; s < project.strips.size(); ++s) {
         const int count = std::max(0, project.strips[s].spec.count);

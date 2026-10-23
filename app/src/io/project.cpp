@@ -447,6 +447,7 @@ Result<Project> parse_project_json(std::string_view json_text) {
         p.node.fade_ms = integer(node, "fade_ms", 3000, 0, 600000);
         p.node.brightness = number(node, "fallback_brightness", 0.25, 0.0, 1.0);
         p.node.speed_hz = number(node, "fallback_speed_hz", 0.05, 0.0, 10.0);
+        p.node.one_strip_per_line = optional(node, "one_strip_per_line", false);
         p.output.cid = cid_from_name(p.source_name);
 
         const json &lim = section(root, "limiter");
@@ -574,7 +575,8 @@ Result<std::string> to_project_json(const Project &p) {
               {"loss_ms", p.node.loss_ms},
               {"fade_ms", p.node.fade_ms},
               {"fallback_brightness", finite(p.node.brightness, "fallback_brightness")},
-              {"fallback_speed_hz", finite(p.node.speed_hz, "fallback_speed_hz")}}},
+              {"fallback_speed_hz", finite(p.node.speed_hz, "fallback_speed_hz")},
+              {"one_strip_per_line", p.node.one_strip_per_line}}},
             {"limiter",
              {{"brightness_cap", finite(l.brightness_cap, "brightness_cap")},
               {"flash_limiter", l.flash_limiter},
