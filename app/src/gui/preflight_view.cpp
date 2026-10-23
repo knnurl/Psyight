@@ -171,6 +171,11 @@ void PreflightView::draw_discovery() {
         ImGui::TextColored(level_colour(CheckLevel::warn),
                            "No node answered: check the cable, the node's power and that this "
                            "computer is on the show network.");
+        ImGui::TextWrapped("Still nothing? Windows Firewall may be blocking Psyight (a direct "
+                           "cable counts as a public network): Windows Security > Firewall & "
+                           "network protection > Allow an app through firewall > psyight.exe, "
+                           "tick Public. The node's console (ST-LINK COM port, 115200) prints its "
+                           "address.");
     } else {
         for (const ArtNode &n : *nodes_) {
             mono_text("%s  %s", ipv4_text(n.ip).c_str(), n.short_name.c_str());
