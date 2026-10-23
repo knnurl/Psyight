@@ -13,7 +13,8 @@ namespace {
 constexpr float kLeftColumnWidthFraction = 0.76f;
 constexpr float kTransportHeightEm = 5.6f;       // Two rows of controls, in font heights.
 constexpr float kPreviewHeightFraction = 0.30f;  // Of the right column.
-constexpr float kInspectorHeightFraction = 0.5f; // Of the right column under the preview.
+constexpr float kInspectorHeightFraction = 0.4f; // Of the right column under the preview: the
+                                                 // inspector and scoring, under the tabs.
 constexpr float kAnalysisHeightFraction = 0.5f;  // Of the left column under the transport.
 
 ImGuiWindowClass pinned_class(ImGuiDockNodeFlags extra) {
@@ -83,7 +84,7 @@ void apply_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, kPreviewHeightFraction, &preview, &right_rest);
     ImGuiID inspector = 0;
     ImGuiID tabs = 0;
-    ImGui::DockBuilderSplitNode(right_rest, ImGuiDir_Up, kInspectorHeightFraction, &inspector,
+    ImGui::DockBuilderSplitNode(right_rest, ImGuiDir_Down, kInspectorHeightFraction, &inspector,
                                 &tabs);
     ImGuiID transport = 0;
     ImGuiID views = 0;
@@ -100,10 +101,11 @@ void apply_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderDockWindow("Preview", preview);
     ImGui::DockBuilderDockWindow("Note inspector", inspector);
     ImGui::DockBuilderDockWindow("Scoring", inspector); // Tabbed behind the inspector.
-    ImGui::DockBuilderDockWindow("Show", tabs);
-    ImGui::DockBuilderDockWindow("Log", tabs); // Tabbed behind the show controls.
-    ImGui::DockBuilderDockWindow("Rig", tabs);
+    // Tabs in the order main draws them on first use: Log, Preflight, Rig, Show.
+    ImGui::DockBuilderDockWindow("Log", tabs);
     ImGui::DockBuilderDockWindow("Preflight", tabs);
+    ImGui::DockBuilderDockWindow("Rig", tabs);
+    ImGui::DockBuilderDockWindow("Show", tabs);
     ImGui::DockBuilderFinish(dockspace_id);
 }
 
