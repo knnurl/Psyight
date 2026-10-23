@@ -236,7 +236,45 @@ void RigView::draw_presets(std::vector<StripSpec> &strips) {
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextDisabled("%s", preset.description.c_str());
     ImGui::PopTextWrapPos();
-    strips = preset.strips;
+    // Its settings, kept per preset while the app runs; the strips follow them.
+    if (preset_values_.size() != presets_.size()) {
+        preset_values_.resize(presets_.size());
+    }
+    std::vector<double> &values = preset_values_[static_cast<size_t>(preset_)];
+    if (values.size() != preset.params.size()) {
+        values.clear();
+        for (const RigPresetParam &q : preset.params) {
+            values.push_back(q.value);
+        }
+    }
+    const float field = 7.0f * ImGui::GetFontSize();
+    for (size_t k = 0; k < preset.params.size(); ++k) {
+        const RigPresetParam &q = preset.params[k];
+        ImGui::PushID(static_cast<int>(k));
+        if (q.toggle) {
+            bool on = values[k] >= 0.5;
+            if (ImGui::Checkbox(q.label.c_str(), &on)) {
+                values[k] = on ? 1.0 : 0.0;
+            }
+        } else if (q.integer) {
+            int v = static_cast<int>(std::lround(values[k]));
+            ImGui::SetNextItemWidth(field);
+            if (drag_int(q.label.c_str(), &v, 0.1f, static_cast<int>(q.min),
+                         static_cast<int>(q.max))) {
+                values[k] = v;
+            }
+        } else {
+            const std::string format = "%.2f" + (q.unit.empty() ? std::string() : " " + q.unit);
+            ImGui::SetNextItemWidth(field);
+            drag_double(q.label.c_str(), &values[k], static_cast<float>((q.max - q.min) / 400.0),
+                        q.min, q.max, format.c_str());
+        }
+        ImGui::PopID();
+    }
+    if (!preset.params.empty() && ImGui::SmallButton("Defaults")) {
+        values.clear(); // Refilled with the defaults next frame.
+    }
+    strips = build_rig_preset(preset, values);
 }
 
 void RigView::draw_replace(std::vector<StripSpec> strips) {

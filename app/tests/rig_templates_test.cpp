@@ -155,7 +155,7 @@ TEST_CASE("rig presets: mirrored halves run from the centre outwards, closed sha
     CHECK(outer.count == 432); // Six 1.2 m sides at 60 px/m.
     CHECK(build_rig(hexagon.strips).pixels.size() == 1152);
 
-    const RigPreset &tunnel = find("Triple arch tunnel");
+    const RigPreset &tunnel = find("Arch tunnel");
     REQUIRE(tunnel.strips.size() == 6);
     for (size_t i = 0; i < tunnel.strips.size(); i += 2) {
         const StripSpec &l = tunnel.strips[i];
@@ -245,4 +245,54 @@ TEST_CASE("rig presets: every built-in has a category, and each category's prese
         }
     }
     CHECK(seen.size() == 4);
+}
+
+TEST_CASE("rig presets: settings rebuild the shape; defaults reproduce the preset") {
+    for (const RigPreset &p : builtin_rig_presets()) {
+        CAPTURE(p.name);
+        REQUIRE(p.build);
+        CHECK_FALSE(p.params.empty());
+        const std::vector<StripSpec> again = build_rig_preset(p, {});
+        REQUIRE(again.size() == p.strips.size());
+        for (size_t i = 0; i < again.size(); ++i) {
+            CHECK(again[i].count == p.strips[i].count);
+            CHECK(again[i].name == p.strips[i].name);
+        }
+    }
+    const auto find = [](const char *name) {
+        for (const RigPreset &p : builtin_rig_presets()) {
+            if (p.name == name) {
+                return p;
+            }
+        }
+        FAIL("no preset " << name);
+        return RigPreset{};
+    };
+    const auto values = [](const RigPreset &p, const char *id, double value) {
+        std::vector<double> v;
+        for (const RigPresetParam &q : p.params) {
+            v.push_back(q.id == id ? value : q.value);
+        }
+        return v;
+    };
+    // Pixel wall rows.
+    const RigPreset wall = find("Pixel wall");
+    CHECK(wall.strips.size() == 20);
+    CHECK(build_rig_preset(wall, values(wall, "rows", 12)).size() == 12);
+    CHECK(build_rig_preset(wall, values(wall, "rows", 500)).size() ==
+          static_cast<size_t>(kMaxTemplateStrips)); // Clamped to the range.
+    // Lotus petals and the outer layer.
+    const RigPreset lotus = find("Lotus");
+    CHECK(lotus.strips.size() == 17);
+    CHECK(build_rig_preset(lotus, values(lotus, "petals", 6)).size() == 13);
+    CHECK(build_rig_preset(lotus, values(lotus, "outer", 0)).size() == 9);
+    // Scale doubles lengths (and pixel counts); Density doubles pixels per metre.
+    const std::vector<StripSpec> big = build_rig_preset(lotus, values(lotus, "scale", 2.0));
+    CHECK(big[0].count == doctest::Approx(2 * lotus.strips[0].count).epsilon(0.05));
+    const std::vector<StripSpec> dense = build_rig_preset(lotus, values(lotus, "density", 2.0));
+    CHECK(dense[1].pixels_per_m == doctest::Approx(120.0));
+    // Fractal tree splits: 2^(n+1) - 1 strips.
+    const RigPreset tree = find("Fractal tree");
+    CHECK(tree.strips.size() == 31);
+    CHECK(build_rig_preset(tree, values(tree, "splits", 2)).size() == 7);
 }

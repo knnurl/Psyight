@@ -54,6 +54,7 @@ class RigView {
     MatrixTemplate matrix_;
     std::vector<RigPreset> presets_ = builtin_rig_presets();
     int preset_ = 0;
+    std::vector<std::vector<double>> preset_values_;          // Per preset, its settings as edited.
     static constexpr const char *kUserPresetsDir = "presets"; // As the preset browser's.
     std::vector<RigPreset> user_rigs_;
     bool user_rigs_loaded_ = false;

@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <tuple>
 
 namespace psyight {
@@ -132,434 +134,670 @@ Vec3 honeycomb_cell(Vec3 origin, double radius_m, int q, int r) {
             origin.z};
 }
 
-RigPreset dj_booth_chevron() {
-    // A V of two wings behind the DJ, from the apex outwards, over the booth's front edge.
-    RigPreset p{"DJ booth chevron",
-                "A V of two 2.4 m wings behind the DJ over a 2 m booth front. Groups: chevron, "
-                "wings, booth.",
-                {}};
-    p.strips.push_back(
-        preset_strip("Left wing", {{0.0, 1.3, 0.0}, {-1.7, 3.0, 0.0}}, 60.0, {"chevron", "wings"}));
-    p.strips.push_back(
-        preset_strip("Right wing", {{0.0, 1.3, 0.0}, {1.7, 3.0, 0.0}}, 60.0, {"chevron", "wings"}));
-    p.strips.push_back(preset_strip("Booth front", {{-1.0, 1.0, 0.6}, {1.0, 1.0, 0.6}}, 60.0,
-                                    {"chevron", "booth"}));
+using Strips = std::vector<StripSpec>;
+using Builder = std::function<Strips(const PresetValues &)>;
+
+RigPresetParam count_param(const char *id, const char *label, int value, int min, int max) {
+    return {id,
+            label,
+            "",
+            static_cast<double>(value),
+            static_cast<double>(min),
+            static_cast<double>(max),
+            true,
+            false};
+}
+
+RigPresetParam metres_param(const char *id, const char *label, double value, double min,
+                            double max) {
+    return {id, label, "m", value, min, max, false, false};
+}
+
+RigPresetParam toggle_param(const char *id, const char *label, bool on) {
+    return {id, label, "", on ? 1.0 : 0.0, 0.0, 1.0, true, true};
+}
+
+// A preset from its settings and builder: every preset also gets Scale (the whole shape, about
+// the floor's centre) and, unless it sets pixels per metre itself, Density (a multiplier on
+// every strip's pixels per metre). `strips` holds the default build.
+RigPreset make_preset(const char *name, const char *description, std::vector<RigPresetParam> params,
+                      Builder build) {
+    RigPreset p{name, description, {}, ""};
+    p.params = std::move(params);
+    p.params.push_back({"scale", "Scale", "x", 1.0, 0.25, 4.0, false, false});
+    const bool own_density =
+        std::any_of(p.params.begin(), p.params.end(),
+                    [](const RigPresetParam &q) { return q.id == "pixels_per_m"; });
+    if (!own_density) {
+        p.params.push_back({"density", "Density", "x", 1.0, 0.25, 4.0, false, false});
+    }
+    p.build = std::move(build);
+    p.strips = build_rig_preset(p, {});
     return p;
 }
 
-RigPreset triple_arch_tunnel() {
-    // Three nested arches, 1 m apart in depth; each half runs from the floor to the apex.
-    RigPreset p{"Triple arch tunnel",
-                "Three nested arches, 1 m apart front to back, each half from the floor to the "
-                "apex. Groups: arches, front, middle, back.",
-                {}};
-    constexpr double kLegM = 1.0;
-    const char *const depth[3] = {"front", "middle", "back"};
-    for (int k = 0; k < 3; ++k) {
-        const double radius_m = 1.8 - 0.35 * k;
-        const double z = -1.0 * k;
-        const Vec3 centre{0.0, kLegM, z};
-        std::vector<Vec3> left{{-radius_m, 0.0, z}};
-        for (const Vec3 &v : arc(centre, radius_m, kPi, 0.5 * kPi, 12)) {
-            left.push_back(v);
-        }
-        std::vector<Vec3> right{{radius_m, 0.0, z}};
-        for (const Vec3 &v : arc(centre, radius_m, 0.0, 0.5 * kPi, 12)) {
-            right.push_back(v);
-        }
-        const std::string n = std::to_string(k + 1);
-        p.strips.push_back(
-            preset_strip("Arch " + n + " left", std::move(left), 60.0, {"arches", depth[k]}));
-        p.strips.push_back(
-            preset_strip("Arch " + n + " right", std::move(right), 60.0, {"arches", depth[k]}));
+// Names: the k-th of n layers is "outer" (first), "inner" (last, when there are two or more) or
+// "middle".
+const char *layer_name(int k, int n) { return k == 0 ? "outer" : k == n - 1 ? "inner" : "middle"; }
+
+std::string capitalised(std::string s) {
+    if (!s.empty() && s[0] >= 'a' && s[0] <= 'z') {
+        s[0] = static_cast<char>(s[0] - 'a' + 'A');
     }
-    return p;
+    return s;
+}
+
+RigPreset dj_booth_chevron() {
+    // A V of two wings behind the DJ, from the apex outwards, over the booth's front edge.
+    return make_preset(
+        "DJ booth chevron",
+        "A V of two wings (2.4 m) behind the DJ over a booth front (2 m). Groups: chevron, wings, "
+        "booth.",
+        {metres_param("wing_m", "Wing length", 1.7 * std::sqrt(2.0), 0.3, 8.0),
+         metres_param("booth_m", "Booth front (0: none)", 2.0, 0.0, 8.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            const double d = v["wing_m"] / std::sqrt(2.0); // At 45 degrees.
+            s.push_back(preset_strip("Left wing", {{0.0, 1.3, 0.0}, {-d, 1.3 + d, 0.0}}, 60.0,
+                                     {"chevron", "wings"}));
+            s.push_back(preset_strip("Right wing", {{0.0, 1.3, 0.0}, {d, 1.3 + d, 0.0}}, 60.0,
+                                     {"chevron", "wings"}));
+            if (const double b = v["booth_m"]; b > 0.0) {
+                s.push_back(preset_strip("Booth front", {{-0.5 * b, 1.0, 0.6}, {0.5 * b, 1.0, 0.6}},
+                                         60.0, {"chevron", "booth"}));
+            }
+            return s;
+        });
+}
+
+RigPreset arch_tunnel() {
+    // Nested arches receding in depth; each half runs from the floor to the apex.
+    return make_preset(
+        "Arch tunnel",
+        "Nested arches (3), 1 m apart front to back, each half from the floor to the apex. "
+        "Groups: arches, front, middle, back.",
+        {count_param("arches", "Arches", 3, 1, 8),
+         metres_param("radius_m", "Front arch radius", 1.8, 0.4, 5.0),
+         metres_param("step_m", "Narrower by, each", 0.35, 0.0, 1.0),
+         metres_param("depth_m", "Apart, front to back", 1.0, 0.0, 4.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            constexpr double kLegM = 1.0;
+            const int n = v.count("arches");
+            for (int k = 0; k < n; ++k) {
+                const double radius_m = std::max(0.2, v["radius_m"] - v["step_m"] * k);
+                const double z = -v["depth_m"] * k;
+                const Vec3 centre{0.0, kLegM, z};
+                std::vector<Vec3> left{{-radius_m, 0.0, z}};
+                for (const Vec3 &p : arc(centre, radius_m, kPi, 0.5 * kPi, 12)) {
+                    left.push_back(p);
+                }
+                std::vector<Vec3> right{{radius_m, 0.0, z}};
+                for (const Vec3 &p : arc(centre, radius_m, 0.0, 0.5 * kPi, 12)) {
+                    right.push_back(p);
+                }
+                const char *depth = k == 0 ? "front" : k == n - 1 ? "back" : "middle";
+                const std::string name = "Arch " + std::to_string(k + 1);
+                s.push_back(preset_strip(name + " left", std::move(left), 60.0, {"arches", depth}));
+                s.push_back(
+                    preset_strip(name + " right", std::move(right), 60.0, {"arches", depth}));
+            }
+            return s;
+        });
 }
 
 RigPreset sunburst() {
-    // Twelve rays running outwards from a small core ring, centred 1.8 m up.
-    RigPreset p{"Sunburst",
-                "Twelve 1.15 m rays running outwards from a core ring, centred 1.8 m up. "
-                "Groups: sun, rays, core, upper, lower, even, odd.",
-                {}};
-    const Vec3 centre{0.0, 1.8, 0.0};
-    p.strips.push_back(preset_strip("Core", polygon(centre, 0.25, 24), 60.0, {"sun", "core"}));
-    for (int i = 0; i < 12; ++i) {
-        const double a = 0.5 * kPi + 2.0 * kPi * i / 12.0; // Ray 1 points straight up.
-        const Vec3 inner{centre.x + 0.35 * std::cos(a), centre.y + 0.35 * std::sin(a), 0.0};
-        const Vec3 outer{centre.x + 1.5 * std::cos(a), centre.y + 1.5 * std::sin(a), 0.0};
-        std::vector<std::string> groups{"sun", "rays", i % 2 == 0 ? "even" : "odd"};
-        if (outer.y > centre.y + 1e-9) {
-            groups.emplace_back("upper");
-        } else if (outer.y < centre.y - 1e-9) {
-            groups.emplace_back("lower");
-        }
-        p.strips.push_back(
-            preset_strip("Ray " + std::to_string(i + 1), {inner, outer}, 60.0, std::move(groups)));
-    }
-    return p;
+    // Rays running outwards from a small core ring, centred 1.8 m up.
+    return make_preset(
+        "Sunburst",
+        "Rays (12, 1.15 m) running outwards from a core ring, centred 1.8 m up. Groups: sun, "
+        "rays, core, upper, lower, even, odd.",
+        {count_param("rays", "Rays", 12, 3, 36),
+         metres_param("ray_m", "Ray length", 1.15, 0.2, 4.0),
+         metres_param("core_m", "Core radius", 0.25, 0.05, 1.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            const Vec3 centre{0.0, 1.8, 0.0};
+            const double core = v["core_m"];
+            s.push_back(preset_strip("Core", polygon(centre, core, 24), 60.0, {"sun", "core"}));
+            const int n = v.count("rays");
+            const double inner_m = core + 0.1;
+            for (int i = 0; i < n; ++i) {
+                const double a = 0.5 * kPi + 2.0 * kPi * i / n; // Ray 1 points straight up.
+                const Vec3 inner = polar(centre, inner_m, a);
+                const Vec3 outer = polar(centre, inner_m + v["ray_m"], a);
+                std::vector<std::string> groups{"sun", "rays", i % 2 == 0 ? "even" : "odd"};
+                if (outer.y > centre.y + 1e-9) {
+                    groups.emplace_back("upper");
+                } else if (outer.y < centre.y - 1e-9) {
+                    groups.emplace_back("lower");
+                }
+                s.push_back(preset_strip("Ray " + std::to_string(i + 1), {inner, outer}, 60.0,
+                                         std::move(groups)));
+            }
+            return s;
+        });
 }
 
 RigPreset hexagon_mandala() {
-    // Three concentric hexagons joined by six spokes running outwards.
-    RigPreset p{"Hexagon mandala",
-                "Three concentric hexagons (1.2, 0.8 and 0.4 m) joined by six spokes, centred "
-                "1.7 m up. Groups: hex, outer, middle, inner, spokes.",
-                {}};
-    const Vec3 centre{0.0, 1.7, 0.0};
-    p.strips.push_back(
-        preset_strip("Outer hexagon", polygon(centre, 1.2, 6), 60.0, {"hex", "outer"}));
-    p.strips.push_back(
-        preset_strip("Middle hexagon", polygon(centre, 0.8, 6), 60.0, {"hex", "middle"}));
-    p.strips.push_back(
-        preset_strip("Inner hexagon", polygon(centre, 0.4, 6), 60.0, {"hex", "inner"}));
-    for (int i = 0; i < 6; ++i) {
-        const double a = -0.5 * kPi + 2.0 * kPi * i / 6.0;
-        const Vec3 from{centre.x + 0.4 * std::cos(a), centre.y + 0.4 * std::sin(a), 0.0};
-        const Vec3 to{centre.x + 1.2 * std::cos(a), centre.y + 1.2 * std::sin(a), 0.0};
-        p.strips.push_back(
-            preset_strip("Spoke " + std::to_string(i + 1), {from, to}, 60.0, {"hex", "spokes"}));
-    }
-    return p;
+    // Concentric hexagons joined by six spokes running outwards.
+    return make_preset(
+        "Hexagon mandala",
+        "Concentric hexagons (3, the outer 1.2 m) joined by six spokes, centred 1.7 m up. "
+        "Groups: hex, outer, middle, inner, spokes.",
+        {count_param("hexagons", "Hexagons", 3, 1, 6),
+         metres_param("radius_m", "Outer radius", 1.2, 0.3, 4.0),
+         toggle_param("spokes", "Spokes", true)},
+        [](const PresetValues &v) {
+            Strips s;
+            const Vec3 centre{0.0, 1.7, 0.0};
+            const int n = v.count("hexagons");
+            const double r = v["radius_m"];
+            for (int k = 0; k < n; ++k) {
+                const char *layer = layer_name(k, n);
+                const std::string name =
+                    n <= 3 ? capitalised(layer) + " hexagon" : "Hexagon " + std::to_string(k + 1);
+                s.push_back(
+                    preset_strip(name, polygon(centre, r * (n - k) / n, 6), 60.0, {"hex", layer}));
+            }
+            if (v.on("spokes") && n > 1) {
+                for (int i = 0; i < 6; ++i) {
+                    const double a = -0.5 * kPi + 2.0 * kPi * i / 6.0;
+                    s.push_back(preset_strip("Spoke " + std::to_string(i + 1),
+                                             {polar(centre, r / n, a), polar(centre, r, a)}, 60.0,
+                                             {"hex", "spokes"}));
+                }
+            }
+            return s;
+        });
 }
 
 RigPreset goalpost_truss() {
-    // A 6 m wide goalpost truss with a stage lip; beam and lip run from the centre outwards.
-    RigPreset p{"Goalpost truss",
-                "Two 3.2 m truss legs, a 6 m top beam and a 6 m stage lip; beam and lip run from "
-                "the centre outwards. Groups: truss, legs, beam, lip.",
-                {}};
-    p.strips.push_back(
-        preset_strip("Left leg", {{-3.0, 0.0, 0.0}, {-3.0, 3.2, 0.0}}, 60.0, {"truss", "legs"}));
-    p.strips.push_back(
-        preset_strip("Right leg", {{3.0, 0.0, 0.0}, {3.0, 3.2, 0.0}}, 60.0, {"truss", "legs"}));
-    p.strips.push_back(
-        preset_strip("Beam left", {{0.0, 3.3, 0.0}, {-3.0, 3.3, 0.0}}, 60.0, {"truss", "beam"}));
-    p.strips.push_back(
-        preset_strip("Beam right", {{0.0, 3.3, 0.0}, {3.0, 3.3, 0.0}}, 60.0, {"truss", "beam"}));
-    p.strips.push_back(
-        preset_strip("Lip left", {{0.0, 0.0, 1.0}, {-3.0, 0.0, 1.0}}, 30.0, {"lip"}));
-    p.strips.push_back(
-        preset_strip("Lip right", {{0.0, 0.0, 1.0}, {3.0, 0.0, 1.0}}, 30.0, {"lip"}));
-    return p;
+    // A goalpost truss with a stage lip; beam and lip run from the centre outwards.
+    return make_preset(
+        "Goalpost truss",
+        "Two truss legs (3.2 m), a top beam and a stage lip (6 m); beam and lip run from the "
+        "centre outwards. Groups: truss, legs, beam, lip.",
+        {metres_param("width_m", "Width", 6.0, 1.0, 20.0),
+         metres_param("height_m", "Leg height", 3.2, 0.5, 10.0),
+         toggle_param("lip", "Stage lip", true)},
+        [](const PresetValues &v) {
+            Strips s;
+            const double x = 0.5 * v["width_m"];
+            const double h = v["height_m"];
+            s.push_back(
+                preset_strip("Left leg", {{-x, 0.0, 0.0}, {-x, h, 0.0}}, 60.0, {"truss", "legs"}));
+            s.push_back(
+                preset_strip("Right leg", {{x, 0.0, 0.0}, {x, h, 0.0}}, 60.0, {"truss", "legs"}));
+            s.push_back(preset_strip("Beam left", {{0.0, h + 0.1, 0.0}, {-x, h + 0.1, 0.0}}, 60.0,
+                                     {"truss", "beam"}));
+            s.push_back(preset_strip("Beam right", {{0.0, h + 0.1, 0.0}, {x, h + 0.1, 0.0}}, 60.0,
+                                     {"truss", "beam"}));
+            if (v.on("lip")) {
+                s.push_back(
+                    preset_strip("Lip left", {{0.0, 0.0, 1.0}, {-x, 0.0, 1.0}}, 30.0, {"lip"}));
+                s.push_back(
+                    preset_strip("Lip right", {{0.0, 0.0, 1.0}, {x, 0.0, 1.0}}, 30.0, {"lip"}));
+            }
+            return s;
+        });
 }
 
 RigPreset triangle_row() {
-    // Five 1.2 m triangles in a row, pointing up and down in turn.
-    RigPreset p{"Triangle row",
-                "Five 1.2 m triangles in a row, pointing up and down in turn. Groups: triangles, "
-                "up, down, even, odd.",
-                {}};
-    constexpr double kSideM = 1.2;
-    constexpr double kBottomM = 1.0;
-    const double top_m = kBottomM + kSideM * std::sqrt(3.0) / 2.0;
-    for (int i = 0; i < 5; ++i) {
-        const double cx = (i - 2) * 0.7;
-        const bool up = i % 2 == 0;
-        // Closed, starting at the point (bottom or top) and going anticlockwise.
-        std::vector<Vec3> points = up ? std::vector<Vec3>{{cx - 0.5 * kSideM, kBottomM, 0.0},
-                                                          {cx + 0.5 * kSideM, kBottomM, 0.0},
-                                                          {cx, top_m, 0.0},
-                                                          {cx - 0.5 * kSideM, kBottomM, 0.0}}
-                                      : std::vector<Vec3>{{cx, kBottomM, 0.0},
-                                                          {cx + 0.5 * kSideM, top_m, 0.0},
-                                                          {cx - 0.5 * kSideM, top_m, 0.0},
-                                                          {cx, kBottomM, 0.0}};
-        p.strips.push_back(preset_strip("Triangle " + std::to_string(i + 1), std::move(points),
-                                        60.0,
-                                        {"triangles", up ? "up" : "down", up ? "even" : "odd"}));
-    }
-    return p;
+    // Triangles in a row, pointing up and down in turn.
+    return make_preset(
+        "Triangle row",
+        "Triangles (5, 1.2 m sides) in a row, pointing up and down in turn. Groups: triangles, "
+        "up, down, even, odd.",
+        {count_param("triangles", "Triangles", 5, 1, 15),
+         metres_param("side_m", "Side", 1.2, 0.2, 4.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            const double side = v["side_m"];
+            constexpr double kBottomM = 1.0;
+            const double top_m = kBottomM + side * std::sqrt(3.0) / 2.0;
+            const int n = v.count("triangles");
+            const double spacing = 0.7 * side / 1.2;
+            for (int i = 0; i < n; ++i) {
+                const double cx = (i - 0.5 * (n - 1)) * spacing;
+                const bool up = i % 2 == 0;
+                // Closed, starting at the point (bottom or top) and going anticlockwise.
+                std::vector<Vec3> points = up ? std::vector<Vec3>{{cx - 0.5 * side, kBottomM, 0.0},
+                                                                  {cx + 0.5 * side, kBottomM, 0.0},
+                                                                  {cx, top_m, 0.0},
+                                                                  {cx - 0.5 * side, kBottomM, 0.0}}
+                                              : std::vector<Vec3>{{cx, kBottomM, 0.0},
+                                                                  {cx + 0.5 * side, top_m, 0.0},
+                                                                  {cx - 0.5 * side, top_m, 0.0},
+                                                                  {cx, kBottomM, 0.0}};
+                s.push_back(preset_strip("Triangle " + std::to_string(i + 1), std::move(points),
+                                         60.0,
+                                         {"triangles", up ? "up" : "down", up ? "even" : "odd"}));
+            }
+            return s;
+        });
 }
 
 RigPreset pixel_curtain() {
-    PillarsTemplate t;
-    t.count = 16;
-    t.height_m = 2.4;
-    t.base_m = 0.3;
-    t.spacing_m = 0.25;
-    t.pixels_per_m = 30.0;
-    t.serpentine = true;
-    return {"Pixel curtain",
-            "Sixteen 2.4 m drops, 0.25 m apart, 30 px/m, wired serpentine. Groups: pillars, "
-            "even, odd.",
-            pillars_strips(t)};
+    return make_preset(
+        "Pixel curtain",
+        "Drops (16, 2.4 m, 0.25 m apart, 30 px/m), wired serpentine. Groups: pillars, even, odd.",
+        {count_param("drops", "Drops", 16, 1, kMaxTemplateStrips),
+         metres_param("height_m", "Drop length", 2.4, 0.2, 10.0),
+         metres_param("spacing_m", "Spacing", 0.25, 0.02, 5.0),
+         {"pixels_per_m", "Density", "px/m", 30.0, 1.0, 144.0, false, false},
+         toggle_param("serpentine", "Serpentine (alternate drops run top to bottom)", true)},
+        [](const PresetValues &v) {
+            PillarsTemplate t;
+            t.count = v.count("drops");
+            t.height_m = v["height_m"];
+            t.base_m = 0.3;
+            t.spacing_m = v["spacing_m"];
+            t.pixels_per_m = v["pixels_per_m"];
+            t.serpentine = v.on("serpentine");
+            return pillars_strips(t);
+        });
 }
 
 RigPreset pixel_wall() {
-    MatrixTemplate t;
-    t.rows = 20;
-    t.width_m = 2.0;
-    t.row_spacing_m = 0.1;
-    t.base_m = 0.5;
-    t.pixels_per_m = 30.0;
-    t.serpentine = true;
-    std::vector<StripSpec> rows = matrix_strips(t);
-    for (StripSpec &s : rows) {
-        s.groups.insert(s.groups.end(), {"left", "right"}); // Centred rows span both.
-    }
-    return {"Pixel wall",
-            "A 2 by 2 m low-resolution wall: 20 rows of 60 pixels, zigzag wired. Groups: matrix, "
-            "top, bottom, even, odd.",
-            std::move(rows)};
+    return make_preset(
+        "Pixel wall",
+        "A low-resolution wall: rows (20) of 2 m at 30 px/m, 0.1 m apart, zigzag wired. Groups: "
+        "matrix, top, bottom, even, odd.",
+        {count_param("rows", "Rows", 20, 1, kMaxTemplateStrips),
+         metres_param("width_m", "Width", 2.0, 0.1, 20.0),
+         metres_param("row_spacing_m", "Row spacing", 0.1, 0.005, 2.0),
+         {"pixels_per_m", "Density", "px/m", 30.0, 1.0, 144.0, false, false},
+         toggle_param("serpentine", "Zigzag (alternate rows run right to left)", true)},
+        [](const PresetValues &v) {
+            MatrixTemplate t;
+            t.rows = v.count("rows");
+            t.width_m = v["width_m"];
+            t.row_spacing_m = v["row_spacing_m"];
+            t.base_m = 0.5;
+            t.pixels_per_m = v["pixels_per_m"];
+            t.serpentine = v.on("serpentine");
+            Strips rows = matrix_strips(t);
+            for (StripSpec &s : rows) {
+                s.groups.insert(s.groups.end(), {"left", "right"}); // Centred rows span both.
+            }
+            return rows;
+        });
 }
 
 RigPreset hive_portal() {
-    // Three nested lens portals receding in depth, the DJ hidden behind; each half runs from the
-    // bottom tip to the top tip.
-    RigPreset p{"Hive portal",
-                "Three nested lens-shaped portals, 0.8 m apart front to back, the tallest 3.2 m; "
-                "each half from the bottom tip to the top. Groups: portal, outer, middle, inner.",
-                {}};
-    struct Layer {
-        const char *name;
-        double height_m;
-        double width_m;
-    };
-    const Layer layers[3] = {{"outer", 3.2, 2.2}, {"middle", 2.6, 1.7}, {"inner", 2.0, 1.2}};
-    for (int k = 0; k < 3; ++k) {
-        const Layer &l = layers[k];
-        const double z = -0.8 * k;
-        const Vec3 bottom{0.0, 1.8 - 0.5 * l.height_m, z};
-        const Vec3 top{0.0, 1.8 + 0.5 * l.height_m, z};
-        std::string name = l.name;
-        name[0] = static_cast<char>(name[0] - 'a' + 'A');
-        p.strips.push_back(preset_strip(name + " left", lens_side(bottom, top, l.width_m), 60.0,
-                                        {"portal", l.name}));
-        p.strips.push_back(preset_strip(name + " right",
-                                        reversed(lens_side(top, bottom, l.width_m)), 60.0,
-                                        {"portal", l.name}));
-    }
-    return p;
+    // Nested lens portals receding in depth, the DJ hidden behind; each half runs from the bottom
+    // tip to the top tip.
+    return make_preset(
+        "Hive portal",
+        "Nested lens-shaped portals (3), 0.8 m apart front to back, the tallest 3.2 m; each half "
+        "from the bottom tip to the top. Groups: portal, outer, middle, inner.",
+        {count_param("portals", "Portals", 3, 1, 5),
+         metres_param("height_m", "Front portal height", 3.2, 1.0, 8.0),
+         metres_param("depth_m", "Apart, front to back", 0.8, 0.0, 3.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            const int n = v.count("portals");
+            const double f = v["height_m"] / 3.2; // The default's proportions, scaled.
+            for (int k = 0; k < n; ++k) {
+                const double height_m = (3.2 - 0.6 * k) * f;
+                const double width_m = std::max(0.2, (2.2 - 0.5 * k) * f);
+                const double z = -v["depth_m"] * k;
+                const Vec3 bottom{0.0, 1.8 - 0.5 * height_m, z};
+                const Vec3 top{0.0, 1.8 + 0.5 * height_m, z};
+                const char *layer = layer_name(k, n);
+                std::string name = capitalised(layer);
+                if (n > 3 && k > 0 && k < n - 1) {
+                    name += " " + std::to_string(k);
+                }
+                s.push_back(preset_strip(name + " left", lens_side(bottom, top, width_m), 60.0,
+                                         {"portal", layer}));
+                s.push_back(preset_strip(name + " right", reversed(lens_side(top, bottom, width_m)),
+                                         60.0, {"portal", layer}));
+            }
+            return s;
+        });
 }
 
 RigPreset honeycomb() {
-    // Nineteen hexagon cells: a core, a ring of 6 and a ring of 12.
-    RigPreset p{"Honeycomb",
-                "Nineteen 0.7 m hexagon cells in a hive, 30 px/m: a core cell and two rings around "
-                "it. Groups: comb, core, ring1, ring2, upper, lower.",
-                {}};
-    const Vec3 origin{0.0, 1.9, 0.0};
-    int n = 0;
-    for (int q = -2; q <= 2; ++q) {
-        for (int r = -2; r <= 2; ++r) {
-            const int ring = std::max({std::abs(q), std::abs(r), std::abs(q + r)});
-            if (ring > 2) {
-                continue;
+    // Hexagon cells in rings around a core cell.
+    return make_preset(
+        "Honeycomb",
+        "Hexagon cells (0.7 m) in a hive, 30 px/m: a core cell and rings around it (2 rings: 19 "
+        "cells). Groups: comb, core, ring1, ring2 and so on, upper, lower.",
+        {count_param("rings", "Rings", 2, 0, 4),
+         metres_param("cell_m", "Cell width", 0.7, 0.2, 2.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            const int rings = v.count("rings");
+            const double radius_m = 0.5 * v["cell_m"];
+            const double pitch_m = radius_m * std::sqrt(3.0) * 1.08;
+            // High enough that the lowest cell clears the floor.
+            const double origin_y =
+                std::max(1.9, 0.3 + rings * pitch_m * std::sqrt(3.0) / 2.0 + radius_m);
+            const Vec3 origin{0.0, origin_y, 0.0};
+            int n = 0;
+            for (int q = -rings; q <= rings; ++q) {
+                for (int r = -rings; r <= rings; ++r) {
+                    const int ring = std::max({std::abs(q), std::abs(r), std::abs(q + r)});
+                    if (ring > rings) {
+                        continue;
+                    }
+                    const Vec3 centre = honeycomb_cell(origin, radius_m, q, r);
+                    std::vector<std::string> groups{
+                        "comb", ring == 0 ? std::string("core") : "ring" + std::to_string(ring)};
+                    if (r > 0) {
+                        groups.emplace_back("upper");
+                    } else if (r < 0) {
+                        groups.emplace_back("lower");
+                    }
+                    s.push_back(preset_strip("Cell " + std::to_string(++n),
+                                             polygon(centre, radius_m, 6), 30.0,
+                                             std::move(groups)));
+                }
             }
-            const Vec3 centre = honeycomb_cell(origin, 0.35, q, r);
-            std::vector<std::string> groups{"comb",
-                                            ring == 0 ? "core" : ring == 1 ? "ring1" : "ring2"};
-            if (r > 0) {
-                groups.emplace_back("upper");
-            } else if (r < 0) {
-                groups.emplace_back("lower");
-            }
-            p.strips.push_back(preset_strip("Cell " + std::to_string(++n), polygon(centre, 0.35, 6),
-                                            30.0, std::move(groups)));
-        }
-    }
-    return p;
+            return s;
+        });
 }
 
 RigPreset lotus() {
-    // A seed ring, 8 inner petals and 8 outer petals between them; each petal runs out from its
-    // base along one side and back along the other.
-    RigPreset p{"Lotus",
-                "A seed ring with 8 inner petals (60 px/m) and 8 larger outer petals between them "
-                "(30 px/m), 3.2 m across. Groups: lotus, seed, inner, outer, even, odd, upper, "
-                "lower.",
-                {}};
-    const Vec3 centre{0.0, 1.8, 0.0};
-    p.strips.push_back(preset_strip("Seed", polygon(centre, 0.18, 16), 60.0, {"lotus", "seed"}));
-    const auto petals = [&](const char *layer, double offset, double from_m, double to_m,
-                            double width_m, double pixels_per_m) {
-        for (int i = 0; i < 8; ++i) {
-            const double a = 0.5 * kPi + 2.0 * kPi * (i + offset) / 8.0;
-            std::vector<std::string> groups{"lotus", layer, i % 2 == 0 ? "even" : "odd"};
-            const double up = std::sin(a);
-            if (up > 1e-9) {
-                groups.emplace_back("upper");
-            } else if (up < -1e-9) {
-                groups.emplace_back("lower");
+    // A seed ring, inner petals and outer petals between them; each petal runs out from its base
+    // along one side and back along the other.
+    return make_preset(
+        "Lotus",
+        "A seed ring with inner petals (8, 60 px/m) and larger outer petals between them (30 "
+        "px/m), 3.2 m across. Groups: lotus, seed, inner, outer, even, odd, upper, lower.",
+        {count_param("petals", "Petals per layer", 8, 3, 16),
+         toggle_param("outer", "Outer petals", true)},
+        [](const PresetValues &v) {
+            Strips s;
+            const Vec3 centre{0.0, 1.8, 0.0};
+            s.push_back(preset_strip("Seed", polygon(centre, 0.18, 16), 60.0, {"lotus", "seed"}));
+            const int n = v.count("petals");
+            const auto petals = [&](const char *layer, double offset, double from_m, double to_m,
+                                    double width_m, double pixels_per_m) {
+                for (int i = 0; i < n; ++i) {
+                    const double a = 0.5 * kPi + 2.0 * kPi * (i + offset) / n;
+                    std::vector<std::string> groups{"lotus", layer, i % 2 == 0 ? "even" : "odd"};
+                    const double up = std::sin(a);
+                    if (up > 1e-9) {
+                        groups.emplace_back("upper");
+                    } else if (up < -1e-9) {
+                        groups.emplace_back("lower");
+                    }
+                    s.push_back(preset_strip(
+                        capitalised(layer) + " petal " + std::to_string(i + 1),
+                        lens_loop(polar(centre, from_m, a), polar(centre, to_m, a), width_m),
+                        pixels_per_m, std::move(groups)));
+                }
+            };
+            petals("inner", 0.0, 0.24, 0.9, 0.36, 60.0);
+            if (v.on("outer")) {
+                petals("outer", 0.5, 0.55, 1.6, 0.62, 30.0);
             }
-            std::string name = layer;
-            name[0] = static_cast<char>(name[0] - 'a' + 'A');
-            p.strips.push_back(
-                preset_strip(name + " petal " + std::to_string(i + 1),
-                             lens_loop(polar(centre, from_m, a), polar(centre, to_m, a), width_m),
-                             pixels_per_m, std::move(groups)));
-        }
-    };
-    petals("inner", 0.0, 0.24, 0.9, 0.36, 60.0);
-    petals("outer", 0.5, 0.55, 1.6, 0.62, 30.0);
-    return p;
+            return s;
+        });
 }
 
 RigPreset third_eye() {
     // An eye in a pyramid: lids, iris, a slit pupil, lashes, and the pyramid behind.
-    RigPreset p{"Third eye",
-                "A 3 m eye (lids left to right, iris, slit pupil, 9 lashes) inside a 4.6 m "
-                "pyramid. Groups: eye, lids, iris, pupil, lashes, pyramid.",
-                {}};
-    const Vec3 centre{0.0, 1.9, 0.0};
-    const Vec3 left{-1.5, 1.9, 0.0};
-    const Vec3 right{1.5, 1.9, 0.0};
-    p.strips.push_back(
-        preset_strip("Upper lid", lens_side(left, right, 1.3), 60.0, {"eye", "lids"}));
-    p.strips.push_back(
-        preset_strip("Lower lid", reversed(lens_side(right, left, 1.3)), 60.0, {"eye", "lids"}));
-    p.strips.push_back(preset_strip("Iris", polygon(centre, 0.5, 32), 60.0, {"eye", "iris"}));
-    p.strips.push_back(preset_strip("Pupil", lens_loop({0.0, 1.5, 0.0}, {0.0, 2.3, 0.0}, 0.22),
-                                    60.0, {"eye", "pupil"}));
-    for (int i = 0; i < 9; ++i) {
-        const double a = (35.0 + 110.0 * i / 8.0) * kPi / 180.0;
-        p.strips.push_back(preset_strip("Lash " + std::to_string(i + 1),
-                                        {polar(centre, 0.85, a), polar(centre, 1.2, a)}, 60.0,
-                                        {"eye", "lashes"}));
-    }
-    const double apex_m = 0.3 + 4.6 * std::sqrt(3.0) / 2.0;
-    p.strips.push_back(preset_strip(
-        "Pyramid", {{-2.3, 0.3, 0.0}, {2.3, 0.3, 0.0}, {0.0, apex_m, 0.0}, {-2.3, 0.3, 0.0}}, 30.0,
-        {"pyramid"}));
-    return p;
+    return make_preset(
+        "Third eye",
+        "A 3 m eye (lids left to right, iris, slit pupil, lashes) inside a 4.6 m pyramid. "
+        "Groups: eye, lids, iris, pupil, lashes, pyramid.",
+        {count_param("lashes", "Lashes", 9, 0, 21), toggle_param("pyramid", "Pyramid", true)},
+        [](const PresetValues &v) {
+            Strips s;
+            const Vec3 centre{0.0, 1.9, 0.0};
+            const Vec3 left{-1.5, 1.9, 0.0};
+            const Vec3 right{1.5, 1.9, 0.0};
+            s.push_back(
+                preset_strip("Upper lid", lens_side(left, right, 1.3), 60.0, {"eye", "lids"}));
+            s.push_back(preset_strip("Lower lid", reversed(lens_side(right, left, 1.3)), 60.0,
+                                     {"eye", "lids"}));
+            s.push_back(preset_strip("Iris", polygon(centre, 0.5, 32), 60.0, {"eye", "iris"}));
+            s.push_back(preset_strip("Pupil", lens_loop({0.0, 1.5, 0.0}, {0.0, 2.3, 0.0}, 0.22),
+                                     60.0, {"eye", "pupil"}));
+            const int n = v.count("lashes");
+            for (int i = 0; i < n; ++i) {
+                const double deg = n == 1 ? 90.0 : 35.0 + 110.0 * i / (n - 1);
+                const double a = deg * kPi / 180.0;
+                s.push_back(preset_strip("Lash " + std::to_string(i + 1),
+                                         {polar(centre, 0.85, a), polar(centre, 1.2, a)}, 60.0,
+                                         {"eye", "lashes"}));
+            }
+            if (v.on("pyramid")) {
+                const double apex_m = 0.3 + 4.6 * std::sqrt(3.0) / 2.0;
+                s.push_back(preset_strip(
+                    "Pyramid",
+                    {{-2.3, 0.3, 0.0}, {2.3, 0.3, 0.0}, {0.0, apex_m, 0.0}, {-2.3, 0.3, 0.0}}, 30.0,
+                    {"pyramid"}));
+            }
+            return s;
+        });
 }
 
 RigPreset string_art_star() {
-    // A twelve-point star {12/5}: each chord runs from point i to point i + 5, so a chase along
-    // the strips turns the whole star.
-    RigPreset p{"String-art star",
-                "Twelve chords of a 3 m circle joining every fifth point (a {12/5} star), inside a "
-                "ring, 30 px/m. Groups: string, chords, ring, even, odd.",
-                {}};
-    const Vec3 centre{0.0, 1.9, 0.0};
-    for (int i = 0; i < 12; ++i) {
-        const double from = 0.5 * kPi + 2.0 * kPi * i / 12.0;
-        const double to = 0.5 * kPi + 2.0 * kPi * (i + 5) / 12.0;
-        p.strips.push_back(preset_strip("Chord " + std::to_string(i + 1),
-                                        {polar(centre, 1.5, from), polar(centre, 1.5, to)}, 30.0,
-                                        {"string", "chords", i % 2 == 0 ? "even" : "odd"}));
-    }
-    p.strips.push_back(preset_strip("Ring", polygon(centre, 1.6, 48), 30.0, {"string", "ring"}));
-    return p;
+    // A star {points/skip}: each chord runs from point i to point i + skip, so a chase along the
+    // strips turns the whole star.
+    return make_preset(
+        "String-art star",
+        "Chords of a 3 m circle joining every fifth of 12 points (a {12/5} star), inside a ring, "
+        "30 px/m. Groups: string, chords, ring, even, odd.",
+        {count_param("points", "Points", 12, 5, 36), count_param("skip", "Join every", 5, 1, 17),
+         metres_param("radius_m", "Radius", 1.5, 0.5, 4.0), toggle_param("ring", "Ring", true)},
+        [](const PresetValues &v) {
+            Strips s;
+            const Vec3 centre{0.0, 1.9, 0.0};
+            const int n = v.count("points");
+            const int skip = std::clamp(v.count("skip"), 1, std::max(1, n / 2));
+            const double r = v["radius_m"];
+            for (int i = 0; i < n; ++i) {
+                const double from = 0.5 * kPi + 2.0 * kPi * i / n;
+                const double to = 0.5 * kPi + 2.0 * kPi * (i + skip) / n;
+                s.push_back(preset_strip("Chord " + std::to_string(i + 1),
+                                         {polar(centre, r, from), polar(centre, r, to)}, 30.0,
+                                         {"string", "chords", i % 2 == 0 ? "even" : "odd"}));
+            }
+            if (v.on("ring")) {
+                s.push_back(
+                    preset_strip("Ring", polygon(centre, r + 0.1, 48), 30.0, {"string", "ring"}));
+            }
+            return s;
+        });
 }
 
 RigPreset alien_ribcage() {
-    // A spine with 7 pairs of arched ribs, widest in the middle, each from the spine outwards.
-    RigPreset p{"Alien ribcage",
-                "A 2.8 m spine with 7 pairs of arched ribs running outwards, widest in the middle. "
-                "Groups: ribcage, spine, ribs, upper, lower, even, odd.",
-                {}};
-    p.strips.push_back(
-        preset_strip("Spine", {{0.0, 0.4, 0.0}, {0.0, 3.2, 0.0}}, 60.0, {"ribcage", "spine"}));
-    for (int k = 0; k < 7; ++k) {
-        const double y = 0.8 + 2.0 * k / 6.0;
-        const double reach_m = 0.45 + 1.35 * std::sin(kPi * (k + 0.5) / 7.0);
-        for (const double side : {-1.0, 1.0}) {
-            std::vector<std::string> groups{"ribcage", "ribs", k % 2 == 0 ? "even" : "odd"};
-            if (k > 3) {
-                groups.emplace_back("upper");
-            } else if (k < 3) {
-                groups.emplace_back("lower");
+    // A spine with pairs of arched ribs, widest in the middle, each from the spine outwards.
+    return make_preset(
+        "Alien ribcage",
+        "A 2.8 m spine with pairs of arched ribs (7) running outwards, widest in the middle. "
+        "Groups: ribcage, spine, ribs, upper, lower, even, odd.",
+        {count_param("ribs", "Rib pairs", 7, 1, 12),
+         metres_param("spine_m", "Spine length", 2.8, 1.0, 6.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            const double spine = v["spine_m"];
+            s.push_back(preset_strip("Spine", {{0.0, 0.4, 0.0}, {0.0, 0.4 + spine, 0.0}}, 60.0,
+                                     {"ribcage", "spine"}));
+            const int n = v.count("ribs");
+            const double middle = 0.5 * (n - 1);
+            for (int k = 0; k < n; ++k) {
+                const double along = n == 1 ? 0.5 : static_cast<double>(k) / (n - 1);
+                const double y = 0.4 + spine * (0.4 + 2.0 * along) / 2.8;
+                const double reach_m = 0.45 + 1.35 * std::sin(kPi * (k + 0.5) / n);
+                for (const double side : {-1.0, 1.0}) {
+                    std::vector<std::string> groups{"ribcage", "ribs", k % 2 == 0 ? "even" : "odd"};
+                    if (k > middle + 1e-9) {
+                        groups.emplace_back("upper");
+                    } else if (k < middle - 1e-9) {
+                        groups.emplace_back("lower");
+                    }
+                    s.push_back(
+                        preset_strip(std::string(side < 0.0 ? "Left" : "Right") + " rib " +
+                                         std::to_string(k + 1),
+                                     bezier({0.0, y, 0.0}, {side * 0.7 * reach_m, y + 0.3, 0.0},
+                                            {side * reach_m, y - 0.45, 0.0}),
+                                     60.0, std::move(groups)));
+                }
             }
-            p.strips.push_back(preset_strip(
-                std::string(side < 0.0 ? "Left" : "Right") + " rib " + std::to_string(k + 1),
-                bezier({0.0, y, 0.0}, {side * 0.7 * reach_m, y + 0.3, 0.0},
-                       {side * reach_m, y - 0.45, 0.0}),
-                60.0, std::move(groups)));
-        }
-    }
-    return p;
+            return s;
+        });
 }
 
-void add_branches(RigPreset &p, Vec3 from, double angle_rad, double length_m, int depth) {
+void add_branches(Strips &s, Vec3 from, double angle_rad, double length_m, int depth, int levels,
+                  double spread_rad, double ratio) {
     const Vec3 to{from.x + length_m * std::cos(angle_rad), from.y + length_m * std::sin(angle_rad),
                   from.z};
     const char *level = depth == 0 ? "trunk" : depth <= 2 ? "branches" : "twigs";
     const char *name = depth == 0 ? "Trunk" : depth <= 2 ? "Branch" : "Twig";
-    p.strips.push_back(preset_strip(std::string(name) + " " + std::to_string(p.strips.size() + 1),
-                                    {from, to}, 60.0, {"tree", level}));
-    if (depth < 4) {
+    s.push_back(preset_strip(std::string(name) + " " + std::to_string(s.size() + 1), {from, to},
+                             60.0, {"tree", level}));
+    if (depth < levels) {
         for (const double side : {-1.0, 1.0}) {
-            add_branches(p, to, angle_rad + side * 27.0 * kPi / 180.0, 0.72 * length_m, depth + 1);
+            add_branches(s, to, angle_rad + side * spread_rad, ratio * length_m, depth + 1, levels,
+                         spread_rad, ratio);
         }
     }
 }
 
 RigPreset fractal_tree() {
-    // A trunk splitting in two four times; every strip runs from the root towards the tips.
-    RigPreset p{"Fractal tree",
-                "A 1.2 m trunk splitting in two four times (31 strips), every strip running from "
-                "the root to the tips. Groups: tree, trunk, branches, twigs.",
-                {}};
-    add_branches(p, {0.0, 0.0, 0.0}, 0.5 * kPi, 1.2, 0);
-    return p;
+    // A trunk splitting in two, again and again; every strip runs from the root towards the tips.
+    return make_preset(
+        "Fractal tree",
+        "A 1.2 m trunk splitting in two four times (31 strips), every strip running from the root "
+        "to the tips. Groups: tree, trunk, branches, twigs.",
+        {count_param("splits", "Splits", 4, 0, 6),
+         metres_param("trunk_m", "Trunk length", 1.2, 0.3, 3.0),
+         {"angle_deg", "Branch angle", "deg", 27.0, 5.0, 60.0, false, false},
+         {"ratio", "Each branch, of the last", "x", 0.72, 0.4, 0.9, false, false}},
+        [](const PresetValues &v) {
+            Strips s;
+            add_branches(s, {0.0, 0.0, 0.0}, 0.5 * kPi, v["trunk_m"], 0, v.count("splits"),
+                         v["angle_deg"] * kPi / 180.0, v["ratio"]);
+            return s;
+        });
 }
 
 RigPreset vortex() {
-    // Six logarithmic spiral arms, each from the centre outwards over 0.9 of a turn.
-    RigPreset p{"Vortex",
-                "Six logarithmic spiral arms, each from the centre outwards over 0.9 of a turn, "
-                "3.2 m across. Groups: vortex, arms, even, odd.",
-                {}};
-    const Vec3 centre{0.0, 1.9, 0.0};
-    constexpr double kInnerM = 0.15;
-    constexpr double kOuterM = 1.6;
-    const double turn_rad = 0.9 * 2.0 * kPi;
-    const double growth = std::log(kOuterM / kInnerM) / turn_rad;
-    for (int k = 0; k < 6; ++k) {
-        const double offset = 0.5 * kPi + 2.0 * kPi * k / 6.0;
-        std::vector<Vec3> points;
-        for (int i = 0; i <= 48; ++i) {
-            const double t = turn_rad * i / 48.0;
-            points.push_back(polar(centre, kInnerM * std::exp(growth * t), offset + t));
-        }
-        p.strips.push_back(preset_strip("Arm " + std::to_string(k + 1), std::move(points), 60.0,
-                                        {"vortex", "arms", k % 2 == 0 ? "even" : "odd"}));
-    }
-    return p;
+    // Logarithmic spiral arms, each from the centre outwards.
+    return make_preset(
+        "Vortex",
+        "Logarithmic spiral arms (6), each from the centre outwards over 0.9 of a turn, 3.2 m "
+        "across. Groups: vortex, arms, even, odd.",
+        {count_param("arms", "Arms", 6, 1, 16),
+         {"turns", "Turns", "", 0.9, 0.2, 3.0, false, false},
+         metres_param("radius_m", "Radius", 1.6, 0.4, 4.0)},
+        [](const PresetValues &v) {
+            Strips s;
+            const Vec3 centre{0.0, 1.9, 0.0};
+            constexpr double kInnerM = 0.15;
+            const double outer_m = std::max(kInnerM + 0.05, v["radius_m"]);
+            const double turn_rad = v["turns"] * 2.0 * kPi;
+            const double growth = std::log(outer_m / kInnerM) / turn_rad;
+            const int n = v.count("arms");
+            for (int k = 0; k < n; ++k) {
+                const double offset = 0.5 * kPi + 2.0 * kPi * k / n;
+                std::vector<Vec3> points;
+                for (int i = 0; i <= 48; ++i) {
+                    const double t = turn_rad * i / 48.0;
+                    points.push_back(polar(centre, kInnerM * std::exp(growth * t), offset + t));
+                }
+                s.push_back(preset_strip("Arm " + std::to_string(k + 1), std::move(points), 60.0,
+                                         {"vortex", "arms", k % 2 == 0 ? "even" : "odd"}));
+            }
+            return s;
+        });
 }
 
 RigPreset hive_temple() {
     // A temple front: a double lens portal, honeycomb wings at its shoulders, rays crowning it.
-    RigPreset p{"Hive temple",
-                "A temple front: a double lens portal (3 m), a honeycomb wing of 4 cells either "
-                "side and 7 rays crowning the top. Groups: temple, portal, outer, inner, comb, "
-                "crown.",
-                {}};
-    for (const auto &[layer, height_m, width_m] :
-         {std::tuple{"outer", 3.0, 1.9}, std::tuple{"inner", 2.3, 1.25}}) {
-        const Vec3 bottom{0.0, 1.75 - 0.5 * height_m, 0.0};
-        const Vec3 top{0.0, 1.75 + 0.5 * height_m, 0.0};
-        std::string name = layer;
-        name[0] = static_cast<char>(name[0] - 'a' + 'A');
-        p.strips.push_back(preset_strip(name + " portal left", lens_side(bottom, top, width_m),
-                                        60.0, {"temple", "portal", layer}));
-        p.strips.push_back(preset_strip(name + " portal right",
-                                        reversed(lens_side(top, bottom, width_m)), 60.0,
-                                        {"temple", "portal", layer}));
-    }
-    const int cells[4][2] = {{0, 0}, {1, 0}, {0, 1}, {-1, 1}};
-    for (const double side : {-1.0, 1.0}) {
-        for (int i = 0; i < 4; ++i) {
-            Vec3 centre = honeycomb_cell({1.6, 1.55, 0.0}, 0.34, cells[i][0], cells[i][1]);
-            centre.x *= side;
-            p.strips.push_back(preset_strip(std::string(side < 0.0 ? "Left" : "Right") + " cell " +
-                                                std::to_string(i + 1),
-                                            polygon(centre, 0.34, 6), 30.0, {"temple", "comb"}));
-        }
-    }
-    const Vec3 crown{0.0, 3.25, 0.0};
-    for (int i = 0; i < 7; ++i) {
-        const double a = (30.0 + 120.0 * i / 6.0) * kPi / 180.0;
-        p.strips.push_back(preset_strip("Ray " + std::to_string(i + 1),
-                                        {polar(crown, 0.2, a), polar(crown, 0.75, a)}, 60.0,
-                                        {"temple", "crown"}));
-    }
-    return p;
+    return make_preset(
+        "Hive temple",
+        "A temple front: a double lens portal (3 m), honeycomb wings (4 cells either side) and "
+        "rays crowning the top (7). Groups: temple, portal, outer, inner, comb, crown.",
+        {count_param("cells", "Cells per wing", 4, 0, 4),
+         count_param("rays", "Crown rays", 7, 0, 15)},
+        [](const PresetValues &v) {
+            Strips s;
+            for (const auto &[layer, height_m, width_m] :
+                 {std::tuple{"outer", 3.0, 1.9}, std::tuple{"inner", 2.3, 1.25}}) {
+                const Vec3 bottom{0.0, 1.75 - 0.5 * height_m, 0.0};
+                const Vec3 top{0.0, 1.75 + 0.5 * height_m, 0.0};
+                const std::string name = capitalised(layer);
+                s.push_back(preset_strip(name + " portal left", lens_side(bottom, top, width_m),
+                                         60.0, {"temple", "portal", layer}));
+                s.push_back(preset_strip(name + " portal right",
+                                         reversed(lens_side(top, bottom, width_m)), 60.0,
+                                         {"temple", "portal", layer}));
+            }
+            const int cells[4][2] = {{0, 0}, {1, 0}, {0, 1}, {-1, 1}};
+            const int n_cells = v.count("cells");
+            for (const double side : {-1.0, 1.0}) {
+                for (int i = 0; i < n_cells; ++i) {
+                    Vec3 centre = honeycomb_cell({1.6, 1.55, 0.0}, 0.34, cells[i][0], cells[i][1]);
+                    centre.x *= side;
+                    s.push_back(preset_strip(std::string(side < 0.0 ? "Left" : "Right") + " cell " +
+                                                 std::to_string(i + 1),
+                                             polygon(centre, 0.34, 6), 30.0, {"temple", "comb"}));
+                }
+            }
+            const Vec3 crown{0.0, 3.25, 0.0};
+            const int n_rays = v.count("rays");
+            for (int i = 0; i < n_rays; ++i) {
+                const double deg = n_rays == 1 ? 90.0 : 30.0 + 120.0 * i / (n_rays - 1);
+                const double a = deg * kPi / 180.0;
+                s.push_back(preset_strip("Ray " + std::to_string(i + 1),
+                                         {polar(crown, 0.2, a), polar(crown, 0.75, a)}, 60.0,
+                                         {"temple", "crown"}));
+            }
+            return s;
+        });
 }
 
 } // namespace
+
+double PresetValues::operator[](std::string_view id) const {
+    for (size_t i = 0; i < params_.size(); ++i) {
+        if (params_[i].id == id) {
+            const double value = i < values_.size() ? values_[i] : params_[i].value;
+            return std::clamp(value, params_[i].min, params_[i].max);
+        }
+    }
+    return 0.0;
+}
+
+int PresetValues::count(std::string_view id) const {
+    return static_cast<int>(std::lround((*this)[id]));
+}
+
+bool PresetValues::on(std::string_view id) const { return (*this)[id] >= 0.5; }
+
+std::vector<StripSpec> build_rig_preset(const RigPreset &preset,
+                                        const std::vector<double> &values) {
+    if (!preset.build) {
+        return preset.strips; // A fixed rig (the user's own).
+    }
+    const PresetValues v(preset.params, values);
+    std::vector<StripSpec> strips = preset.build(v);
+    const bool has_density = std::any_of(preset.params.begin(), preset.params.end(),
+                                         [](const RigPresetParam &q) { return q.id == "density"; });
+    const double scale = v["scale"];
+    const double density = has_density ? v["density"] : 1.0;
+    if (scale == 1.0 && density == 1.0) {
+        return strips;
+    }
+    for (StripSpec &s : strips) {
+        for (Vec3 &p : s.polyline) {
+            p.x *= scale;
+            p.y *= scale;
+            p.z *= scale;
+        }
+        s.pixels_per_m *= density;
+        s.count = pixels_for(polyline_length_m(s.polyline), s.pixels_per_m);
+    }
+    return strips;
+}
 
 std::vector<RigPreset> builtin_rig_presets() {
     std::vector<RigPreset> presets;
@@ -569,7 +807,7 @@ std::vector<RigPreset> builtin_rig_presets() {
             presets.push_back(std::move(rig));
         }
     };
-    add("Stage builds", {dj_booth_chevron(), triple_arch_tunnel(), goalpost_truss(), triangle_row(),
+    add("Stage builds", {dj_booth_chevron(), arch_tunnel(), goalpost_truss(), triangle_row(),
                          pixel_curtain(), pixel_wall()});
     add("Hive", {hive_temple(), hive_portal(), honeycomb()});
     add("Sacred geometry",
