@@ -26,6 +26,7 @@ static ETH_DMADescTypeDef s_tx_desc[ETH_TX_DESC_CNT] __attribute__((aligned(32))
 static ETH_TxPacketConfigTypeDef s_tx_config;
 static lan8742_Object_t s_phy;
 static volatile int s_rx_starved; /* The pool ran dry; the next free re-arms the descriptors. */
+static ethernetif_stats s_stats;
 ETH_HandleTypeDef g_eth;
 
 /* Nucleo-144 RMII: PA1 REF_CLK, PA2 MDIO, PA7 CRS_DV, PC1 MDC, PC4 RXD0, PC5 RXD1, PB13 TXD1,
@@ -79,6 +80,9 @@ static void pbuf_free_custom(struct pbuf *p) {
 void HAL_ETH_RxAllocateCallback(uint8_t **buffer) {
     rx_buffer *b = (rx_buffer *)LWIP_MEMPOOL_ALLOC(RX_POOL);
     if (b == NULL) {
+        if (!s_rx_starved) {
+            ++s_stats.starved;
+        }
         s_rx_starved = 1;
         *buffer = NULL;
         return;
@@ -205,12 +209,25 @@ err_t ethernetif_init(struct netif *netif) {
 void ethernetif_input(struct netif *netif) {
     struct pbuf *p = NULL;
     while (HAL_ETH_ReadData(&g_eth, (void **)&p) == HAL_OK) {
-        if (p != NULL && netif->input(p, netif) != ERR_OK) {
-            pbuf_free(p);
+        if (p != NULL) {
+            ++s_stats.frames;
+            if (netif->input(p, netif) != ERR_OK) {
+                pbuf_free(p);
+            }
         }
         p = NULL;
     }
+    /* The receive DMA suspends when it finds no free descriptor (RM0410: "receive buffer
+     * unavailable") and stays suspended until a poll demand, so frames arriving after a burst
+     * would wait for the next one. Resume it now that HAL_ETH_ReadData has re-armed them. */
+    if (g_eth.Instance->DMASR & ETH_DMASR_RBUS) {
+        g_eth.Instance->DMASR = ETH_DMASR_RBUS; /* Write 1 to clear. */
+        g_eth.Instance->DMARPDR = 0u;
+        ++s_stats.suspended;
+    }
 }
+
+ethernetif_stats ethernetif_get_stats(void) { return s_stats; }
 
 void ethernetif_link_poll(struct netif *netif) {
     const int32_t state = LAN8742_GetLinkState(&s_phy);

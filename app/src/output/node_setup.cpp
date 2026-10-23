@@ -211,27 +211,31 @@ std::vector<std::string> node_differences(const NodePlan &plan,
 Result<std::string> node_request(UdpSocket &socket, const std::array<std::uint8_t, 4> &node,
                                  const std::string &command, int timeout_ms) {
     const auto *bytes = reinterpret_cast<const std::uint8_t *>(command.data());
-    if (Result<void> sent = socket.send_to(std::span<const std::uint8_t>(bytes, command.size()),
-                                           {node, kNodeConfigPort});
-        !sent) {
-        return sent.error();
-    }
     std::array<std::uint8_t, 2048> buffer{};
     Ipv4Endpoint from;
-    // Replies from elsewhere (another node, a stray packet) are skipped.
-    for (int attempt = 0; attempt < 4; ++attempt) {
-        Result<size_t> got = socket.receive(buffer, timeout_ms, &from);
-        if (!got) {
-            return got.error();
+    // Sent up to three times: the node's first reply can wait for ARP to resolve this computer
+    // (seconds on a direct cable), and a resent command finds it resolved. Every command is safe
+    // to repeat. Replies from elsewhere (another node, a stray packet) are skipped.
+    for (int send = 0; send < kNodeRequestTries; ++send) {
+        if (Result<void> sent = socket.send_to(std::span<const std::uint8_t>(bytes, command.size()),
+                                               {node, kNodeConfigPort});
+            !sent) {
+            return sent.error();
         }
-        if (got.value() == 0) {
-            return Error{"no reply from " + ipv4_text(node) + " (is it a Psyight node, and on?)"};
-        }
-        if (from.address == node) {
-            return std::string(reinterpret_cast<const char *>(buffer.data()), got.value());
+        for (int stray = 0; stray < 4; ++stray) {
+            Result<size_t> got = socket.receive(buffer, timeout_ms, &from);
+            if (!got) {
+                return got.error();
+            }
+            if (got.value() == 0) {
+                break; // Timed out: send again.
+            }
+            if (from.address == node) {
+                return std::string(reinterpret_cast<const char *>(buffer.data()), got.value());
+            }
         }
     }
-    return Error{"no reply from " + ipv4_text(node)};
+    return Error{"no reply from " + ipv4_text(node) + " (is it a Psyight node, and on?)"};
 }
 
 } // namespace psyight

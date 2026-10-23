@@ -9,6 +9,7 @@
  * (stages 2 and 3) or after a fault. */
 #include "board.h"
 #include "config_store.h"
+#include "ethernetif.h"
 #include "net.h"
 #include "node_core.h"
 #include "ws2812.h"
@@ -180,13 +181,15 @@ static void stage3_loop(void) {
         if (now - last_stats >= STATS_MS) {
             uint8_t ip[4];
             net_address(ip);
+            const ethernetif_stats rx = ethernetif_get_stats();
             printf("node %u.%u.%u.%u: %lu fps out, %lu packets, %lu latches, %lu sequence gaps, "
-                   "%lu ignored%s\r\n",
+                   "%lu ignored, rx %lu frames %lu polls %lu starved %lu resumed%s\r\n",
                    ip[0], ip[1], ip[2], ip[3],
                    (unsigned long)(frames_since * 1000u / (now - last_stats)),
                    (unsigned long)s_node.packets, (unsigned long)s_node.latches,
                    (unsigned long)s_node.sequence_gaps, (unsigned long)s_node.ignored,
-                   lost ? ", signal lost" : "");
+                   (unsigned long)rx.frames, (unsigned long)net_polls(), (unsigned long)rx.starved,
+                   (unsigned long)rx.suspended, lost ? ", signal lost" : "");
             frames_since = 0;
             last_stats = now;
         }

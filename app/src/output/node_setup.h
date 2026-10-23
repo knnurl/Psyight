@@ -74,7 +74,10 @@ int node_protocol(const std::map<std::string, std::string> &settings); // 1 when
 std::vector<std::string> node_differences(const NodePlan &plan,
                                           const std::map<std::string, std::string> &settings);
 
-// Sends one command and waits for the reply (blocking, at most timeout_ms: off the GUI thread).
+inline constexpr int kNodeRequestTries = 3;
+
+// Sends one command and waits for the reply, resending it after timeout_ms without one, up to
+// kNodeRequestTries times (blocking: off the GUI thread).
 Result<std::string> node_request(UdpSocket &socket, const std::array<std::uint8_t, 4> &node,
                                  const std::string &command, int timeout_ms);
 

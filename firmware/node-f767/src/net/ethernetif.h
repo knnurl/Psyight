@@ -11,4 +11,13 @@ err_t ethernetif_init(struct netif *netif);
 void ethernetif_input(struct netif *netif);
 void ethernetif_link_poll(struct netif *netif);
 
+/* Receive statistics for the console: frames handed to the stack, times the buffer pool ran dry,
+ * and times the receive DMA suspended for want of a descriptor (resumed at once). */
+typedef struct {
+    uint32_t frames;
+    uint32_t starved;
+    uint32_t suspended;
+} ethernetif_stats;
+ethernetif_stats ethernetif_get_stats(void);
+
 #endif

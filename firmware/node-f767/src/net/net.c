@@ -85,8 +85,18 @@ void net_join_sync_universe(uint16_t universe) {
     }
 }
 
-static void send_poll_replies(const ip_addr_t *to) {
-    /* One reply per up to four universes sharing a Sub-Net, numbered by bind index. */
+static uint32_t s_polls;
+
+uint32_t net_polls(void) { return s_polls; }
+
+static void send_poll_replies(void) {
+    /* One reply per up to four universes sharing a Sub-Net, numbered by bind index. Sent to the
+     * subnet's broadcast address (as Art-Net 3 nodes did), not to the poller: a unicast reply waits
+     * for ARP to resolve the controller, and on a direct cable that took seconds, past the app's
+     * discovery window. The controller listens on port 6454 for any reply. */
+    ip_addr_t to;
+    ip_addr_set_ip4_u32(&to, ip4_addr_get_u32(netif_ip4_addr(&s_netif)) |
+                                 ~ip4_addr_get_u32(netif_ip4_netmask(&s_netif)));
     const node_settings *s = &s_config->node;
     uint8_t buffer[PSY_ART_POLL_REPLY_BYTES];
     psy_poll_reply r;
@@ -111,7 +121,7 @@ static void send_poll_replies(const ip_addr_t *to) {
         struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, (u16_t)n, PBUF_RAM);
         if (p != NULL) {
             memcpy(p->payload, buffer, n);
-            udp_sendto(s_art, p, to, PSY_ARTNET_PORT);
+            udp_sendto(s_art, p, &to, PSY_ARTNET_PORT);
             pbuf_free(p);
         }
     }
@@ -127,7 +137,8 @@ static void on_art_net(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_
     psy_packet packet;
     if (data != NULL && psy_parse_art_net(data, n, &packet)) {
         if (packet.kind == PSY_PACKET_POLL) {
-            send_poll_replies(from);
+            ++s_polls;
+            send_poll_replies();
         } else if (s_config->protocols & NODE_PROTOCOL_ART_NET) {
             s_handler(&packet, true, HAL_GetTick());
         }

@@ -17,6 +17,7 @@ void net_init(node_config *config, const uint8_t mac[6], net_packet_handler hand
 void net_poll(uint32_t now_ms);
 bool net_link_up(void);
 void net_address(uint8_t ip[4]);
+uint32_t net_polls(void); /* ArtPolls received. */
 /* Joins the multicast group of an sACN sync universe once data names it. */
 void net_join_sync_universe(uint16_t universe);
 /* Set when a config command asked for a save, a reboot or an apply; the main loop acts on it. */
