@@ -80,6 +80,16 @@ void PreflightView::update() {
     if (now - interfaces_at_ > kInterfaceRefresh) {
         interfaces_ = list_ipv4_interfaces(); // A few ms; not every frame.
         interfaces_at_ = now;
+        // Discover by itself at start and whenever the addresses change (a cable plugged in, a
+        // node's link-local address appearing on a direct cable).
+        std::vector<std::array<std::uint8_t, 4>> addresses;
+        for (const NetworkInterface &i : interfaces_) {
+            addresses.push_back(i.address);
+        }
+        if (addresses != discovered_on_ && !interfaces_.empty() && !discovery_.valid()) {
+            discovered_on_ = std::move(addresses);
+            discovery_ = std::async(std::launch::async, discover, interfaces_);
+        }
     }
     if (discovery_.valid() &&
         discovery_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {

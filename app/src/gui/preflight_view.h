@@ -56,6 +56,7 @@ class PreflightView {
     PreviewView &preview_;
     std::vector<NetworkInterface> interfaces_;
     std::chrono::steady_clock::time_point interfaces_at_{};
+    std::vector<std::array<std::uint8_t, 4>> discovered_on_; // The addresses last auto-polled.
     std::optional<std::vector<ArtNode>> nodes_;
     std::future<Result<std::vector<ArtNode>>> discovery_;
     std::string discovery_error_;
