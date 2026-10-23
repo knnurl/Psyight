@@ -7,6 +7,9 @@
 #define TICK_T1H 173u      /* 801 ns. */
 #define LATCH_US 300u
 #define CYCLES_PER_US 216u
+/* The data lines: pins 0 to 7 of port D (PD8 and PD9, the console's USART3, are never touched:
+ * the BSRR words only name bits 0 to 7 and 16 to 23). */
+#define DATA_PORT GPIOD
 #define DMA_FLAGS 0x3Du /* FE, DME, TE, HT and TC of one stream (bit 1 is reserved). */
 
 static uint32_t s_words[NODE_MAX_PIXELS_PER_LANE * 24u]; /* 65 KB: reset masks per bit. */
@@ -34,7 +37,7 @@ static void stream_setup(DMA_Stream_TypeDef *s, uint32_t stream, const volatile 
     while (s->CR & DMA_SxCR_EN) {
     }
     clear_flags(stream);
-    s->PAR = (uint32_t)&GPIOE->BSRR;
+    s->PAR = (uint32_t)&DATA_PORT->BSRR;
     s->M0AR = (uint32_t)source;
     s->NDTR = count;
     s->FCR = 0;                                       /* Direct mode: one word per request. */
@@ -46,16 +49,16 @@ static void stream_setup(DMA_Stream_TypeDef *s, uint32_t stream, const volatile 
 void ws2812_init(uint8_t active_mask) {
     s_set_mask = active_mask;
     s_reset_mask = (uint32_t)active_mask << 16;
-    __HAL_RCC_GPIOE_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
     __HAL_RCC_TIM1_CLK_ENABLE();
     __HAL_RCC_DMA2_CLK_ENABLE();
-    GPIOE->BSRR = s_reset_mask; /* Low before switching to output: no glitch on the strips. */
+    DATA_PORT->BSRR = s_reset_mask; /* Low before switching to output: no glitch on the strips. */
     GPIO_InitTypeDef g = {0};
     g.Pin = active_mask;
     g.Mode = GPIO_MODE_OUTPUT_PP;
     g.Pull = GPIO_NOPULL;
     g.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    HAL_GPIO_Init(GPIOE, &g);
+    HAL_GPIO_Init(DATA_PORT, &g);
 
     TIM1->CR1 = 0;
     TIM1->PSC = 0;
@@ -106,7 +109,7 @@ void ws2812_dma_irq(void) {
         TIM1->CR1 &= ~TIM_CR1_CEN;
         TIM1->DIER = 0;
         clear_flags(2);
-        GPIOE->BSRR = s_reset_mask; /* Already low; make sure. */
+        DATA_PORT->BSRR = s_reset_mask; /* Already low; make sure. */
         s_done_cycles = board_cycles();
         ++s_frames;
         s_busy = false;

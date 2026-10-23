@@ -63,7 +63,7 @@ void node_config_defaults(node_config *c, const uint8_t mac[6]) {
     c->ip[3] = mac[5] == 0 || mac[5] == 255 ? 10 : mac[5];
     c->mask[0] = 255;
     c->protocols = NODE_PROTOCOL_ART_NET | NODE_PROTOCOL_SACN;
-    c->active_mask = 0x0F; /* The default rig's four strips on PE0..PE3. */
+    c->active_mask = 0x0F; /* The default rig's four strips on PD0..PD3. */
     strcpy(c->short_name, "Psyight node");
     strcpy(c->long_name, "Psyight STM32F767 pixel node");
     c->node = node_default_settings();

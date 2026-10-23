@@ -2,7 +2,7 @@
 // its own settings (the universes it receives, its lanes), set over its text protocol on UDP port
 // 6455; this works them out from the project and speaks the protocol:
 // - the plan: the universes the patch uses, and the lanes: strips chained in patch order, each lane
-//   one data line (PE0 to PE7) of at most kNodeLanePixels pixels, at most kNodeLanes of them;
+//   one data line (PD0 to PD7) of at most kNodeLanePixels pixels, at most kNodeLanes of them;
 // - the commands for it ("set ...": lanes, outputs, universes, each lane's colour order, the
 //   signal-loss policy and the fallback show's settings and palette, then "apply");
 // - the node's "get" reply, read back and compared with the plan and the project's settings.

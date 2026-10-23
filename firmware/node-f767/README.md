@@ -9,7 +9,7 @@ Firmware for the custom Art-Net and sACN pixel node of SPEC section 12: up to 8 
   - `node_core`: universe store and sync latch, lane mapping, signal-loss policies, the fallback show, and the 8-lane bit transpose.
   - `node_config`: the stored settings and the text config protocol.
 - `src/board/`: clocks, LEDs, UART printf, watchdog, flash config, interrupts.
-- `src/ws2812/`: the parallel output engine (TIM1 plus three DMA2 streams into GPIOE's BSRR).
+- `src/ws2812/`: the parallel output engine (TIM1 plus three DMA2 streams into GPIOD's BSRR).
 - `src/net/`: lwIP 2.2 (no RTOS) on the MAC and LAN8742 PHY, and the UDP services.
 - `third_party/` (gitignored): ST's HAL, CMSIS, lwIP port and PHY driver at pinned commits, fetched by `fetch_deps.ps1`.
 
@@ -39,7 +39,7 @@ The serial console is the ST-LINK virtual COM port at 115200 8N1, carrying start
 
 ## Wiring
 
-- Lanes 0 to 7: PE0 to PE7 (Zio and morpho connectors). The default config drives lanes 0 to 3 (the app's 2.5 by 1.2 m test frame, `active 15`).
+- Lanes 0 to 7: PD0 to PD7, all on the Zio headers: PD7, PD6, PD5, PD4 and PD3 on CN9 pins 2, 4, 6, 8 and 10 (side by side), PD0 on CN9 pin 25, PD1 on CN9 pin 27, PD2 on CN8 pin 12. (Before 2026-10-23 they were PE0 to PE7.) The default config drives lanes 0 to 3 (the app's 2.5 by 1.2 m test frame, `active 15`). Pinout and wiring: `docs/NODE_WIRING_GUIDE.pdf`.
 - Each lane goes through a 74HCT245 (3.3 V to 5 V) with a 33 to 100 Ω series resistor at the output, into the strip's DIN.
 - The board's ground must be common with the strips' supply ground. Fuse each output and inject power along long strips (SPEC 12.2, 13).
 - Ethernet: the Nucleo's RJ45.
@@ -52,7 +52,7 @@ The serial console is the ST-LINK virtual COM port at 115200 8N1, carrying start
 
 ### F1: strips only
 
-Flash F1 and scope PE0. Each bit must be 1.25 µs long (±150 ns). A 0 bit is high for 0.40 µs and a 1 bit for 0.80 µs, each within ±150 ns. The low gap between frames must be at least 280 µs. Each lane shows a short chase in its own colour at about 10% brightness, and the console prints frames per second and the transpose time.
+Flash F1 and scope PD0 (CN9 pin 25). Each bit must be 1.25 µs long (±150 ns). A 0 bit is high for 0.40 µs and a 1 bit for 0.80 µs, each within ±150 ns. The low gap between frames must be at least 280 µs. Each lane shows a short chase in its own colour at about 10% brightness, and the console prints frames per second and the transpose time.
 
 Check that bit 0 of a frame is not missing. The timer starts at its top value so that the first event is the rising edge; if the first bit were lost, the colours would come out shifted.
 
