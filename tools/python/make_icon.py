@@ -14,6 +14,8 @@ TARGET = ROOT / "assets" / "icon" / "psyight.ico"
 
 LARGE_SIZES = [256, 128, 64, 48]
 SMALL_SIZES = [32, 24, 16]
+# The "P" as fractions of the logo: centre x, centre y, side.
+LETTER = (0.475, 0.52, 0.9)
 
 
 def square_crop(image, centre_x, centre_y, side):
@@ -24,8 +26,10 @@ def square_crop(image, centre_x, centre_y, side):
 def main():
     logo = Image.open(SOURCE).convert("RGBA")
     width, height = logo.size
-    whole = square_crop(logo, width // 2, height // 2, 800)  # The waveforms' full width.
-    letter = square_crop(logo, 525, 500, 600)  # Just the "P".
+    side = min(width, height)
+    whole = square_crop(logo, width // 2, height // 2, side)
+    letter = square_crop(logo, round(LETTER[0] * width), round(LETTER[1] * height),
+                         round(LETTER[2] * side))
     frames = [whole.resize((s, s), Image.LANCZOS) for s in LARGE_SIZES]
     frames += [letter.resize((s, s), Image.LANCZOS) for s in SMALL_SIZES]
     frames[0].save(TARGET, format="ICO", append_images=frames[1:],
