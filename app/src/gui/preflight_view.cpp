@@ -16,7 +16,9 @@ namespace psyight {
 namespace {
 
 constexpr auto kInterfaceRefresh = std::chrono::seconds(3);
-constexpr int kDiscoveryTimeoutMs = 1000;
+constexpr int kDiscoveryTimeoutMs = 1500;
+// Polled again while no node has answered (Art-Net controllers poll every few seconds).
+constexpr auto kRediscoverEvery = std::chrono::seconds(5);
 constexpr std::uint16_t kArtNetPortNumber = 6454;
 
 ImVec4 level_colour(CheckLevel level) {
@@ -75,6 +77,19 @@ Result<std::vector<ArtNode>> discover(std::vector<NetworkInterface> interfaces) 
 
 } // namespace
 
+std::array<std::uint8_t, 4> PreflightView::node_interface() const {
+    if (nodes_.has_value()) {
+        for (const ArtNode &n : *nodes_) {
+            for (const NetworkInterface &i : interfaces_) {
+                if (i.contains(n.ip)) {
+                    return i.address;
+                }
+            }
+        }
+    }
+    return {};
+}
+
 void PreflightView::update() {
     const auto now = std::chrono::steady_clock::now();
     if (now - interfaces_at_ > kInterfaceRefresh) {
@@ -86,8 +101,12 @@ void PreflightView::update() {
         for (const NetworkInterface &i : interfaces_) {
             addresses.push_back(i.address);
         }
-        if (addresses != discovered_on_ && !interfaces_.empty() && !discovery_.valid()) {
+        const bool none_yet = !nodes_.has_value() || nodes_->empty();
+        if ((addresses != discovered_on_ ||
+             (none_yet && now - discovered_at_ > kRediscoverEvery)) &&
+            !interfaces_.empty() && !discovery_.valid()) {
             discovered_on_ = std::move(addresses);
+            discovered_at_ = now;
             discovery_ = std::async(std::launch::async, discover, interfaces_);
         }
     }

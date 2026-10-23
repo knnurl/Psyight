@@ -49,6 +49,9 @@ class PreflightView {
     void draw_node_setup();
     const std::vector<PreflightCheck> &checks() const { return checks_; }
     const std::optional<std::vector<ArtNode>> &nodes() const { return nodes_; }
+    // The address of the local interface whose subnet holds the first node found; all zero when
+    // none was found (the output then leaves where the system routes it).
+    std::array<std::uint8_t, 4> node_interface() const;
 
   private:
     Session &session_;
@@ -57,6 +60,7 @@ class PreflightView {
     std::vector<NetworkInterface> interfaces_;
     std::chrono::steady_clock::time_point interfaces_at_{};
     std::vector<std::array<std::uint8_t, 4>> discovered_on_; // The addresses last auto-polled.
+    std::chrono::steady_clock::time_point discovered_at_{};  // The last automatic poll.
     std::optional<std::vector<ArtNode>> nodes_;
     std::future<Result<std::vector<ArtNode>>> discovery_;
     std::string discovery_error_;

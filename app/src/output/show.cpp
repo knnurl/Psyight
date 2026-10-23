@@ -57,8 +57,12 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         test_frames_ = 0;
     }
     const bool network = config.send_to_network || (testing && config.test.send);
+    if (network && socket_ != nullptr && socket_interface_ != config.output_interface) {
+        socket_.reset(); // Another interface: reopened below, bound to it.
+    }
     if (network && socket_ == nullptr) {
-        Result<std::unique_ptr<UdpSocket>> opened = open_udp_socket();
+        Result<std::unique_ptr<UdpSocket>> opened = open_udp_socket(config.output_interface);
+        socket_interface_ = config.output_interface;
         if (opened) {
             socket_ = std::move(opened.value());
             network_error_.clear();

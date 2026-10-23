@@ -52,6 +52,9 @@ struct ShowConfig {
     std::vector<float> pixel_caps; // Per rig pixel, from the group caps; empty for none.
     Patch patch = build_patch(default_rig());
     OutputSettings output;
+    // The local interface the output leaves on (its address); all zero: the system's choice. Set
+    // from discovery: the interface whose subnet holds a node.
+    std::array<std::uint8_t, 4> output_interface{};
     bool send_to_network = false;
     // Safety controls (SPEC 9.1): blackout sends black (through the limiters, so the way back up
     // counts as a flash); hold keeps sending the last frame shown. Blackout wins over hold.
@@ -108,6 +111,7 @@ class ShowRenderer {
     OutputSender sender_;
     VirtualNode node_;
     std::unique_ptr<UdpSocket> socket_;
+    std::array<std::uint8_t, 4> socket_interface_{}; // What socket_ is bound to.
     double last_t_s_ = 0.0;
     std::int64_t index_ = 0;
     std::int64_t send_errors_ = 0;

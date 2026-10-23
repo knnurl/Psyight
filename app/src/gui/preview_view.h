@@ -52,6 +52,13 @@ class PreviewView {
     void draw_top_bar();
     // B, H, 0 and 1 to 9 (blackout, hold, scenes); off while another mode owns the keys.
     void set_keys_enabled(bool on) { keys_enabled_ = on; }
+    // The local interface the show's output leaves on (all zero: the system's choice).
+    void set_output_interface(const std::array<std::uint8_t, 4> &address) {
+        if (address != config_.output_interface) {
+            config_.output_interface = address;
+            dirty_ = true;
+        }
+    }
     bool sending() const { return config_.send_to_network; }
     double measured_fps() const { return measured_fps_; }
     bool recording() const { return recorder_ != nullptr; }

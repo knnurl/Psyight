@@ -49,8 +49,8 @@ class UdpSocket {
 };
 
 // Binds bind_address:bind_port (0.0.0.0 and 0 for any). Broadcast sends are allowed (Art-Net
-// often uses directed broadcast). Multicast sends use a TTL of 1 and leave on the interface the
-// routing table picks.
+// often uses directed broadcast). Multicast sends use a TTL of 1 and leave on the interface with
+// bind_address, or, unbound, on the one the routing table picks.
 Result<std::unique_ptr<UdpSocket>> open_udp_socket(std::array<std::uint8_t, 4> bind_address = {},
                                                    std::uint16_t bind_port = 0);
 

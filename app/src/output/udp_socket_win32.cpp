@@ -206,6 +206,12 @@ Result<std::unique_ptr<UdpSocket>> open_udp_socket(std::array<std::uint8_t, 4> b
     if (bind(s, reinterpret_cast<const sockaddr *>(&a), sizeof(a)) != 0) {
         return socket_error("bind");
     }
+    if (bind_address != std::array<std::uint8_t, 4>{}) {
+        // Multicast (sACN) leaves on this interface, not the one the routing table picks (often
+        // Wi-Fi when the node is cabled straight to the computer).
+        setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, reinterpret_cast<const char *>(&a.sin_addr),
+                   sizeof(a.sin_addr));
+    }
     return std::unique_ptr<UdpSocket>(std::move(owned));
 }
 

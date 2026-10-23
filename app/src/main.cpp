@@ -498,6 +498,8 @@ int main() {
             }
             // The labelling mode has its own keys (Space, numbers, letters): the panels under it
             // leave theirs.
+            // The show's output leaves on the interface where a node answered discovery.
+            preview_view.set_output_interface(preflight_view.node_interface());
             transport_panel.set_keys_enabled(!labelling);
             preview_view.set_keys_enabled(!labelling);
             transport_panel.draw();
