@@ -309,7 +309,10 @@ def main():
     story.append(p("8. Setting the node up from the app", H2))
     story.extend(bullets([
         "Connect the node to the same network as the PC. It asks for an address by DHCP; without a "
-        "lease it takes 2.x.y.z/8 (from its MAC) after 10 s. The console prints it.",
+        "lease (a cable straight to the PC) it takes a link-local 169.254.x.y/16 address from "
+        "its MAC after 10 s, the range Windows gives the PC on the same cable, so they find each "
+        "other with no settings. The console prints it. A fixed address: set dhcp 0 with ip and "
+        "mask (by default the Art-Net style 2.x.y.z/8).",
         "In Psyight: Preflight &gt; Discover Art-Net nodes, then Node setup. It shows the data lines "
         "the current rig needs (pixels and colour order per line) and any notes, for example a line "
         "too long for 60 fps (more than 545 pixels).",

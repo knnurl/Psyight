@@ -17,6 +17,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -645,4 +646,44 @@ TEST_CASE("node setup: lane orders, signal-loss settings, notes, and older firmw
     CHECK(node_lane_max_fps(680) == doctest::Approx(48.3).epsilon(0.01)); // SPEC 12.3.
     CHECK(node_lane_max_fps(kNodeLanePixelsAt60Fps) >= 60.0);
     CHECK(node_lane_max_fps(kNodeLanePixelsAt60Fps + 1) < 60.0);
+}
+
+TEST_CASE("node firmware: the DHCP fallback is a link-local address from the MAC") {
+    std::uint8_t a[4];
+    const std::uint8_t mac[6] = {0x02, 0x50, 0x12, 0x34, 0x56, 0x78};
+    node_link_local_address(mac, a);
+    CHECK(a[0] == 169);
+    CHECK(a[1] == 254);
+    CHECK(a[2] == 1 + 0x56 % 254);
+    CHECK(a[3] == 0x78);
+    // RFC 3927: the first and last /24 are reserved, whatever the MAC.
+    for (const std::uint8_t b :
+         {std::uint8_t{0}, std::uint8_t{253}, std::uint8_t{254}, std::uint8_t{255}}) {
+        const std::uint8_t m[6] = {2, 0, 0, 0, b, 0};
+        node_link_local_address(m, a);
+        CHECK(a[2] >= 1);
+        CHECK(a[2] <= 254);
+    }
+}
+
+TEST_CASE("node setup: lines kept short enough for 60 fps when the eight allow it") {
+    const std::vector<RigPreset> presets = builtin_rig_presets();
+    const auto lotus = std::find_if(presets.begin(), presets.end(),
+                                    [](const RigPreset &p) { return p.name == "Lotus"; });
+    REQUIRE(lotus != presets.end());
+    Project project = default_project();
+    project.strips.clear();
+    for (const StripSpec &s : lotus->strips) {
+        project.strips.push_back({s, ColourOrder::grb});
+    }
+    const NodePlan plan = plan_node(project);
+    CHECK(plan.pixels == 1427);
+    REQUIRE(plan.lanes.size() == 3); // Seed and inner 1 to 5; inner 6 to 8 and outer 1 to 3; ...
+    CHECK(plan.lanes[0].pixels == 537);
+    CHECK(plan.lanes[1].pixels == 510);
+    CHECK(plan.lanes[2].pixels == 380);
+    CHECK(plan.notes.empty()); // Every line at 60 fps or more.
+    for (const NodeLane &lane : plan.lanes) {
+        CHECK(node_lane_max_fps(lane.pixels) >= 60.0);
+    }
 }

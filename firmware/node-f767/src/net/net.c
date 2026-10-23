@@ -246,17 +246,19 @@ void net_poll(uint32_t now_ms) {
     }
     if (s_dhcp_active && !dhcp_supplied_address(&s_netif) &&
         now_ms - s_dhcp_started > DHCP_FALLBACK_MS) {
-        /* No DHCP server: use the configured (by default MAC-derived 2.x.y.z/8) address. */
+        /* No DHCP server (a direct cable): a link-local address from the MAC, the range the PC
+         * takes on the same cable, so discovery and output reach the node with no settings. */
         dhcp_stop(&s_netif);
         s_dhcp_active = false;
+        uint8_t a[4];
+        node_link_local_address(s_mac, a);
         ip4_addr_t ip, mask, gw;
-        IP4_ADDR(&ip, s_config->ip[0], s_config->ip[1], s_config->ip[2], s_config->ip[3]);
-        IP4_ADDR(&mask, s_config->mask[0], s_config->mask[1], s_config->mask[2], s_config->mask[3]);
-        IP4_ADDR(&gw, s_config->gateway[0], s_config->gateway[1], s_config->gateway[2],
-                 s_config->gateway[3]);
+        IP4_ADDR(&ip, a[0], a[1], a[2], a[3]);
+        IP4_ADDR(&mask, 255, 255, 0, 0);
+        ip4_addr_set_zero(&gw);
         netif_set_addr(&s_netif, &ip, &mask, &gw);
         netif_set_up(&s_netif);
-        printf("net: no DHCP lease in %u s, using the fallback address\r\n",
+        printf("net: no DHCP lease in %u s, using the link-local address\r\n",
                (unsigned)(DHCP_FALLBACK_MS / 1000u));
     }
 }

@@ -11,7 +11,9 @@
  *   save                     write to flash (the node pauses 1 to 2 s while the sector erases)
  *   defaults                 reset to defaults in RAM
  *   reboot                   restart
- * Keys: ip, mask, gateway (a.b.c.d), dhcp (0 or 1): after save and reboot; name, long_name,
+ * Keys: ip, mask, gateway (a.b.c.d): the fixed address, used with dhcp 0; dhcp (0 or 1): with 1,
+ * the node asks for an address and, without a lease after 10 s, takes a link-local 169.254.x.y/16
+ * (node_link_local_address), the range Windows gives a direct cable; all after save and reboot; name, long_name,
  * protocols (1 Art-Net, 2 sACN, 3 both): at once; the rig settings, on apply (or after a
  * restart): universe (first), universes (count), pixels_per_universe, lane0..lane7
  * ("first_pixel count"), active (lane bit mask, decimal), loss_ms, policy (hold, fade, fallback,
@@ -70,6 +72,10 @@ int node_config_valid(const node_config *c); /* Magic, version and CRC. */
  * valid version 1 config. */
 int node_config_upgrade(const void *stored, node_config *out);
 size_t node_config_v1_size(void);
+
+/* The node's link-local address (RFC 3927 range 169.254.1.0 to 169.254.254.255) from its MAC: the
+ * DHCP fallback. */
+void node_link_local_address(const uint8_t mac[6], uint8_t out[4]);
 
 /* Handles one command; writes the reply (null-terminated) and returns what the caller must do
  * next (save to flash, reboot) beyond what the reply says. */

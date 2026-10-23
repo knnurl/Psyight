@@ -53,8 +53,9 @@ void node_config_defaults(node_config *c, const uint8_t mac[6]) {
     memset(c, 0, sizeof(*c));
     c->magic = NODE_CONFIG_MAGIC;
     c->version = NODE_CONFIG_VERSION;
-    /* DHCP first; without a lease the node falls back to the Art-Net style 2.x.y.z/8 address
-     * derived from its MAC, so it can always be found. */
+    /* DHCP first; without a lease (a direct cable) the node takes a link-local address, as the
+     * PC does, so they can always find each other. The fixed address (dhcp 0) defaults to the
+     * Art-Net style 2.x.y.z/8 derived from the MAC. */
     c->dhcp = 1;
     c->ip[0] = 2;
     c->ip[1] = mac[3];
@@ -74,6 +75,13 @@ uint32_t node_config_crc(const node_config *c) {
 }
 
 size_t node_config_v1_size(void) { return sizeof(node_config_v1); }
+
+void node_link_local_address(const uint8_t mac[6], uint8_t out[4]) {
+    out[0] = 169;
+    out[1] = 254;
+    out[2] = (uint8_t)(1u + mac[4] % 254u); /* 1 to 254: the ends are reserved. */
+    out[3] = mac[5];
+}
 
 int node_config_upgrade(const void *stored, node_config *out) {
     node_config_v1 old;

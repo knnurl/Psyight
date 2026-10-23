@@ -10,11 +10,36 @@ namespace psyight {
 
 int NodePlan::active_mask() const { return (1 << static_cast<int>(lanes.size())) - 1; }
 
+namespace {
+
+// Strips chained in patch order, a new line when the next strip would pass `limit` pixels.
+std::vector<NodeLane> chain(const Project &project, int limit) {
+    std::vector<NodeLane> lanes;
+    int pixels = 0;
+    for (size_t s = 0; s < project.strips.size(); ++s) {
+        const int count = std::max(0, project.strips[s].spec.count);
+        if (lanes.empty() || lanes.back().pixels + count > limit) {
+            lanes.push_back({pixels, 0, static_cast<int>(s), 0, project.strips[s].order});
+        }
+        lanes.back().pixels += count;
+        ++lanes.back().strips;
+        pixels += count;
+    }
+    return lanes;
+}
+
+} // namespace
+
 NodePlan plan_node(const Project &project) {
     NodePlan plan;
     plan.first_universe = project.first_universe;
     plan.pixels_per_universe = project.pixels_per_universe;
-    // Strips chained in patch order: a new lane when the next strip would not fit.
+    // Strips chained in patch order. Lines short enough for the show's 60 fps when the node's 8
+    // lines allow it (fewer pixels a line refresh faster), else as full as a line takes.
+    plan.lanes = chain(project, kNodeLanePixelsAt60Fps);
+    if (static_cast<int>(plan.lanes.size()) > kNodeLanes) {
+        plan.lanes = chain(project, kNodeLanePixels);
+    }
     for (size_t s = 0; s < project.strips.size(); ++s) {
         const int count = std::max(0, project.strips[s].spec.count);
         if (count > kNodeLanePixels) {
@@ -22,18 +47,19 @@ NodePlan plan_node(const Project &project) {
                                     " pixels: a lane takes at most " +
                                     std::to_string(kNodeLanePixels) + ".");
         }
-        if (plan.lanes.empty() || plan.lanes.back().pixels + count > kNodeLanePixels) {
-            plan.lanes.push_back({plan.pixels, 0, static_cast<int>(s), 0, project.strips[s].order});
-        } else if (project.strips[s].order != plan.lanes.back().order) {
-            plan.notes.push_back(
-                project.strips[s].spec.name + " is " + colour_order_name(project.strips[s].order) +
-                " on a line that starts " + colour_order_name(plan.lanes.back().order) +
-                ": the show is right, but the node's own fallback show uses " +
-                colour_order_name(plan.lanes.back().order) + " for the whole line.");
-        }
-        plan.lanes.back().pixels += count;
-        ++plan.lanes.back().strips;
         plan.pixels += count;
+    }
+    for (const NodeLane &lane : plan.lanes) {
+        for (int s = lane.first_strip + 1; s < lane.first_strip + lane.strips; ++s) {
+            const ProjectStrip &strip = project.strips[static_cast<size_t>(s)];
+            if (strip.order != lane.order) {
+                plan.notes.push_back(strip.spec.name + " is " + colour_order_name(strip.order) +
+                                     " on a line that starts " + colour_order_name(lane.order) +
+                                     ": the show is right, but the node's own fallback show "
+                                     "uses " +
+                                     colour_order_name(lane.order) + " for the whole line.");
+            }
+        }
     }
     plan.fallback = project.node;
     for (size_t l = 0; l < plan.lanes.size(); ++l) {

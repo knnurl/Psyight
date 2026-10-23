@@ -58,7 +58,7 @@ Check that bit 0 of a frame is not missing. The timer starts at its top value so
 
 ### F2: network only
 
-Flash F2 and connect it to the network. The console prints the node's address (from DHCP, or after 10 s without a lease the fallback 2.x.y.z/8 address derived from the MAC), then, once a second, each universe's packets, last sequence number and size.
+Flash F2 and connect it to the network. The console prints the node's address (from DHCP, or after 10 s without a lease the link-local 169.254.x.y/16 address derived from the MAC: the range Windows gives a direct cable, so a PC and the node find each other with no settings; a fixed address is `set dhcp 0` with `ip` and `mask`, by default the Art-Net style 2.x.y.z/8), then, once a second, each universe's packets, last sequence number and size.
 
 In the app, use the Preview's Output section: sACN multicast, or unicast or Art-Net to the printed address. Step the top bar to Ambient, React or Show, and watch universes 1 to 3 count at about 60 packets a second with the sequence numbers advancing. The Preflight tab's "Discover Art-Net nodes" should list the node.
 
