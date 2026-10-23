@@ -397,8 +397,10 @@ def main():
         "Without the command line: copy <font name='Courier'>psyight_node_f3.bin</font> onto the "
         "NODE_F767ZI USB drive the ST-LINK shows.",
         "Console: open the ST-LINK virtual COM port at 115200 8N1. Every 5 s it prints the address, "
-        "output frames per second, packets, latches, sequence gaps, ignored universes, and "
-        "\"signal lost\" while no show data arrives.",
+        "output frames per second, show packets, latches, sequence gaps, ignored universes, then "
+        "the frames received, discovery polls seen and two receive-error counts, and \"signal "
+        "lost\" while no show data arrives (the node then runs its fallback show). \"0 packets\" "
+        "means no show data reaches the node; \"0 polls\" means discovery does not.",
     ]))
 
     story.append(p("8. Setting the node up from the app", H2))
@@ -408,7 +410,12 @@ def main():
         "link-local 169.254.x.y/16 address from its MAC after 10 s, the range Windows gives the "
         "PC on the same cable, so they find each other with no settings. The console prints it. A "
         "fixed address: set dhcp 0 with ip and mask (by default the Art-Net style 2.x.y.z/8).",
-        "In Psyight: Preflight &gt; Discover Art-Net nodes, then Node setup. It shows the data lines "
+        "Psyight finds the node by itself: Preflight polls at start, whenever the computer's "
+        "addresses change (a cable plugged in) and every 5 s until a node answers; the node "
+        "answers on its subnet's broadcast address. Discover Art-Net nodes polls at once. The "
+        "show's output (sACN multicast included) then leaves through the network port on the "
+        "node's subnet.",
+        "Preflight &gt; Node setup shows the data lines "
         "the current rig needs (pixels and colour order per line), keeping each line at or under "
         "545 pixels (60 fps) when the eight lines allow it.",
         "Choose what the node does when the signal stops (hold, fade, fallback show or blackout), "
@@ -450,6 +457,12 @@ def main():
         "each line (colour order per line, protocol 3).",
         "Set up from the app, apply without a restart (no glitch mid-frame), save, power cycle, "
         "read back.",
+        "No node found although the console shows its address: Windows Firewall may block "
+        "Psyight (a direct cable counts as a public network). Windows Security &gt; Firewall "
+        "&amp; network protection &gt; Allow an app through firewall &gt; psyight.exe, tick "
+        "Public; or an inbound rule allowing UDP for psyight.exe from the local subnet.",
+        "LEDs stuck on a slow dim look: that is the fallback show (no show data). Step the top bar "
+        "to Ambient, React or Show (Preview sends nothing), and check the console's packet count.",
         "If the red LED stays on or the address stays 0.0.0.0: check the cable, then that JP6 and "
         "JP7 are fitted.",
     ]))
