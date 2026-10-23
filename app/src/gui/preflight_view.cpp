@@ -34,19 +34,29 @@ ImVec4 level_colour(CheckLevel level) {
     return t.text;
 }
 
-// Polls every interface's subnet from one socket on Art-Net's port (nodes reply there).
+// Polls every interface's subnet from a socket bound to that interface's address on Art-Net's
+// port (nodes reply there). Bound, so the poll leaves through that interface: with several
+// adapters in 169.254.0.0/16 (VPNs, virtual adapters), a poll from an unbound socket did not
+// reliably reach a node cabled straight to the computer.
 Result<std::vector<ArtNode>> discover(std::vector<NetworkInterface> interfaces) {
-    Result<std::unique_ptr<UdpSocket>> socket = open_udp_socket({}, kArtNetPortNumber);
-    if (!socket) {
-        return socket.error();
-    }
     std::vector<ArtNode> all;
+    std::string first_error;
     for (const NetworkInterface &i : interfaces) {
+        Result<std::unique_ptr<UdpSocket>> socket = open_udp_socket(i.address, kArtNetPortNumber);
+        if (!socket) {
+            if (first_error.empty()) {
+                first_error = i.name + ": " + socket.error().message;
+            }
+            continue;
+        }
         Result<std::vector<ArtNode>> found =
             discover_art_nodes(*socket.value(), {i.broadcast(), kArtNetPortNumber},
                                kDiscoveryTimeoutMs / static_cast<int>(interfaces.size()));
         if (!found) {
-            return found.error();
+            if (first_error.empty()) {
+                first_error = i.name + ": " + found.error().message;
+            }
+            continue;
         }
         for (ArtNode &n : found.value()) {
             const bool known = std::any_of(all.begin(), all.end(), [&](const ArtNode &a) {
@@ -56,6 +66,9 @@ Result<std::vector<ArtNode>> discover(std::vector<NetworkInterface> interfaces) 
                 all.push_back(std::move(n));
             }
         }
+    }
+    if (all.empty() && !first_error.empty()) {
+        return Error{first_error}; // Say why, rather than "no node answered".
     }
     return all;
 }

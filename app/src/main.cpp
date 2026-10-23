@@ -24,6 +24,7 @@
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/transport_panel.h"
+#include "gui/widgets.h"
 #include "io/png.h"
 #include "io/recent_files.h"
 #include "io/user_settings.h"
@@ -306,7 +307,9 @@ int main() {
         bool show_settings = false;
         bool perform = false;   // The Perform view (F11) over the workspace.
         bool labelling = false; // The labelling mode (F9) over the workspace.
-        bool browser = false;   // The preset browser (View > Browser, Ctrl+B).
+        // In show mode with the editing panels hidden: the analysis panels shown for now (F7).
+        bool show_analysis = false;
+        bool browser = false; // The preset browser (View > Browser, Ctrl+B).
         bool open_requested = false;
         glfwSetWindowUserPointer(window, &session);
         glfwSetDropCallback(window, on_files_dropped);
@@ -454,6 +457,13 @@ int main() {
                     ImGui::MenuItem("ImPlot demo", nullptr, &show_implot_demo);
                     ImGui::EndMenu();
                 }
+                if (show_mode && prefs.show_mode_hides_editing) {
+                    if (psyight::toggle_button("Analysis (F7)", show_analysis)) {
+                        show_analysis = !show_analysis;
+                    }
+                    ImGui::SetItemTooltip("Show the analysis and bass roll instead of the stage, "
+                                          "without leaving React or Show.");
+                }
                 preview_view.draw_top_bar();
                 ImGui::EndMainMenuBar();
             }
@@ -491,7 +501,15 @@ int main() {
             transport_panel.set_keys_enabled(!labelling);
             preview_view.set_keys_enabled(!labelling);
             transport_panel.draw();
-            if (!(show_mode && prefs.show_mode_hides_editing)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_F7, false) && show_mode &&
+                prefs.show_mode_hides_editing) {
+                show_analysis = !show_analysis;
+            }
+            if (!show_mode) {
+                show_analysis = false; // Each time show mode starts, it starts on the stage.
+            }
+            const bool hide_editing = show_mode && prefs.show_mode_hides_editing && !show_analysis;
+            if (!hide_editing) {
                 analysis_view.draw();
                 bass_roll_view.draw_roll();
                 bass_roll_view.draw_inspector();
@@ -502,7 +520,7 @@ int main() {
             log_view.draw();
             preflight_view.draw();
             rig_view.draw();
-            preview_view.draw(show_mode && prefs.show_mode_hides_editing);
+            preview_view.draw(hide_editing);
             // A strip hovered in one of the preview and the Rig tab is highlighted in the other.
             preview_view.set_highlighted_strip(rig_view.hovered_strip());
             rig_view.set_highlighted_strip(preview_view.hovered_strip());

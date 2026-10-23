@@ -22,7 +22,7 @@ The **status bar** along the bottom shows, at a glance: the worst preflight prob
 
 The window: the transport (play, loop, half speed, time, volume, the track's waveform) is at the top left, above the analysis and the bass roll. The rig preview is pinned at the top right; its button folds it away and the button at the far right of the top bar (or View > Rig preview) brings it back. Below it are the tabs Log, Preflight, Rig and Show (live input, MIDI, scenes, limiters, output), then scoring and the note inspector. View > Reset layout puts everything back. In the analysis, drag the thin line between two plots (spectrogram, band energy, flux, residual) to give one of them more height; double-click it for the default heights. The heights are kept with your settings.
 
-**Show mode:** React and Show switch the app to the dark Show theme and hide the editing panels; the rig is then drawn large where the bass roll was. Leaving them restores the theme and panels. File > Settings turns either change off.
+**Show mode:** React and Show switch the app to the dark Show theme and hide the editing panels; the rig is then drawn large where the bass roll was. Leaving them restores the theme and panels. To look at the analysis without leaving React or Show, press Analysis (F7) in the top bar; press it again for the stage. File > Settings turns either change off.
 
 ## Setting up the rig
 
