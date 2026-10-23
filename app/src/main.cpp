@@ -473,7 +473,7 @@ int main() {
                 ImGui::SetWindowFocus("Preflight");
             }
             // Bump the version when panels are added, so saved layouts get the new default once.
-            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v8");
+            const ImGuiID dockspace_id = ImGui::GetID("Main dock space v9");
             if (reset_layout || ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
                 psyight::apply_default_layout(dockspace_id); // First run, or View > Reset layout.
                 reset_layout = false;
@@ -517,8 +517,7 @@ int main() {
                 bass_roll_view.draw_inspector();
             }
             scoring_view.draw();
-            // The tabs' order in their group is the order they are first drawn: Log, Preflight,
-            // Rig, Show.
+            // The tabs' order (Log, Preflight, Rig, Show) is set by apply_default_layout.
             log_view.draw();
             preflight_view.draw();
             rig_view.draw();

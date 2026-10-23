@@ -25,6 +25,18 @@ ImGuiWindowClass pinned_class(ImGuiDockNodeFlags extra) {
     return c;
 }
 
+// Docks a tab at a given place in its group. ImGui sorts a new tab bar by each window's saved dock
+// order, which an older layout in imgui.ini may still hold, so the order is set here too.
+void dock_tab(const char *name, ImGuiID node, short order) {
+    ImGui::DockBuilderDockWindow(name, node);
+    if (ImGuiWindow *window = ImGui::FindWindowByName(name)) {
+        window->DockOrder = order;
+    }
+    if (ImGuiWindowSettings *settings = ImGui::FindWindowSettingsByID(ImHashStr(name))) {
+        settings->DockOrder = order;
+    }
+}
+
 // Fills the splitter gap of every visible left-right split under node, over the split's height,
 // fading towards its top and bottom.
 void draw_vertical_dividers(const ImGuiDockNode *node, ImDrawList &draw_list,
@@ -101,11 +113,11 @@ void apply_default_layout(ImGuiID dockspace_id) {
     ImGui::DockBuilderDockWindow("Preview", preview);
     ImGui::DockBuilderDockWindow("Note inspector", inspector);
     ImGui::DockBuilderDockWindow("Scoring", inspector); // Tabbed behind the inspector.
-    // Tabs in the order main draws them on first use: Log, Preflight, Rig, Show.
-    ImGui::DockBuilderDockWindow("Log", tabs);
-    ImGui::DockBuilderDockWindow("Preflight", tabs);
-    ImGui::DockBuilderDockWindow("Rig", tabs);
-    ImGui::DockBuilderDockWindow("Show", tabs);
+    // Tabs in this order: Log, Preflight, Rig, Show.
+    dock_tab("Log", tabs, 0);
+    dock_tab("Preflight", tabs, 1);
+    dock_tab("Rig", tabs, 2);
+    dock_tab("Show", tabs, 3);
     ImGui::DockBuilderFinish(dockspace_id);
 }
 
