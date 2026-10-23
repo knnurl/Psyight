@@ -231,6 +231,7 @@ Done:
 - Layout: tabs Log, Preflight, Rig, Show; Analysis (F7) in React and Show.
 - Rig presets are generators with settings (counts, sizes, switches, overall width as Scale, Density).
 - Live: 1.5 s of silence ends the music (beat lets go, lights fade over 2 s).
+- The owner's logo is the app icon: assets/icon/psyight.ico (tools/python/make_icon.py; small sizes crop to the "P") in the exe as GLFW_ICON (app/src/gui/psyight.rc), so Explorer, the title bar and the taskbar all show it.
 Open:
 - The owner labels sections in the labelling mode; then tune the section rules with --sections-eval.
 - An image of ST's Zio pinout was offered for the PDF: waiting for it as a file, and for the owner's choice on ST's artwork in a public repo.

@@ -1,2 +1,4 @@
 # Binary: never convert line endings.
 *.pdf binary
+*.ico binary
+*.png binary

@@ -100,7 +100,8 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/scoring_view.cpp src/gui/log_view.cpp src/io/midi_input.cpp
                        src/gui/crash_guard_win32.cpp src/gui/capture.cpp src/gui/theme.cpp
                        src/gui/file_dialog_win32.cpp src/gui/settings_view.cpp
-                       src/gui/colormaps.cpp src/gui/widgets.cpp src/gui/status_bar.cpp src/gui/setup_assistant.cpp)
+                       src/gui/colormaps.cpp src/gui/widgets.cpp src/gui/status_bar.cpp src/gui/setup_assistant.cpp
+                       src/gui/psyight.rc)
 target_include_directories(psyight PRIVATE src)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32

@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon/psyight_logo.png" alt="Psyight logo" width="240"></p>
+
 # Psyight
 
 Psyight listens to music and turns it into LED pixel shows. It detects musical events with high accuracy and drives WS2812-class strips over sACN or Art-Net. It is built first for dark psytrance at around 150 to 160 BPM, where the rolling bassline matters as much as the kick: every bass note's onset, length, gate, decay, pitch and slide is tracked, not just the beat.
@@ -66,6 +68,7 @@ firmware/node-f767/   STM32F767 Art-Net and sACN pixel node (8 strips, DMA drive
 tools/python/         offline only: Demucs separation, model training and export
 prototypes/           browser prototypes from the design phase
 docs/                 specification, operator guide, results, plans
+assets/               fonts and the icon (tools/python/make_icon.py builds psyight.ico from the logo)
 ```
 
 ## Building
