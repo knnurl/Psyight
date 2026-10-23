@@ -1,6 +1,6 @@
 # Psyight progress and handoff
 
-Last updated: 2026-10-19. Written so another agent can pick up without the original session.
+Last updated: 2026-10-23. Written so another agent can pick up without the original session.
 
 ## Read first
 - `CLAUDE.md` (process, conventions, commands), `docs/SPEC.md` (requirements; decision log in section 16).
@@ -221,6 +221,20 @@ Not software (owner): spare-node workflow, PAT-ready hardware, fusing, enclosure
 - Phase 4 (branch restyle-layout): the owner's layout. Transport strip over the left column (icon buttons, 24 px mono timecode, volume drag, the overview beside them; no tab bar, pinned); analysis and bass roll below. Right column: the rig preview pinned on top (folds; unfold from the top bar or View > Rig preview), the note inspector with scoring, then Show (the show controls, split out of the preview), log, rig and preflight. The bottom right node is central, so hidden panels give their space away. The mode radio buttons are a segmented control. Show mode (React or Show): the Show theme, the editing panels hidden and the rig drawn large in a Stage window where the bass roll was; leaving restores both; File > Settings switches each part off. Dock space v7 (saved layouts get the new default once). Frame time median desk 3.30, show 3.17 ms.
 - Settings persist (owner, 2026-10-18): psyight.settings.json in the working directory (gitignored) keeps the theme, interface depth, spectrogram colours and range, volume and the bass roll toggles. io/user_settings.*, tests/user_settings_test.cpp.
 - Phase 4 layout chosen by the owner (2026-10-18): a compact transport strip over the left column only, the rig preview pinned top right (foldable), inspector and scoring under it, show controls in a Show tab beside log, rig and preflight. Order kept: phases 2 and 3 first.
+
+## Session 2026-10-22 to 2026-10-23 (this machine; all on main and pushed)
+Done:
+- Node firmware protocol 3: lane colour orders, palette as RGB, config version 2 upgrading version 1; link-local DHCP fallback (169.254.x.y/16 from the MAC); ArtPollReply broadcast on the subnet; console receive counters (frames, polls, starved, resumed). Data lines moved to PD0..PD7 (all on the Zio headers). Flashed on the bench board, which works end to end with the app.
+- App, node side: Node setup sends orders and the signal-loss settings (Project::node), plans lines for 60 fps (lotus: 537, 510, 380), One strip per data line option, resends config commands, shows each line's pin; Patch by strip shows each strip's line and pin; discovery at start, on network changes and every 5 s while none answered, bound per interface and repeated; show output (multicast too) leaves on the node's interface.
+- docs/NODE_WIRING_GUIDE.pdf (tools/python/make_node_guide.py): wiring, the board pinout (top view, every Zio pin from UM1974), flashing, set-up, troubleshooting.
+- Labelling mode (View > Label sections, F9) and psyight_analyse --sections-eval; labels gain phrases and sections_done.
+- Layout: tabs Log, Preflight, Rig, Show; Analysis (F7) in React and Show.
+- Rig presets are generators with settings (counts, sizes, switches, overall width as Scale, Density).
+- Live: 1.5 s of silence ends the music (beat lets go, lights fade over 2 s).
+Open:
+- The owner labels sections in the labelling mode; then tune the section rules with --sections-eval.
+- An image of ST's Zio pinout was offered for the PDF: waiting for it as a file, and for the owner's choice on ST's artwork in a public repo.
+- Trails as a post-effect still need a decision.
 
 ## Session 2026-10-21 to 2026-10-22 (second machine, Windows 10, VS 2019 only at first)
 Process: built from a clean clone; VS 2019 16.7 cannot build it (fmt 11, abbreviated templates), so VS 2022 Build Tools (MSVC 19.44, compiler only) were installed to D:\VS2022BT with vcpkg cloned to D:\vcpkg; the machine's own CMakeUserPresets.json (gitignored, preset "local") and build_local.cmd (untracked) hold the paths. Node firmware: Arm GNU Toolchain 13.3.rel1 unzipped to D:\ArmGNU (checksum checked), ST sources by fetch_deps.ps1. graphify 0.9.93 (pipx, D:\pipx) maps the code: `graphify extract . --code-only` writes graphify-out/ (local only, excluded in .git/info/exclude).

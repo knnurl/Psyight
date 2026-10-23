@@ -251,7 +251,33 @@ void RigView::draw_presets(std::vector<StripSpec> &strips) {
     for (size_t k = 0; k < preset.params.size(); ++k) {
         const RigPresetParam &q = preset.params[k];
         ImGui::PushID(static_cast<int>(k));
-        if (q.toggle) {
+        if (q.id == "scale") {
+            // Scale shown as the overall size: the width the shape has at scale 1 (with the
+            // other settings as they are) times the scale; typing a width sets the scale.
+            std::vector<double> unscaled = values;
+            unscaled[k] = 1.0;
+            const std::vector<StripSpec> base = build_rig_preset(preset, unscaled);
+            double min_x = 1e9, max_x = -1e9, min_y = 1e9, max_y = -1e9;
+            for (const StripSpec &s : base) {
+                for (const Vec3 &v : s.polyline) {
+                    min_x = std::min(min_x, v.x);
+                    max_x = std::max(max_x, v.x);
+                    min_y = std::min(min_y, v.y);
+                    max_y = std::max(max_y, v.y);
+                }
+            }
+            const double width_m = std::max(0.01, max_x - min_x);
+            const double height_m = std::max(0.0, max_y - min_y);
+            double overall_m = width_m * values[k];
+            ImGui::SetNextItemWidth(field);
+            if (drag_double("Overall width", &overall_m, 0.01f, q.min * width_m, q.max * width_m,
+                            "%.2f m")) {
+                values[k] = std::clamp(overall_m / width_m, q.min, q.max);
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("%.2f m tall", height_m * values[k]);
+            ImGui::SetItemTooltip("Scales the whole shape (%.2f x its own size).", values[k]);
+        } else if (q.toggle) {
             bool on = values[k] >= 0.5;
             if (ImGui::Checkbox(q.label.c_str(), &on)) {
                 values[k] = on ? 1.0 : 0.0;

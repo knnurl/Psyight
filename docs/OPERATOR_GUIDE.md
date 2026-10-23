@@ -32,7 +32,7 @@ The window: the transport (play, loop, half speed, time, volume, the track's wav
 Hover the rig preview to see each strip's name and an arrow at its first pixel (where its data comes in); the strip under the mouse is outlined, and its row lights up in the Rig tab (and hovering a row there outlines the strip).
 
 
-Rig tab (Engineer depth) > New rig starts the rig from one of three sources, side by side as tabs. **Templates** build it from a few numbers: **Pillars** (how many, height, spacing or a circle, density, serpentine wiring) or a **Matrix panel** (rows, width, row spacing, density, zigzag wiring). **Presets** are 17 ready-made shapes, listed under Stage builds, Hive, Sacred geometry and Organic (hover a name for its size and groups). **My rigs** are the ones you saved: name the current rig at the bottom of that tab and press "Save to my rigs" to start any project from it later; Delete removes one. The line under them shows strips, pixels, universes and the current at full white. "Replace the rig..." swaps the strips after a confirmation; scenes, palettes and settings stay. The strips get group tags (left and right, top and bottom, even and odd) that layers can be limited to. Each strip can still be edited by hand below.
+Rig tab (Engineer depth) > New rig starts the rig from one of three sources, side by side as tabs. **Templates** build it from a few numbers: **Pillars** (how many, height, spacing or a circle, density, serpentine wiring) or a **Matrix panel** (rows, width, row spacing, density, zigzag wiring). **Presets** are 17 shapes, listed under Stage builds, Hive, Sacred geometry and Organic (hover a name for its size and groups). Each has its own settings under the list: counts (the pixel wall's rows, the lotus's petals, the sunburst's rays, the tree's splits), sizes and switches, plus **Overall width** (the whole shape scaled; its height is shown beside it) and **Density**. Defaults is the preset as described. **My rigs** are the ones you saved: name the current rig at the bottom of that tab and press "Save to my rigs" to start any project from it later; Delete removes one. The line under them shows strips, pixels, universes and the current at full white. "Replace the rig..." swaps the strips after a confirmation; scenes, palettes and settings stay. The strips get group tags (left and right, top and bottom, even and odd) that layers can be limited to. Each strip can still be edited by hand below.
 
 ## Before the show: Preflight
 
@@ -52,9 +52,11 @@ Every check line should be green; read every amber line:
 - **Limiter:** the flash limiter is on (3 flashes a second).
 - **Timing:** the latency offset is set.
 - **Network:** the protocol, the destination and which interface sends.
-- **Nodes:** press "Discover Art-Net nodes" once on the show network; your node should be listed.
+- **Nodes:** found by themselves at start, when the network changes, and every 5 s until one answers ("Discover Art-Net nodes" polls at once). If none answers although the node's console shows its address, Windows Firewall may be blocking Psyight: allow psyight.exe on public networks (a direct cable counts as one).
 
 "Copy report" puts the whole list on the clipboard, which helps when asking for help.
+
+**Node setup** (Preflight) works out the node's data lines from the rig: strips chained in patch order, each line short enough for 60 fps when the eight lines allow it, or with **One strip per data line**, each strip on its own pin (rigs of up to 8 strips). It shows each line's pin and header position (PD0 to PD7, all on the Zio headers; see docs/NODE_WIRING_GUIDE.pdf), what the node does when the show's signal stops (hold, fade, fallback show or blackout), then Set up the node applies it at once and Save on the node keeps it. The Rig tab's Patch by strip shows each strip's line and pin too. Show output follows the network port where the node was found.
 
 ## Two ways to run
 

@@ -39,15 +39,19 @@ Optional offline Demucs stems improve every detector.
 - A state ladder (Preview, Ambient, React, Show), so nothing reaches the lights by accident.
 
 **Output.**
-- sACN (E1.31) and Art-Net with sync.
+- sACN (E1.31) and Art-Net with sync, sent through the network port where the node was found.
 - A virtual node and test patterns.
-- Node discovery.
+- Automatic node discovery, and node setup from the rig: data lines and pins, colour orders and what the node does when the signal stops.
+
+**Rigs.** Templates (pillars, matrix panels) and 17 presets, each adjustable (counts, sizes, overall width, density), plus your own saved rigs.
 
 **Operator tools.**
 - An Ableton-style device rack for scenes.
 - A Perform view, MIDI learn and a setup assistant.
 - Undo for show edits.
 - A bass roll with labelling and scoring against hand-labelled ground truth.
+- A labelling mode for sections and phrases across a music library, with a score of the detection against the labelled tracks.
+- In live mode, silence ends the music: the beat lets go and the lights fade out.
 
 ## Repository layout
 
