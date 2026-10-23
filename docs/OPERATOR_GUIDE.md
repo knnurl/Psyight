@@ -60,7 +60,7 @@ Every check line should be green; read every amber line:
 
 **From files** (prepared tracks, best accuracy): drop a WAV, FLAC or MP3 onto the window and press Space to play. The whole track is analysed first, from its Demucs stems when they exist, so events are known ahead and nothing lags.
 
-**Live** (a DJ set, unknown music): in the Show tab, open "Live input", choose a source and press Start.
+**Live** (a DJ set, unknown music): in the Show tab, open "Live input", choose a source and press Start. When the music stops (1.5 s of silence), the beat lets go and the lights fade out over 2 s; the next track's kicks lock the beat again.
 
 - **Loopback:** whatever this computer plays (DJ software on the same laptop).
 - **An input device:** the mixer's booth output into an audio interface. A virtual cable (for example "Line 1 (Virtual Audio Cable)") also works: route the DJ software to it.

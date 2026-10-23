@@ -67,6 +67,7 @@ Result<void> LiveAnalyser::prepare(int sample_rate_hz, const StudentModel &model
 }
 
 void LiveAnalyser::reset() {
+    quiet_frames_ = 0;
     features_.reset();
     student_->reset();
     pending_count_ = 0;
@@ -122,6 +123,23 @@ void LiveAnalyser::process(std::span<const float> samples) {
 }
 
 void LiveAnalyser::run_frame() {
+    // Silence (the music stopped): the hop's RMS below the silence level for silence_s.
+    double energy = 0.0;
+    for (const float x : pending_) {
+        energy += static_cast<double>(x) * x;
+    }
+    const double rms = pending_.empty() ? 0.0 : std::sqrt(energy / pending_.size());
+    if (rms < params_.silence_rms) {
+        ++quiet_frames_;
+    } else {
+        quiet_frames_ = 0;
+        state_.silent = false;
+    }
+    if (!state_.silent && static_cast<double>(quiet_frames_) * frame_s_ >= params_.silence_s) {
+        state_.silent = true;
+        state_.silent_since_s = static_cast<double>(input_frames_) * frame_s_;
+        beat_.on_silence(state_);
+    }
     features_.frame(feature_frame_);
     // The residual's timbre from this input frame's bands above 400 Hz.
     double power_sum = 0.0, weighted = 0.0, log_sum = 0.0;
@@ -390,6 +408,17 @@ void LiveBeat::set_downbeat(LiveState &s, double t_s) {
 void LiveBeat::nudge(LiveState &s, double seconds) {
     if (s.tempo_known) {
         s.anchor_s += seconds;
+    }
+}
+
+void LiveBeat::on_silence(LiveState &s) {
+    relock(s);
+    s.tempo_known = false; // No beat to predict: the lights stop pulsing.
+    s.kick_streak = 0;
+    s.riser = 0.0;
+    s.section_energy = 0;
+    if (s.section != LiveSection::intro) {
+        set_section(s, LiveSection::intro, s.silent_since_s);
     }
 }
 

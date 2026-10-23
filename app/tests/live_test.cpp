@@ -396,3 +396,43 @@ TEST_CASE("live beat: the riser rises through a build, never falls, and ends wit
     CHECK(rig.state.riser == 0.0);
     CHECK(rig.state.section_energy == 2);
 }
+
+TEST_CASE("live: silence ends the music: the beat lets go, then sound brings it back") {
+    const Result<StudentModel> model =
+        load_student(std::filesystem::path(PSYIGHT_TESTS_DIR) / "data" / "student_fixture");
+    REQUIRE(model.ok());
+    LiveAnalyser live;
+    REQUIRE(live.prepare(kRate, model.value()).ok());
+    const std::vector<float> music = test_signal(kRate * 2);
+    live.process(music);
+    CHECK_FALSE(live.state().silent);
+    const std::vector<float> quiet(static_cast<size_t>(kRate), 0.0f);
+    live.process(quiet); // One second: not yet.
+    CHECK_FALSE(live.state().silent);
+    live.process(quiet); // Two: silent (1.5 s), found at about 3.5 s.
+    REQUIRE(live.state().silent);
+    CHECK(live.state().silent_since_s == doctest::Approx(3.5).epsilon(0.02));
+    CHECK_FALSE(live.state().tempo_known);
+    CHECK_FALSE(live.state().locked);
+    CHECK(live.state().section == LiveSection::intro);
+    live.process(music); // Sound again.
+    CHECK_FALSE(live.state().silent);
+}
+
+TEST_CASE("live beat: on silence a locked beat stops predicting") {
+    BeatRig rig;
+    for (int b = 0; b < 32; ++b) {
+        rig.kick(1.0 + b * 0.4);
+    }
+    REQUIRE(rig.state.locked);
+    REQUIRE(rig.state.tempo_known);
+    rig.state.silent = true;
+    rig.state.silent_since_s = 14.0;
+    rig.beat.on_silence(rig.state);
+    CHECK_FALSE(rig.state.tempo_known);
+    CHECK_FALSE(rig.state.locked);
+    CHECK(rig.state.section == LiveSection::intro);
+    const EngineInputs in = inputs_at(rig.state, 20.0);
+    CHECK(in.since_kick_s > 6.0); // The last real kick, not a predicted beat.
+    CHECK(in.beat_phase == 0.0);
+}

@@ -84,6 +84,10 @@ struct LiveParams {
     double novelty_memory_bars = 32.0;
     int novelty_min_bars = 8;     // Bars of novelty before it may decide.
     double downbeat_margin = 0.1; // Of the best phase's mean.
+    // Silence: the input below silence_rms (about -55 dBFS) for silence_s ends the music: the
+    // beat lets go (tempo unknown, acquiring again) and the section returns to the intro.
+    double silence_rms = 0.0018;
+    double silence_s = 1.5;
 };
 
 inline constexpr double kLiveNever = -std::numeric_limits<double>::infinity();
@@ -136,8 +140,10 @@ struct LiveState {
     LiveSection section = LiveSection::intro;
     double section_start_s = 0.0;
     int section_count = 0;
-    int section_energy = 1; // 0 low, 1 mid, 2 high (as file mode's DetectedSection::energy).
-    double riser = 0.0;     // 0 to 1 through a build (as file mode's riser curve).
+    int section_energy = 1;    // 0 low, 1 mid, 2 high (as file mode's DetectedSection::energy).
+    bool silent = false;       // The music stopped (LiveParams::silence_s of silence).
+    double silent_since_s = 0; // When it was found silent (the show fades from here).
+    double riser = 0.0;        // 0 to 1 through a build (as file mode's riser curve).
     // For the scene rotation (engine/automation.h): starts of each kind so far, the current one
     // included, and the section before the current one.
     std::array<int, 5> section_occurrences{};
@@ -164,6 +170,8 @@ class LiveBeat {
     static void set_downbeat(LiveState &state, double t_s);
     static void nudge(LiveState &state, double seconds); // Moves the predicted beats later.
     void relock(LiveState &state);                       // Measures the tempo again.
+    // The music stopped: no tempo, no prediction, the intro; the next kicks acquire afresh.
+    void on_silence(LiveState &state);
 
   private:
     void set_section(LiveState &state, LiveSection section, double start_s);
@@ -227,6 +235,7 @@ class LiveAnalyser {
     StudentFeatureStream features_;
     std::unique_ptr<StudentStream> student_;
     std::vector<float> pending_; // Samples of the hop being filled.
+    long long quiet_frames_ = 0; // Consecutive input hops below the silence level.
     size_t pending_count_ = 0;
     std::vector<float> feature_frame_, binary_, pitch_;
     long long input_frames_ = 0; // Feature frames computed.

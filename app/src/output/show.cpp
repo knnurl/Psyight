@@ -37,6 +37,10 @@ class ShowRenderer::Tee final : public PacketSink {
     UdpSocket *socket_;
 };
 
+namespace {
+constexpr double kSilenceFadeS = 2.0; // Live: the lights fade out once the music stopped.
+} // namespace
+
 ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     const auto started = std::chrono::steady_clock::now();
     if (config.version != config_version_) {
@@ -84,8 +88,13 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         out = held_; // The look, frozen; the limiters and automation are skipped.
     } else if (config.analysis != nullptr || config.live != nullptr) {
         EngineInputs inputs;
+        double silence_fade = 1.0;
         if (config.live != nullptr) {
             const LiveState state = config.live->state();
+            if (state.silent) {
+                silence_fade =
+                    std::clamp(1.0 - (t_s - state.silent_since_s) / kSilenceFadeS, 0.0, 1.0);
+            }
             inputs = inputs_at(state, t_s);
             const int manual =
                 launcher_.update(config.manual_scene, inputs, config.automation.launch);
@@ -106,6 +115,11 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         } else {
             out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
                                    config.seed, &modulation_);
+            if (silence_fade < 1.0) { // Live, the music stopped: fade out.
+                for (Rgb &c : out.frame) {
+                    c = scaled(c, silence_fade);
+                }
+            }
             if (out.mix.to >= 0 && static_cast<size_t>(out.mix.to) < modulation_.size()) {
                 for (const ModRouteState &r : modulation_[static_cast<size_t>(out.mix.to)]) {
                     out.route_values.push_back(r.value);
