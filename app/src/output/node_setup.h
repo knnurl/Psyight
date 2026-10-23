@@ -54,6 +54,9 @@ struct NodePlan {
     int active_mask() const;
 };
 
+// Where lane `lane` (0 to 7) leaves the NUCLEO-F767ZI: "PD0 (CN9 pin 25)" and so on; "" outside.
+const char *node_lane_pin(int lane);
+
 // A lane's highest frame rate on the node (SPEC 12.3).
 double node_lane_max_fps(int pixels);
 

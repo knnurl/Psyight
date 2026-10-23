@@ -687,3 +687,11 @@ TEST_CASE("node setup: lines kept short enough for 60 fps when the eight allow i
         CHECK(node_lane_max_fps(lane.pixels) >= 60.0);
     }
 }
+
+TEST_CASE("node setup: each lane's pin and header position (port D, UM1974 table 13)") {
+    CHECK(std::string(node_lane_pin(0)) == "PD0 (CN9 pin 25)");
+    CHECK(std::string(node_lane_pin(2)) == "PD2 (CN8 pin 12)");
+    CHECK(std::string(node_lane_pin(7)) == "PD7 (CN9 pin 2)");
+    CHECK(std::string(node_lane_pin(8)).empty());
+    CHECK(std::string(node_lane_pin(-1)).empty());
+}

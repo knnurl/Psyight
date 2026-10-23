@@ -86,6 +86,14 @@ NodePlan plan_node(const Project &project) {
     return plan;
 }
 
+const char *node_lane_pin(int lane) {
+    // UM1974 Table 13 (firmware/node-f767/src/ws2812: PD0 to PD7).
+    static const char *const kPins[kNodeLanes] = {
+        "PD0 (CN9 pin 25)", "PD1 (CN9 pin 27)", "PD2 (CN8 pin 12)", "PD3 (CN9 pin 10)",
+        "PD4 (CN9 pin 8)",  "PD5 (CN9 pin 6)",  "PD6 (CN9 pin 4)",  "PD7 (CN9 pin 2)"};
+    return lane >= 0 && lane < kNodeLanes ? kPins[lane] : "";
+}
+
 double node_lane_max_fps(int pixels) { return 1.0 / (std::max(0, pixels) * 30e-6 + 300e-6); }
 
 namespace {

@@ -5,6 +5,7 @@
 #include "gui/tier.h"
 #include "gui/widgets.h"
 #include "io/presets.h"
+#include "output/node_setup.h"
 
 #include <imgui.h>
 #include <imgui_internal.h> // TableGetHoveredRow.
@@ -528,6 +529,8 @@ void RigView::draw_patch() {
               p.limiter.budget_a, p.limiter.budget_a <= 0.0 ? " (off)" : "");
     // Where each strip lands.
     if (ImGui::TreeNode("Patch by strip")) {
+        // Each strip's data line on the node, as Preflight > Node setup would set it up.
+        const NodePlan plan = plan_node(p);
         size_t first = 0;
         for (size_t s = 0; s < p.strips.size(); ++s) {
             const auto count = static_cast<size_t>(std::max(0, p.strips[s].spec.count));
@@ -537,11 +540,24 @@ void RigView::draw_patch() {
             }
             const PatchedPixel &a = patch.pixels[first];
             const PatchedPixel &b = patch.pixels[first + count - 1];
-            mono_text("%s: universe %d channel %d to universe %d channel %d (%s)",
+            std::string line;
+            for (size_t l = 0; l < plan.lanes.size(); ++l) {
+                const NodeLane &lane = plan.lanes[l];
+                const int in_chain = static_cast<int>(s) - lane.first_strip;
+                if (in_chain >= 0 && in_chain < lane.strips) {
+                    line = "; line " + std::to_string(l + 1) + ", " +
+                           node_lane_pin(static_cast<int>(l));
+                    if (lane.strips > 1) {
+                        line += ", " + std::to_string(in_chain + 1) + " of " +
+                                std::to_string(lane.strips) + " in its chain";
+                    }
+                }
+            }
+            mono_text("%s: universe %d channel %d to universe %d channel %d (%s)%s",
                       p.strips[s].spec.name.c_str(),
                       patch.universes[static_cast<size_t>(a.universe_slot)], a.channel + 1,
                       patch.universes[static_cast<size_t>(b.universe_slot)], b.channel + 3,
-                      colour_order_name(p.strips[s].order));
+                      colour_order_name(p.strips[s].order), line.c_str());
             first += count;
         }
         ImGui::TreePop();

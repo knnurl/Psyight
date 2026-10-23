@@ -443,7 +443,7 @@ void PreflightView::draw_node_setup() {
             const NodeLane &lane = plan.lanes[l];
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            mono_text("%zu (PD%zu)", l + 1, l);
+            mono_text("%zu  %s", l + 1, node_lane_pin(static_cast<int>(l)));
             ImGui::TableNextColumn();
             const std::string &first =
                 project.strips[static_cast<size_t>(lane.first_strip)].spec.name;
