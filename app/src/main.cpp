@@ -195,6 +195,7 @@ void handle_shortcuts(psyight::Session &session, psyight::ProjectState &project)
 } // namespace
 
 int main() {
+    psyight::attach_parent_console(); // A windowed app: a terminal only when started from one.
     // Capture mode (gui/capture.h): a hidden fixed-size window rendered offscreen to a PNG.
     std::optional<psyight::CaptureArgs> capture;
     if (auto parsed = psyight::parse_capture_args(psyight::command_line_paths()); parsed) {

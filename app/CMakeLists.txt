@@ -105,6 +105,10 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/colormaps.cpp src/gui/widgets.cpp src/gui/status_bar.cpp src/gui/setup_assistant.cpp
                        src/gui/psyight.rc)
 target_include_directories(psyight PRIVATE src)
+# A windowed program: no console window of its own (main stays the entry point); started from a
+# terminal it prints there (gui/command_line.h attach_parent_console).
+set_target_properties(psyight PROPERTIES WIN32_EXECUTABLE TRUE)
+target_link_options(psyight PRIVATE /ENTRY:mainCRTStartup)
 target_link_libraries(psyight PRIVATE psyight_options psyight_lib imgui::imgui implot::implot
                                       glfw OpenGL::GL spdlog::spdlog dwmapi shell32
                                       RtMidi::rtmidi dbghelp nlohmann_json::nlohmann_json ole32
