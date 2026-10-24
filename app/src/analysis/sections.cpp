@@ -12,6 +12,7 @@ constexpr int kBeatsPerBar = kSlotsPerBar / kSlotsPerBeat;
 
 constexpr int kMinRiserBreakdownBars = 4; // Shorter breakdowns have no flatness baseline.
 constexpr int kMaxRiserGapBars = 4;       // Bars between a riser's peak and the kick's return.
+constexpr int kTextureLineBars = 4;       // Texture changes split sections on 4-bar lines.
 
 // The riser build's first bar in the breakdown [begin, end), or -1 without a riser.
 int riser_start(const std::vector<SectionBar> &bars, int begin, int end, const SectionParams &p) {
@@ -108,6 +109,20 @@ Result<std::vector<SectionBar>> section_bars(const FrontEndResult &f, const Beat
             }
         }
         bar.level_db = 10.0 * std::log10(all / (end - begin) + 1e-12);
+        for (const BandTrack &band : f.bands) {
+            double band_power = 0.0;
+            for (int i = begin; i < end; ++i) {
+                band_power += std::pow(10.0, band.energy_db[i] / 10.0);
+            }
+            bar.texture.push_back(10.0 * std::log10(band_power / (end - begin) + 1e-12));
+        }
+        for (const int b : {band_index(f, "bass"), hats}) {
+            double flux = 0.0;
+            for (int i = begin; b >= 0 && i < end; ++i) {
+                flux += f.bands[b].flux[i];
+            }
+            bar.texture.push_back(std::log10(flux + 1e-6));
+        }
         if (residual != nullptr) {
             const int last = std::min(end, static_cast<int>(residual->flatness.size()));
             int sounding = 0;
@@ -276,6 +291,61 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
             }
         }
         m = n;
+    }
+
+    // Texture changes on 4-bar lines inside a groove or drop: each feature scaled over the
+    // track, the distance between a bar and the one before.
+    const size_t width = bar_list.front().texture.size();
+    std::vector<double> mean(width, 0.0);
+    std::vector<double> sd(width, 0.0);
+    for (const SectionBar &bar : bar_list) {
+        for (size_t d = 0; d < width; ++d) {
+            mean[d] += bar.texture[d] / bars;
+        }
+    }
+    for (const SectionBar &bar : bar_list) {
+        for (size_t d = 0; d < width; ++d) {
+            sd[d] += (bar.texture[d] - mean[d]) * (bar.texture[d] - mean[d]) / bars;
+        }
+    }
+    for (double &v : sd) {
+        v = std::sqrt(v);
+    }
+    for (int b = 1; b < bars; ++b) {
+        const bool line =
+            ((b - phrase_offset) % kTextureLineBars + kTextureLineBars) % kTextureLineBars == 0;
+        if (!line || label[b] != label[b - 1] || (label[b] != "groove" && label[b] != "drop")) {
+            continue;
+        }
+        // A bar with clearly fewer kicks than the bars around it (a fill, a stop, up to three
+        // bars as the kick hysteresis allows) is no change of texture: the comparison steps over.
+        const auto dropout = [&](int m) {
+            int most = 0;
+            for (int k = std::max(0, m - kTextureLineBars);
+                 k <= std::min(bars - 1, m + kTextureLineBars); ++k) {
+                most = std::max(most, kick_beats[k]);
+            }
+            return kick_beats[m] + 2 <= most;
+        };
+        int before = b - 1;
+        while (before > 0 && before > b - 4 && dropout(before)) {
+            --before;
+        }
+        int after = b;
+        while (after + 1 < bars && after < b + 3 && dropout(after)) {
+            ++after;
+        }
+        double distance = 0.0;
+        for (size_t d = 0; d < width; ++d) {
+            if (sd[d] > 1e-9) {
+                const double change =
+                    (bar_list[after].texture[d] - bar_list[before].texture[d]) / sd[d];
+                distance += change * change;
+            }
+        }
+        if (std::sqrt(distance) >= p.texture_step) {
+            cut[b] = true;
+        }
     }
 
     // Merge runs of equal labels.
@@ -451,6 +521,7 @@ const ParamEntry kParamTable[] = {
     {&SectionParams::kick_switch_penalty, "section.kick_switch_penalty", "Kick hysteresis", "beats", 0.0, 32.0, ParamTier::tune, "Beats of evidence a change between kick and no kick costs: higher keeps fills and dropouts inside the groove."},
     {&SectionParams::energy_step_db, "section.energy_step_db", "Energy step", "dB", 0.5, 20.0, ParamTier::tune, "A level change between phrases that splits a groove into two sections."},
     {&SectionParams::build_snap_bars, "section.build_snap_bars", "Build snap", "bars", 0.0, 2.0, ParamTier::engineer, "A build start this close to a 4-bar line moves onto it."},
+    {&SectionParams::texture_step, "section.texture_step", "Texture step", "", 0.2, 10.0, ParamTier::tune, "How much a bar's sound (band levels, bass and hats density, scaled over the track) must change from the bar before to start a new section on a 4-bar line."},
 };
 // clang-format on
 
@@ -468,7 +539,8 @@ Result<void> declare_section_params(ParamRegistry &registry) {
         const bool continuous = entry.member == &SectionParams::build_min_rise_db ||
                                 entry.member == &SectionParams::build_flatness_ratio ||
                                 entry.member == &SectionParams::build_min_flatness ||
-                                entry.member == &SectionParams::energy_step_db;
+                                entry.member == &SectionParams::energy_step_db ||
+                                entry.member == &SectionParams::texture_step;
         spec.step = continuous ? 0.0 : 1.0;
         spec.tier = entry.tier;
         spec.description = entry.description;

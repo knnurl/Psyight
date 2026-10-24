@@ -465,7 +465,49 @@ int sections_report(const std::vector<std::wstring> &paths) {
     return per_minute.empty() ? 1 : 0;
 }
 
-int sections_eval(const std::vector<std::wstring> &paths) {
+// --detail: every labelled boundary (L) and every detected one (D) with its change, its bar
+// (from the labelled bar 1, and its place in an 8-bar phrase from there or from the labelled
+// phrase grid), whether the other side has one within a bar, and the kick either side.
+void print_boundary_detail(const Labels &l, const std::vector<SectionLabel> &detected,
+                           const TrackAnalysis &a) {
+    const double bar_s = bar_length_s(l.grid);
+    const double tolerance_s = bar_s + 1e-6;
+    const auto near_one = [&](const std::vector<SectionLabel> &list, double t) {
+        for (size_t j = 1; j < list.size(); ++j) {
+            if (std::fabs(list[j].start_s - t) <= tolerance_s) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto kick_at = [&](double t) {
+        for (const SectionBar &b : a.section_bars) {
+            if (t >= b.start_s && t < b.start_s + bar_s) {
+                return b.kick ? 'K' : '-';
+            }
+        }
+        return '?';
+    };
+    const LabelPhrases phrases =
+        l.phrases.set ? l.phrases : LabelPhrases{true, l.grid.first_downbeat_s, 8};
+    const auto print = [&](char kind, const std::vector<SectionLabel> &list,
+                           const std::vector<SectionLabel> &other) {
+        for (size_t i = 1; i < list.size(); ++i) {
+            const double t = list[i].start_s;
+            const LabelPhrases eight{true, phrases.start_s, 8};
+            std::printf("    %c %8.2f s  %-9s -> %-9s  bar %4lld  in phrase %d  %s  kick %c%c\n",
+                        kind, t, list[i - 1].label.c_str(), list[i].label.c_str(),
+                        bar_index_at(l.grid, t + 1e-6) + 1, bar_in_phrase(l.grid, eight, t + 1e-6),
+                        near_one(other, t) ? "hit " : "miss", kick_at(t - 0.5 * bar_s),
+                        kick_at(t + 0.5 * bar_s));
+        }
+    };
+    print('L', l.sections, detected);
+    print('D', detected, l.sections);
+}
+
+int sections_eval(const std::vector<std::wstring> &paths, bool detail,
+                  const SectionParams &section_params) {
     std::vector<std::filesystem::path> folders;
     std::vector<TrackEntry> tracks;
     for (const std::wstring &p : paths) {
@@ -499,6 +541,7 @@ int sections_eval(const std::vector<std::wstring> &paths) {
         TrackAnalysisOptions options;
         options.source = analysis_stems_exist(stem_paths_for(track.path)) ? AnalysisSource::stems
                                                                           : AnalysisSource::mix;
+        options.sections = section_params;
         const Result<TrackAnalysis> analysis = analyse_track(track.path, options);
         if (!analysis) {
             std::printf("%-50s  %s\n", track.name.substr(0, 50).c_str(),
@@ -531,6 +574,9 @@ int sections_eval(const std::vector<std::wstring> &paths) {
                     track.name.substr(0, 50).c_str(), s.precision(), s.recall(), s.f1(),
                     s.labelled_boundaries, s.detected_boundaries, 100.0 * s.bar_accuracy(),
                     phrase.c_str(), options.source == AnalysisSource::stems ? "stems" : "mix");
+        if (detail) {
+            print_boundary_detail(l, detected, a);
+        }
         std::fflush(stdout);
     }
     if (scored == 0) {
@@ -551,6 +597,7 @@ int wmain(int argc, wchar_t **argv) {
     bool bar_table = false;
     bool report = false;
     bool evaluate = false;
+    bool detail = false;
     TrackAnalysisOptions options;
     std::vector<std::wstring> paths;
     for (int i = 1; i < argc; ++i) {
@@ -562,6 +609,10 @@ int wmain(int argc, wchar_t **argv) {
             report = true;
         } else if (std::wcscmp(argv[i], L"--sections-eval") == 0) {
             evaluate = true;
+        } else if (std::wcscmp(argv[i], L"--texture-step") == 0 && i + 1 < argc) {
+            options.sections.texture_step = std::wcstod(argv[++i], nullptr);
+        } else if (std::wcscmp(argv[i], L"--detail") == 0) {
+            detail = true;
         } else if (std::wcscmp(argv[i], L"--bars") == 0) {
             bar_table = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
@@ -580,7 +631,7 @@ int wmain(int argc, wchar_t **argv) {
         return sections_report(paths);
     }
     if (evaluate) {
-        return sections_eval(paths);
+        return sections_eval(paths, detail, options.sections);
     }
     int status = 0;
     for (const std::wstring &path : paths) {

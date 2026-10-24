@@ -24,6 +24,10 @@
 // - energy: grooves split where the level changes by energy_step_db or more between phrases (a
 //   groove that steps up); every section then gets an energy level, low, mid or high, from its
 //   level against the track's bar levels (terciles);
+// - texture: a groove or drop also splits on a 4-bar line of the phrase grid where the bar's
+//   texture (the five bands' levels and the bass and hats onset density, each scaled over the
+//   track) differs from the bar before by texture_step or more (the kick runs on: a layer comes
+//   in, the bass changes; on the owner's labelled tracks most changes are of this kind);
 // - build starts within build_snap_bars of a 4-bar line of the phrase grid move onto it.
 // Confidence is the share of beats in the section that agree with its kick state.
 // Assumptions: 4/4 on the beat tracker's grid. Deterministic. Latency: non-causal (file mode).
@@ -52,6 +56,7 @@ struct SectionParams {
     double kick_switch_penalty = 6.0; // Beats of disagreement a change of kick state costs.
     double energy_step_db = 3.0;      // A level change between phrases that splits a groove.
     double build_snap_bars = 1.0;     // A build start this close to a 4-bar line moves onto it.
+    double texture_step = 1.5; // Bar-to-bar texture change (track-scaled) splitting on 4-bar lines.
 };
 
 // One bar of the grid as the section rules see it (also printed by psyight_analyse --bars).
@@ -63,6 +68,9 @@ struct SectionBar {
     double level_db = 0.0;    // All bands' mean power: the bar's loudness.
     double flatness = 0.0;    // The residual's mean spectral flatness over sounding frames, 0 to 1.
     double centroid_hz = 0.0; // The residual's mean spectral centroid over sounding frames.
+    // The front end's band levels (dB) in band order, then the bass and hats bands' onset
+    // density (log of the summed flux).
+    std::vector<double> texture;
 };
 
 struct DetectedSection {
