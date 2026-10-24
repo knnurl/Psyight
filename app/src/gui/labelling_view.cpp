@@ -754,16 +754,18 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
             if (!phrase_start && !phrase_middle && bar_px < 4.0f) {
                 continue;
             }
-            const float top = phrase_start ? 0.0f : phrase_middle ? 0.3f : 0.55f;
-            const float alpha = phrase_start ? 0.9f : phrase_middle ? 0.45f : 0.18f;
+            const bool strong = phrase_start || phrase_middle;
+            const float alpha = phrase_start ? 0.9f : phrase_middle ? 0.5f : 0.18f;
             draw->AddLine(
-                ImVec2(x, ruler_y + top * ruler_h), ImVec2(x, p0.y + height),
-                to_u32(with_alpha(phrase_start ? theme().phrase_tick : theme().text_dim, alpha)),
+                ImVec2(x, ruler_y + (strong ? 0.0f : 0.55f * ruler_h)), ImVec2(x, p0.y + height),
+                to_u32(with_alpha(strong ? theme().phrase_tick : theme().text_dim, alpha)),
                 phrase_start ? 1.5f : 1.0f);
-            if (phrase_start && 8.0f * bar_px > 2.2f * em) {
+            if (strong && 4.0f * bar_px > 2.2f * em) {
                 char text[16];
                 std::snprintf(text, sizeof(text), "%lld", b + 1);
-                draw->AddText(ImVec2(x + 2.0f, ruler_y), to_u32(theme().text_dim), text);
+                draw->AddText(ImVec2(x + 2.0f, ruler_y),
+                              to_u32(with_alpha(theme().text_dim, phrase_start ? 1.0f : 0.6f)),
+                              text);
             }
         }
     }
