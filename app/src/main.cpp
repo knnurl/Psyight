@@ -605,6 +605,7 @@ int main() {
                 psyight::wait_for_display_refresh();
                 file_flow.after_frame(glfwGetWin32Window(window)); // Its file dialogs.
                 labelling_view.after_frame(glfwGetWin32Window(window));
+                rig_view.after_frame(glfwGetWin32Window(window));
                 if (open_requested) { // After the frame is shown, not halfway through it.
                     open_requested = false;
                     if (const auto chosen =

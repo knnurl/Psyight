@@ -121,6 +121,11 @@ std::optional<std::filesystem::path> open_project_file_dialog(void *owner) {
     return show_dialog(owner, false, {kProjectFilters, 2, L"Open a project", nullptr, {}});
 }
 
+std::optional<std::filesystem::path> open_svg_file_dialog(void *owner) {
+    const COMDLG_FILTERSPEC filters[] = {{L"SVG drawing", L"*.svg"}, {L"All files", L"*.*"}};
+    return show_dialog(owner, false, {filters, 2, L"Make a rig from a drawing", nullptr, {}});
+}
+
 std::optional<std::filesystem::path> pick_folder_dialog(void *owner) {
     return show_dialog(owner, false, {nullptr, 0, L"Add a music folder", nullptr, {}, true});
 }

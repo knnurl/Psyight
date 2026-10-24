@@ -45,7 +45,7 @@ Optional offline Demucs stems improve every detector.
 - A virtual node and test patterns.
 - Automatic node discovery, and node setup from the rig: data lines and pins, colour orders and what the node does when the signal stops.
 
-**Rigs.** Templates (pillars, matrix panels) and 17 presets, each adjustable (counts, sizes, overall width, density), plus your own saved rigs.
+**Rigs.** Templates (pillars, matrix panels) and 18 presets, each adjustable (counts, sizes, overall width, density), your own saved rigs, and rigs drawn in Inkscape or any vector editor (SVG: one strip per path, groups from layers; a starting drawing is in [docs/examples](docs/examples/)).
 
 **Operator tools.**
 - An Ableton-style device rack for scenes.

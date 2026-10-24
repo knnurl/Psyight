@@ -1,6 +1,7 @@
 #include "gui/rig_view.h"
 
 #include "core/paths.h"
+#include "gui/file_dialog.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/widgets.h"
@@ -14,6 +15,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 
 namespace psyight {
 
@@ -123,8 +126,9 @@ void RigView::draw_templates() {
 }
 
 void RigView::draw_template_controls() {
-    // Three sources at one level: templates made from a few numbers, the built-in presets, and
-    // the rigs saved by the user. Each gives strips; the summary and Replace below are shared.
+    // Four sources at one level: templates made from a few numbers, the built-in presets, the
+    // rigs saved by the user, and a drawing. Each gives strips; the summary and Replace below are
+    // shared.
     std::vector<StripSpec> strips;
     bool mine = false;
     // Tabs inside a panel: the chosen one lighter with an accent line, the others blending in
@@ -148,6 +152,10 @@ void RigView::draw_template_controls() {
         if (ImGui::BeginTabItem("My rigs")) {
             mine = true;
             draw_user_rigs(strips);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("From SVG")) {
+            draw_svg(strips);
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -391,6 +399,81 @@ void RigView::draw_user_rigs(std::vector<StripSpec> &strips) {
         return;
     }
     strips = chosen.strips;
+}
+
+void RigView::draw_svg(std::vector<StripSpec> &strips) {
+    if (ImGui::Button("Choose a drawing...")) {
+        svg_requested_ = true;
+    }
+    ImGui::SetItemTooltip("An SVG from Inkscape or any vector editor, in real units (mm).");
+    if (!svg_status_.empty()) {
+        ImGui::TextColored(theme().warning, "%s", svg_status_.c_str());
+    }
+    if (svg_text_.empty()) {
+        ImGui::TextWrapped(
+            "Draw each light run as a path, the way its pixels run (Inkscape: Path > "
+            "Reverse turns one round). Layers name the groups: put the contour in "
+            "a layer called contour, the rings in rings. Hidden layers (a photo "
+            "traced over) are left out.");
+        return;
+    }
+    ImGui::TextUnformatted(svg_file_.c_str());
+    const float field = 7.0f * ImGui::GetFontSize();
+    ImGui::SetNextItemWidth(field);
+    drag_double("Width", &svg_options_.width_m, 0.01f, 0.05, 50.0, "%.2f m");
+    ImGui::SetItemTooltip("The whole drawing scaled to this width.");
+    ImGui::SetNextItemWidth(field);
+    drag_double("Bottom above the floor", &svg_options_.base_m, 0.01f, 0.0, 20.0, "%.2f m");
+    ImGui::SetNextItemWidth(field);
+    drag_double("Density", &svg_options_.pixels_per_m, 1.0f, 1.0, 1000.0, "%.0f px/m");
+    const auto same = [](const SvgRigOptions &a, const SvgRigOptions &b) {
+        return a.width_m == b.width_m && a.base_m == b.base_m && a.pixels_per_m == b.pixels_per_m;
+    };
+    if (!svg_built_ || !svg_built_options_ || !same(*svg_built_options_, svg_options_)) {
+        svg_built_ = rig_from_svg(svg_text_, svg_options_); // Only when a setting changed.
+        svg_built_options_ = svg_options_;
+    }
+    if (!*svg_built_) {
+        ImGui::TextColored(theme().warning, "%s", svg_built_->error().message.c_str());
+        return;
+    }
+    const SvgRig &rig = svg_built_->value();
+    mono_text("%.2f by %.2f m (drawn %.2f m wide)", rig.width_m, rig.height_m, rig.natural_width_m);
+    if (rig.too_short > 0) {
+        ImGui::TextDisabled("%d path%s shorter than a pixel left out.", rig.too_short,
+                            rig.too_short == 1 ? "" : "s");
+    }
+    strips = rig.strips;
+}
+
+void RigView::after_frame(void *owner) {
+    if (!svg_requested_) {
+        return;
+    }
+    svg_requested_ = false;
+    const auto chosen = open_svg_file_dialog(owner);
+    if (!chosen) {
+        return;
+    }
+    std::ifstream in(*chosen, std::ios::binary);
+    std::ostringstream text;
+    text << in.rdbuf();
+    if (!in) {
+        svg_status_ = "Could not read " + path_to_utf8(chosen->filename()) + ".";
+        return;
+    }
+    // Its own size first; the width field starts there.
+    const Result<SvgRig> made = rig_from_svg(
+        text.str(), SvgRigOptions{0.0, svg_options_.base_m, svg_options_.pixels_per_m});
+    if (!made) {
+        svg_status_ = path_to_utf8(chosen->filename()) + ": " + made.error().message;
+        return;
+    }
+    svg_status_.clear();
+    svg_text_ = text.str();
+    svg_file_ = path_to_utf8(chosen->filename());
+    svg_options_.width_m = made.value().natural_width_m;
+    svg_built_.reset();
 }
 
 void RigView::draw_save_rig() {

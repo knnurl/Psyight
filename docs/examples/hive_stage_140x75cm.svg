@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A starting point for a rig drawn in Inkscape (Rig > New rig > From SVG): a 140 by 75 cm
+     frame, one layer per group, every path running the way its pixels run (from the middle
+     outwards). The Frame layer is hidden, so it is left out: draw over it, or over a photo in a
+     hidden layer of its own. Units are millimetres. -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="1400mm" height="750mm" viewBox="0 0 1400 750">
+  <g inkscape:groupmode="layer" inkscape:label="Frame" style="display:none">
+    <rect x="0" y="0" width="1400" height="750" fill="none" stroke="#888" stroke-width="4"/>
+  </g>
+  <g inkscape:groupmode="layer" inkscape:label="Contour" fill="none" stroke="#c080ff" stroke-width="6">
+    <path inkscape:label="Right upper contour" d="M 700 45 Q 1150 45 1380 375"/>
+    <path inkscape:label="Left upper contour" d="M 700 45 Q 250 45 20 375"/>
+    <path inkscape:label="Right lower contour" d="M 700 705 Q 1150 705 1380 375"/>
+    <path inkscape:label="Left lower contour" d="M 700 705 Q 250 705 20 375"/>
+  </g>
+  <g inkscape:groupmode="layer" inkscape:label="Mandala" fill="none" stroke="#40e0ff" stroke-width="6">
+    <circle inkscape:label="Mandala ring" cx="700" cy="375" r="220"/>
+    <circle inkscape:label="Core" cx="700" cy="375" r="80"/>
+  </g>
+  <g inkscape:groupmode="layer" inkscape:label="Tunnels" fill="none" stroke="#40e0ff" stroke-width="6">
+    <circle inkscape:label="Left tunnel outer" cx="250" cy="375" r="120"/>
+    <circle inkscape:label="Left tunnel inner" cx="250" cy="375" r="60"/>
+    <circle inkscape:label="Right tunnel outer" cx="1150" cy="375" r="120"/>
+    <circle inkscape:label="Right tunnel inner" cx="1150" cy="375" r="60"/>
+  </g>
+</svg>
