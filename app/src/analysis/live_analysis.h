@@ -56,7 +56,7 @@ const char *live_section_name(LiveSection section); // As file mode's labels.
 
 struct LiveParams {
     double min_bpm = 120.0;
-    double max_bpm = 200.0;        // 190 clamped Hagios (186.6 to 189.4 BPM by the minute).
+    double max_bpm = 230.0;        // Hi-tech: the labelled tracks run up to 214 BPM.
     int acquire_kicks = 8;         // Kicks used to measure the tempo before the loop starts.
     double acquire_spread = 0.04;  // Folded intervals must agree within this fraction.
     double pll_phase_gain = 0.25;  // Of each kick's phase error, applied to the phase.

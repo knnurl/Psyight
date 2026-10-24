@@ -3,6 +3,7 @@
 #include "analysis/series.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <string_view>
@@ -16,6 +17,13 @@ constexpr int kFeatureBands = 24; // Log-spectrogram rows grouped for the novelt
 constexpr int kNoveltyBars = 4;   // Bars compared on each side of a candidate phrase start.
 constexpr double kNoveltyClipQuantile = 0.95;
 constexpr int kMinPhraseBreakBars = 2;
+constexpr int kTextureCycleBars = 4; // Section changes fall on 4-bar lines (labelled tracks: 80%).
+// The texture phase decides when its 4-bar lines change this much more than other bar lines.
+constexpr double kTexturePhaseMinRatio = 1.2;
+// ...on tracks of at least this many beats (32 bars: a short excerpt has too few 4-bar lines), and
+// when the kick breaks do not already decide the downbeat with this confidence.
+constexpr int kTextureMinBeats = 128;
+constexpr double kTrustedBreakConfidence = 0.5;
 constexpr double kStopVoteWeight = 0.5; // Of a drop's vote, for the start of a breakdown.
 constexpr double kIsolatedKickVote = 1.0;
 constexpr double kOtherPeakFraction = 0.05; // Tempo peaks within 5% are the same peak.
@@ -95,6 +103,63 @@ void best_phase(const std::vector<double> &novelty, int offset, int period, int 
         }
     }
     confidence = mean[phase] > 0.0 ? (mean[phase] - second) / mean[phase] : 0.0;
+}
+
+// Texture phase: bars of 4 beats from each of the 16 beat offsets of a 4-bar cycle; for each, the
+// mean bar-to-bar change (feature distance between neighbouring bars) on its 4-bar lines over the
+// mean on its other bar lines. Section changes cluster on 4-bar lines (on the owner's labelled
+// tracks 80% of boundaries do, 58% on 8-bar lines), so the best offset marks the downbeat (offset
+// mod 4) and the 4-bar lines (offset / 4). Returns the best offset, its ratio and the margin of
+// that ratio over the next best, relative to the best.
+struct TexturePhase {
+    int offset = 0;
+    double ratio = 0.0;
+    double margin = 0.0;
+};
+
+TexturePhase texture_phase(const std::vector<std::vector<double>> &beat_features) {
+    constexpr int kCycle = kTextureCycleBars * kBeatsPerBar;
+    std::vector<double> ratio(kCycle, 0.0);
+    const int beats = static_cast<int>(beat_features.size());
+    const size_t width = beats > 0 ? beat_features.front().size() : 0;
+    for (int offset = 0; offset < kCycle; ++offset) {
+        std::vector<std::vector<double>> bars;
+        for (int k = offset; k + kBeatsPerBar <= beats; k += kBeatsPerBar) {
+            std::vector<double> bar(width, 0.0);
+            for (int j = 0; j < kBeatsPerBar; ++j) {
+                for (size_t d = 0; d < width; ++d) {
+                    bar[d] += beat_features[k + j][d] / kBeatsPerBar;
+                }
+            }
+            bars.push_back(std::move(bar));
+        }
+        double lines = 0.0;
+        double others = 0.0;
+        int line_count = 0;
+        int other_count = 0;
+        for (int m = 1; m < static_cast<int>(bars.size()); ++m) {
+            const double change = mean_distance(bars, m, m - 1, 1);
+            if (m % kTextureCycleBars == 0) {
+                lines += change;
+                ++line_count;
+            } else {
+                others += change;
+                ++other_count;
+            }
+        }
+        if (line_count > 0 && other_count > 0 && others > 0.0) {
+            ratio[offset] = (lines / line_count) / (others / other_count);
+        }
+    }
+    TexturePhase best;
+    best.offset = static_cast<int>(std::max_element(ratio.begin(), ratio.end()) - ratio.begin());
+    best.ratio = ratio[best.offset];
+    double second = 0.0;
+    for (int offset = 0; offset < kCycle; ++offset) {
+        second = offset != best.offset ? std::max(second, ratio[offset]) : second;
+    }
+    best.margin = best.ratio > 0.0 ? (best.ratio - second) / best.ratio : 0.0;
+    return best;
 }
 
 // Phase votes from a presence sequence (kick present per beat, or per bar), returning the number
@@ -438,7 +503,20 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     std::vector<double> votes;
     result.downbeat_cues =
         break_votes(kick_present, first_beat, kBeatsPerBar, kBeatsPerBar, kIsolatedKickVote, votes);
+    int break_phase = 0;
+    double break_confidence = 0.0;
     if (result.downbeat_cues > 0) {
+        decide(votes, break_phase, break_confidence);
+    }
+    const TexturePhase texture = texture_phase(beat_features);
+    const bool by_texture = texture.ratio >= kTexturePhaseMinRatio &&
+                            static_cast<int>(beat_features.size()) >= kTextureMinBeats &&
+                            break_confidence < kTrustedBreakConfidence;
+    if (by_texture) {
+        downbeat_phase =
+            ((first_beat + texture.offset) % kBeatsPerBar + kBeatsPerBar) % kBeatsPerBar;
+        result.downbeat_confidence = texture.margin;
+    } else if (result.downbeat_cues > 0) {
         decide(votes, downbeat_phase, result.downbeat_confidence);
     } else {
         best_phase(beat_novelty, first_beat, kBeatsPerBar, downbeat_phase,
@@ -478,7 +556,29 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
         }
         bar_kick.push_back(2 * with_kick > kBeatsPerBar);
     }
-    if (bars >= 2 * phrase) {
+    if (by_texture && bars >= 2 * phrase) {
+        // The 4-bar lines from the texture phase; of the two 8-bar phrasings on them, the one
+        // whose lines change more.
+        const int line = (first_beat + texture.offset - first_downbeat) / kBeatsPerBar;
+        const int four = ((line % kTextureCycleBars) + kTextureCycleBars) % kTextureCycleBars;
+        std::array<double, 2> change{};
+        std::array<int, 2> count{};
+        for (int m = 1; m < bars; ++m) {
+            const int in_phrase = ((m - four) % phrase + phrase) % phrase;
+            if (in_phrase % kTextureCycleBars == 0) {
+                const int which = in_phrase == 0 ? 0 : 1;
+                change[which] += mean_distance(bar_features, m, m - 1, 1);
+                ++count[which];
+            }
+        }
+        const double first_half = count[0] > 0 ? change[0] / count[0] : 0.0;
+        const double second_half = count[1] > 0 ? change[1] / count[1] : 0.0;
+        result.phrase_bar_offset = first_half >= second_half ? four : four + kTextureCycleBars;
+        result.phrase_confidence =
+            std::max(first_half, second_half) > 0.0
+                ? std::fabs(first_half - second_half) / std::max(first_half, second_half)
+                : 0.0;
+    } else if (bars >= 2 * phrase) {
         result.phrase_cues = break_votes(bar_kick, 0, phrase, kMinPhraseBreakBars, 0.0, votes);
         if (result.phrase_cues > 0) {
             decide(votes, result.phrase_bar_offset, result.phrase_confidence);

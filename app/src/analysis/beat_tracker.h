@@ -8,13 +8,20 @@
 //    Onsets whose click is weak against their low-mid flux (bass attacks) are weighted down.
 // 2. Tempo: autocorrelation of the onset function with a harmonic comb (1, 2 and 4 beats),
 //    weighted by a log-Gaussian prior and limited to min_bpm..max_bpm, which excludes the half and
-//    double tempos of psytrance.
+//    double tempos of psytrance. The range reaches hi-tech (labelled tracks up to 214 BPM); the
+//    prior centred on 170 keeps the rolling bass's 2/3 tempo from winning.
 // 3. Beats: dynamic programming (Ellis 2007): each beat maximises onset strength minus a cost on
 //    log-period deviation, so beats continue through breakdowns.
 // 4. Grid: the constant-tempo period and phase whose beats collect the most onset strength over
 //    the whole track (grid search), refined by least squares on the strong beats near it. DJ
 //    mixes with tempo changes need the per-beat times instead (M5).
-// 5. Downbeat and phrase: breakdowns start and end on bar lines, so where the kick returns (and,
+// 5. Downbeat and phrase. First the texture phase: section changes cluster on 4-bar lines (80%
+//    of the owner's labelled boundaries), so of the 16 beat offsets in a 4-bar cycle, the one
+//    whose 4-bar lines change most against its other bar lines gives the downbeat and the 4-bar
+//    lines, and of the two 8-bar phrasings on them the one whose lines change more gives the
+//    phrase. It decides on tracks of 32 bars or more when its lines change at least 1.2 times as
+//    much and the kick breaks below do not decide the downbeat with confidence 0.5 or more.
+//    Otherwise: breakdowns start and end on bar lines, so where the kick returns (and,
 //    at half weight, stops) after a break of a bar or more votes for the downbeat, as does every
 //    isolated kick (kick-on-one sections); breaks of two bars or more vote for the phrase
 //    position. Without breaks, the beat (and bar) positions where
@@ -37,8 +44,8 @@ namespace psyight {
 
 struct BeatTrackerParams {
     double min_bpm = 120.0;
-    double max_bpm = 190.0;
-    double prior_bpm = 150.0;
+    double max_bpm = 230.0;
+    double prior_bpm = 170.0;
     double prior_width_octaves = 0.5;   // Standard deviation of the log2 tempo prior.
     double tightness = 100.0;           // Cost weight on squared log-period deviation (Ellis 2007).
     double click_ratio_full = 0.2;      // Click / low-mid flux ratio counting fully as a kick.
