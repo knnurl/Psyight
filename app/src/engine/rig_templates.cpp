@@ -784,13 +784,14 @@ RigPreset hive_stage() {
     return make_preset(
         "Hive stage",
         "A carved stage front, 1.4 by 0.75 m: a mandala (core, ring, rays), a tunnel of rings "
-        "either side, a spiked contour, gems (single pixels) and a halo 4 cm behind, along the "
-        "contour. Groups: "
-        "stage, mandala, core, ring, rays, tunnels, outer, inner, contour, gems, halo.",
+        "either side, a spiked contour, a hexagon round the mandala, gems (single pixels) and a "
+        "halo 4 cm behind, along the contour. Groups: stage, mandala, core, ring, rays, tunnels, "
+        "outer, inner, contour, hexagon, gems, halo.",
         {count_param("rays", "Mandala rays", 8, 0, 24),
          count_param("tunnel_rings", "Rings per tunnel", 2, 0, 4),
          count_param("spikes", "Spikes per edge", 4, 0, 12), count_param("gems", "Gems", 8, 0, 24),
-         toggle_param("halo", "Halo behind", true)},
+         toggle_param("halo", "Halo behind", true), toggle_param("hexagon", "Hexagon", true),
+         metres_param("hexagon_m", "Hexagon radius", 0.275, 0.1, 0.4)},
         [](const PresetValues &v) {
             Strips s;
             const Vec3 centre{0.0, 1.4, 0.0};
@@ -842,6 +843,21 @@ RigPreset hive_stage() {
                     arc(centre, 0.28, -0.5 * kPi - half_step, 1.5 * kPi - half_step, 8 * n_gems);
                 const double per_m = n_gems / polyline_length_m(ring);
                 s.push_back(preset_strip("Gems", std::move(ring), per_m, {"stage", "gems"}));
+            }
+            // Hexagon around the mandala: points left and right, flat top and bottom; each half
+            // from the top edge's middle round its side point to the bottom edge's middle.
+            if (v.on("hexagon")) {
+                const double r = v["hexagon_m"];
+                for (const double side : {-1.0, 1.0}) {
+                    std::vector<Vec3> half{at(0.0, r * std::sqrt(3.0) / 2.0)};
+                    for (const double deg : {60.0, 0.0, -60.0}) {
+                        const double a = deg * kPi / 180.0;
+                        half.push_back(at(side * r * std::cos(a), r * std::sin(a)));
+                    }
+                    half.push_back(at(0.0, -r * std::sqrt(3.0) / 2.0));
+                    s.push_back(preset_strip(side < 0.0 ? "Left hexagon" : "Right hexagon",
+                                             std::move(half), 60.0, {"stage", "hexagon"}));
+                }
             }
             // Halo: the contour's shape, smooth and 0.95 of its size, 4 cm behind (lighting the
             // back panel along the silhouette, clear of the tunnels); each half from the top
