@@ -44,4 +44,18 @@ Rig build_rig(std::vector<StripSpec> strips);
 // along the bottom and top, 72 up each side: 444 pixels, under the SPEC's 1,500).
 Rig default_rig();
 
+// Wiring on one data line: from strip `first` as it runs, each next strip is the one whose
+// start lies nearest the last one's end; with allow_reverse, a strip whose end lies nearer is
+// turned round instead (closed loops never are: that changes nothing but their direction).
+struct WiringStep {
+    size_t strip = 0;
+    bool reversed = false;
+};
+std::vector<WiringStep> wiring_order(const std::vector<StripSpec> &strips, size_t first,
+                                     bool allow_reverse);
+// The strip turned round: its polyline from the other end, the same pixels.
+StripSpec reversed_strip(StripSpec strip);
+// The data jumpers' total length: from each strip's end to the next one's start, in metres.
+double jumper_length_m(const std::vector<StripSpec> &strips);
+
 } // namespace psyight

@@ -47,6 +47,7 @@ class RigView {
     // The strips' summary against the budgets, and Replace the rig after a confirmation.
     void draw_replace(std::vector<StripSpec> strips);
     void draw_strips();
+    void draw_wiring_order(std::vector<ProjectStrip> &strips, bool &changed);
     void draw_patch();
 
     ProjectState &project_;
@@ -68,6 +69,8 @@ class RigView {
     int user_rig_ = 0;
     std::string rig_name_;
     std::string rig_status_;
+    int wiring_first_ = 0;       // Order for wiring: the strip the data line starts at.
+    bool wiring_reverse_ = true; // ...and whether strips may be turned round.
     bool svg_requested_ = false;
     std::string svg_file_; // The drawing's file name, and its text.
     std::string svg_text_;

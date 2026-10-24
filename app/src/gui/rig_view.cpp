@@ -537,11 +537,82 @@ void RigView::draw_save_rig() {
     }
 }
 
+// Order for wiring: the strips chained by nearest ends from a chosen first one, turned round
+// where that shortens the jumpers (optional), after a confirmation that shows the jumpers' total.
+void RigView::draw_wiring_order(std::vector<ProjectStrip> &strips, bool &changed) {
+    if (ImGui::Button("Order for wiring...")) {
+        wiring_first_ = 0;
+        ImGui::OpenPopup("Order for wiring");
+    }
+    ImGui::SetItemTooltip("Chain the strips by nearest ends, as one data line wired by hand.");
+    if (!ImGui::BeginPopupModal("Order for wiring", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+    if (strips.empty()) {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+    wiring_first_ = std::clamp(wiring_first_, 0, static_cast<int>(strips.size()) - 1);
+    ImGui::TextUnformatted("The data line starts at the first pixel of");
+    ImGui::SetNextItemWidth(12.0f * ImGui::GetFontSize());
+    if (ImGui::BeginCombo("##first",
+                          strips[static_cast<size_t>(wiring_first_)].spec.name.c_str())) {
+        for (size_t i = 0; i < strips.size(); ++i) {
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::Selectable(strips[i].spec.name.c_str(),
+                                  static_cast<int>(i) == wiring_first_)) {
+                wiring_first_ = static_cast<int>(i);
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::Checkbox("Turn strips round where that shortens the jumpers", &wiring_reverse_);
+    ImGui::SetItemTooltip("A strip turned round runs its pixels the other way (effects that move "
+                          "along strips change direction there).");
+    std::vector<StripSpec> specs;
+    for (const ProjectStrip &s : strips) {
+        specs.push_back(s.spec);
+    }
+    const std::vector<WiringStep> order =
+        wiring_order(specs, static_cast<size_t>(wiring_first_), wiring_reverse_);
+    std::vector<StripSpec> ordered;
+    int turned = 0;
+    for (const WiringStep &step : order) {
+        ordered.push_back(step.reversed ? reversed_strip(specs[step.strip]) : specs[step.strip]);
+        turned += step.reversed;
+    }
+    mono_text("Jumpers: %.2f m now, %.2f m in this order; %d strip%s turned round",
+              jumper_length_m(specs), jumper_length_m(ordered), turned, turned == 1 ? "" : "s");
+    if (ImGui::Button("Apply")) {
+        std::vector<ProjectStrip> made;
+        for (size_t k = 0; k < order.size(); ++k) {
+            made.push_back({ordered[k], strips[order[k].strip].order});
+        }
+        strips = std::move(made);
+        polyline_texts_.clear();
+        group_texts_.clear();
+        for (const ProjectStrip &s : strips) {
+            polyline_texts_.push_back(polyline_text(s.spec.polyline));
+            group_texts_.push_back(groups_text(s.spec.groups));
+        }
+        changed = true;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
 void RigView::draw_strips() {
     const float em = ImGui::GetFontSize();
     std::vector<ProjectStrip> &strips = project_.edit().strips;
     bool changed = false;
     int remove = -1;
+    int move = -1; // The strip to swap with the one after it (the wiring order).
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX;
     // Horizontal scrolling needs a fixed height: the rows, the header and the scrollbar.
@@ -549,7 +620,7 @@ void RigView::draw_strips() {
         std::min(ImGui::GetContentRegionAvail().y * 0.6f,
                  (static_cast<float>(strips.size()) + 2.5f) * ImGui::GetFrameHeightWithSpacing());
     hovered_strip_ = -1;
-    if (ImGui::BeginTable("strips", 7, flags, ImVec2(0.0f, height))) {
+    if (ImGui::BeginTable("strips", 8, flags, ImVec2(0.0f, height))) {
         hovered_strip_ = ImGui::TableGetHoveredRow() - 1; // Row 0 is the header.
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 4.5f * em);
         ImGui::TableSetupColumn("Points (x,y[,z] m)", ImGuiTableColumnFlags_WidthFixed, 10.0f * em);
@@ -558,6 +629,7 @@ void RigView::draw_strips() {
         ImGui::TableSetupColumn("Order", ImGuiTableColumnFlags_WidthFixed, 2.5f * em);
         ImGui::TableSetupColumn("Groups", ImGuiTableColumnFlags_WidthFixed, 5.0f * em);
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 1.0f * em);
+        ImGui::TableSetupColumn("Wiring", ImGuiTableColumnFlags_WidthFixed, 3.4f * em);
         ImGui::TableHeadersRow();
         for (size_t i = 0; i < strips.size() && i < polyline_texts_.size(); ++i) {
             ProjectStrip &s = strips[i];
@@ -630,6 +702,20 @@ void RigView::draw_strips() {
                 remove = static_cast<int>(i);
             }
             ImGui::SetItemTooltip("Remove this strip.");
+            ImGui::TableNextColumn();
+            ImGui::BeginDisabled(i == 0);
+            if (ImGui::ArrowButton("##up", ImGuiDir_Up)) {
+                move = static_cast<int>(i) - 1;
+            }
+            ImGui::EndDisabled();
+            ImGui::SetItemTooltip("Earlier on the data line.");
+            ImGui::SameLine(0.0f, 0.2f * em);
+            ImGui::BeginDisabled(i + 1 == strips.size());
+            if (ImGui::ArrowButton("##down", ImGuiDir_Down)) {
+                move = static_cast<int>(i);
+            }
+            ImGui::EndDisabled();
+            ImGui::SetItemTooltip("Later on the data line.");
             ImGui::PopID();
         }
         ImGui::EndTable();
@@ -645,6 +731,15 @@ void RigView::draw_strips() {
                           ColourOrder::grb});
         polyline_texts_.push_back(polyline_text(strips.back().spec.polyline));
         group_texts_.emplace_back();
+        changed = true;
+    }
+    ImGui::SameLine();
+    draw_wiring_order(strips, changed);
+    if (move >= 0 && move + 1 < static_cast<int>(strips.size())) {
+        const auto a = static_cast<size_t>(move);
+        std::swap(strips[a], strips[a + 1]);
+        std::swap(polyline_texts_[a], polyline_texts_[a + 1]);
+        std::swap(group_texts_[a], group_texts_[a + 1]);
         changed = true;
     }
     if (remove >= 0) {

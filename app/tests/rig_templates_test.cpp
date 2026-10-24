@@ -358,3 +358,39 @@ TEST_CASE("rig presets: the hive stage fits a 1.4 by 0.75 m frame, mirrored, gem
     CHECK(gem_rig.pixels.front().position.x == doctest::Approx(0.0).epsilon(1e-6)); // Bottom.
     CHECK(gem_rig.pixels.front().position.y == doctest::Approx(1.12));
 }
+
+TEST_CASE("rig: wiring order chains strips by nearest ends, turning them round when allowed") {
+    const auto strip = [](const char *name, std::vector<Vec3> points) {
+        StripSpec s;
+        s.name = name;
+        s.polyline = std::move(points);
+        s.count = 10;
+        return s;
+    };
+    // A runs to x = 1; C starts just after it; B is drawn from its far end back towards C.
+    const std::vector<StripSpec> strips = {strip("A", {{0, 0, 0}, {1, 0, 0}}),
+                                           strip("B", {{3, 0, 0}, {2, 0, 0}}),
+                                           strip("C", {{1.1, 0, 0}, {1.9, 0, 0}})};
+    CHECK(jumper_length_m(strips) == doctest::Approx(2.0 + 0.9));
+    std::vector<WiringStep> order = wiring_order(strips, 0, true);
+    REQUIRE(order.size() == 3);
+    CHECK(order[1].strip == 2);
+    CHECK_FALSE(order[1].reversed);
+    CHECK(order[2].strip == 1);
+    CHECK(order[2].reversed);
+    std::vector<StripSpec> wired;
+    for (const WiringStep &step : order) {
+        wired.push_back(step.reversed ? reversed_strip(strips[step.strip]) : strips[step.strip]);
+    }
+    CHECK(jumper_length_m(wired) == doctest::Approx(0.2));
+    CHECK(wired[2].polyline.front().x == doctest::Approx(2.0));
+    CHECK(wired[2].count == 10);
+    // Without turning strips round, B keeps its direction.
+    order = wiring_order(strips, 0, false);
+    CHECK_FALSE(order[2].reversed);
+    // A closed loop is never turned round.
+    const std::vector<StripSpec> loop = {
+        strip("A", {{0, 0, 0}, {1, 0, 0}}),
+        strip("Ring", {{1.2, 0, 0}, {1.2, 1, 0}, {2, 1, 0}, {1.2, 0, 0}})};
+    CHECK_FALSE(wiring_order(loop, 0, true)[1].reversed);
+}

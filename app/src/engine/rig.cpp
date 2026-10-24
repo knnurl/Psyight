@@ -73,4 +73,79 @@ Rig default_rig() {
     });
 }
 
+namespace {
+
+double distance_m(const Vec3 &a, const Vec3 &b) {
+    return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) +
+                     (a.z - b.z) * (a.z - b.z));
+}
+
+bool closed(const StripSpec &s) {
+    return s.polyline.size() > 2 && distance_m(s.polyline.front(), s.polyline.back()) < 1e-6;
+}
+
+} // namespace
+
+std::vector<WiringStep> wiring_order(const std::vector<StripSpec> &strips, size_t first,
+                                     bool allow_reverse) {
+    std::vector<WiringStep> order;
+    if (strips.empty()) {
+        return order;
+    }
+    first = std::min(first, strips.size() - 1);
+    std::vector<bool> used(strips.size(), false);
+    order.push_back({first, false});
+    used[first] = true;
+    Vec3 end = strips[first].polyline.empty() ? Vec3{} : strips[first].polyline.back();
+    while (order.size() < strips.size()) {
+        WiringStep best;
+        double best_m = std::numeric_limits<double>::infinity();
+        for (size_t i = 0; i < strips.size(); ++i) {
+            const std::vector<Vec3> &p = strips[i].polyline;
+            if (used[i] || p.empty()) {
+                continue;
+            }
+            const double forward = distance_m(end, p.front());
+            if (forward < best_m - 1e-9) {
+                best = {i, false};
+                best_m = forward;
+            }
+            const double backward = distance_m(end, p.back());
+            if (allow_reverse && !closed(strips[i]) && backward < best_m - 1e-9) {
+                best = {i, true};
+                best_m = backward;
+            }
+        }
+        if (!std::isfinite(best_m)) {
+            for (size_t i = 0; i < strips.size(); ++i) { // Strips without points, last.
+                if (!used[i]) {
+                    order.push_back({i, false});
+                    used[i] = true;
+                }
+            }
+            break;
+        }
+        used[best.strip] = true;
+        order.push_back(best);
+        const std::vector<Vec3> &p = strips[best.strip].polyline;
+        end = best.reversed ? p.front() : p.back();
+    }
+    return order;
+}
+
+StripSpec reversed_strip(StripSpec strip) {
+    std::reverse(strip.polyline.begin(), strip.polyline.end());
+    return strip;
+}
+
+double jumper_length_m(const std::vector<StripSpec> &strips) {
+    double total = 0.0;
+    for (size_t i = 1; i < strips.size(); ++i) {
+        if (!strips[i - 1].polyline.empty() && !strips[i].polyline.empty()) {
+            total += distance_m(strips[i - 1].polyline.back(), strips[i].polyline.front());
+        }
+    }
+    return total;
+}
+
 } // namespace psyight
