@@ -20,7 +20,7 @@ namespace psyight {
 namespace {
 
 constexpr float kLibraryWidthEm = 22.0f;
-constexpr float kMinZoomBars = 8.0f;
+constexpr float kMinZoomBars = 2.0f;
 constexpr float kMaxZoomBars = 128.0f;
 constexpr float kHandleGrabPixels = 5.0f;
 constexpr float kPanStartPixels = 3.0f; // A press moving less is a click.
@@ -402,10 +402,11 @@ void LabellingView::draw_track() {
     ImGui::SliderFloat("##zoom bars", &zoom_bars_, kMinZoomBars, kMaxZoomBars, "%.0f bars shown",
                        ImGuiSliderFlags_Logarithmic);
     ImGui::SetItemTooltip("The zoomed view's width (or the mouse wheel over it).");
-    ImGui::SameLine();
-    ImGui::TextDisabled("Keys: Space play; 1 to 6 sections (Shift: phrase, Alt: exact); Del "
-                        "remove; P phrase; D downbeat; , . grid shift; [ ] jump; "
-                        "Enter done; N next.");
+    ImGui::PushStyleColor(ImGuiCol_Text, theme().text_dim);
+    ImGui::TextWrapped("Keys: Space play; 1 to 6 sections (Shift: phrase, Alt: exact); Del "
+                       "remove; P phrase; D downbeat; , . grid shift; [ ] jump; "
+                       "Enter done; N next.");
+    ImGui::PopStyleColor();
     ImGui::Spacing();
     draw_grid_controls();
     ImGui::Spacing();
@@ -559,7 +560,7 @@ void LabellingView::draw_grid_controls() {
     ImGui::SetItemTooltip("The bar line nearest the playhead becomes bar %d; the bar lines stay "
                           "(for phrases counted as the music counts them).",
                           bar_number_);
-    ImGui::SameLine(0.0f, 2.0f * em);
+    ImGui::AlignTextToFramePadding(); // The shift on a row of its own (narrow windows).
     ImGui::TextUnformatted("Shift");
     const double beat_s = l.grid.bpm > 0.0 ? 60.0 / l.grid.bpm : 0.0;
     const struct {
@@ -581,7 +582,7 @@ void LabellingView::draw_grid_controls() {
     ImGui::Checkbox("Sections follow", &grid_moves_sections_);
     ImGui::SetItemTooltip("Your sections and phrase start move with the grid (they were placed on "
                           "its bars).");
-    ImGui::SameLine(0.0f, 2.0f * em);
+    ImGui::AlignTextToFramePadding(); // The phrases on a row of their own.
     ImGui::TextUnformatted("Phrases of");
     ImGui::SameLine();
     LabelPhrases phrases = effective_phrases();
@@ -971,11 +972,13 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
     } else if (active && dragging_ < 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         seek(t_of(mouse.x)); // Click or scrub.
     }
-    if (grid_dragging_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+    // Drags that began in the zoomed view end there: the overview, drawn first, has its own
+    // scale.
+    if (lanes && grid_dragging_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         session_.labels().end_gesture();
         grid_dragging_ = false;
     }
-    if (panning_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+    if (lanes && panning_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         if (std::fabs(mouse.x - pan_start_x_) <= kPanStartPixels) {
             seek(t_of(pan_start_x_)); // A click, not a pan.
         }
