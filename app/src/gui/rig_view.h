@@ -1,7 +1,8 @@
 // Rig panel (SPEC sections 7.1, 9.4 and 10, M3): the project (its name; New, Open, Save, Save
 // as), a new rig from one of four sources (templates: pillars or a matrix panel from a few
 // numbers; the built-in presets; the user's own rigs, which the current one can be saved to;
-// an SVG drawing: engine/rig_templates.h, io/presets.h, io/svg_rig.h) that replaces the strips
+// an SVG or DXF drawing: engine/rig_templates.h, io/presets.h, io/svg_rig.h, io/dxf_rig.h) that
+// replaces the strips
 // after a confirmation, the strips (name, polyline, density, pixel count, colour order, groups),
 // the patch layout and checks: strips running past their polyline, the 1,500-pixel budget, and the
 // supply current at full white against the power budget. Tabbed with the preview, which shows the
@@ -70,6 +71,7 @@ class RigView {
     bool svg_requested_ = false;
     std::string svg_file_; // The drawing's file name, and its text.
     std::string svg_text_;
+    bool svg_dxf_ = false; // The drawing is a DXF (else an SVG).
     std::string svg_status_;
     SvgRigOptions svg_options_;
     std::optional<SvgRigOptions> svg_built_options_; // The options svg_built_ was made with.

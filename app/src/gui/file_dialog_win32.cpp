@@ -122,7 +122,8 @@ std::optional<std::filesystem::path> open_project_file_dialog(void *owner) {
 }
 
 std::optional<std::filesystem::path> open_svg_file_dialog(void *owner) {
-    const COMDLG_FILTERSPEC filters[] = {{L"SVG drawing", L"*.svg"}, {L"All files", L"*.*"}};
+    const COMDLG_FILTERSPEC filters[] = {{L"Drawings (SVG, DXF)", L"*.svg;*.dxf"},
+                                         {L"All files", L"*.*"}};
     return show_dialog(owner, false, {filters, 2, L"Make a rig from a drawing", nullptr, {}});
 }
 

@@ -40,4 +40,16 @@ struct SvgRig {
 
 Result<SvgRig> rig_from_svg(std::string_view svg, const SvgRigOptions &options);
 
+// A drawing's shape before placement (SVG and DXF readers): its points in metres at the
+// drawing's own size, y up; its name and groups as the strip will have them.
+struct DrawingShape {
+    std::string name;
+    std::vector<std::string> groups;
+    std::vector<Vec3> points;
+};
+
+// Places shapes as the rig's strips: scaled to options.width_m (0: as drawn), x centred on 0,
+// the lowest point base_m above the floor; left and right groups; too-short ones counted.
+Result<SvgRig> rig_from_shapes(std::vector<DrawingShape> shapes, const SvgRigOptions &options);
+
 } // namespace psyight

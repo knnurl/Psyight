@@ -856,6 +856,21 @@ Result<SvgRig> rig_from_svg(std::string_view svg, const SvgRigOptions &options) 
     if (!found_svg) {
         return Error{"Not an SVG drawing (no <svg> element)."};
     }
+    std::vector<DrawingShape> drawn;
+    for (Shape &shape : shapes) {
+        DrawingShape d{std::move(shape.name), std::move(shape.groups), {}};
+        for (const Point &q : shape.points) {
+            d.points.push_back({q.x, -q.y, 0.0}); // SVG's y runs down.
+        }
+        drawn.push_back(std::move(d));
+    }
+    return rig_from_shapes(std::move(drawn), options);
+}
+
+Result<SvgRig> rig_from_shapes(std::vector<DrawingShape> shapes, const SvgRigOptions &options) {
+    shapes.erase(std::remove_if(shapes.begin(), shapes.end(),
+                                [](const DrawingShape &s) { return s.points.size() < 2; }),
+                 shapes.end());
     if (shapes.empty()) {
         return Error{"The drawing has no visible paths or shapes."};
     }
@@ -863,8 +878,8 @@ Result<SvgRig> rig_from_svg(std::string_view svg, const SvgRigOptions &options) 
     double max_x = min_x;
     double min_y = shapes.front().points.front().y;
     double max_y = min_y;
-    for (const Shape &s : shapes) {
-        for (const Point &p : s.points) {
+    for (const DrawingShape &s : shapes) {
+        for (const Vec3 &p : s.points) {
             min_x = std::min(min_x, p.x);
             max_x = std::max(max_x, p.x);
             min_y = std::min(min_y, p.y);
@@ -879,7 +894,7 @@ Result<SvgRig> rig_from_svg(std::string_view svg, const SvgRigOptions &options) 
     rig.width_m = rig.natural_width_m * k;
     rig.height_m = (max_y - min_y) * k;
     const double centre_x = 0.5 * (min_x + max_x);
-    for (Shape &s : shapes) {
+    for (DrawingShape &s : shapes) {
         StripSpec strip;
         strip.name = std::move(s.name);
         strip.pixels_per_m = options.pixels_per_m;
@@ -887,7 +902,7 @@ Result<SvgRig> rig_from_svg(std::string_view svg, const SvgRigOptions &options) 
         double hi = 0.0;
         for (size_t i = 0; i < s.points.size(); ++i) {
             const Vec3 p{(s.points[i].x - centre_x) * k,
-                         options.base_m + (max_y - s.points[i].y) * k, 0.0};
+                         options.base_m + (s.points[i].y - min_y) * k, 0.0};
             lo = i == 0 ? p.x : std::min(lo, p.x);
             hi = i == 0 ? p.x : std::max(hi, p.x);
             strip.polyline.push_back(p);

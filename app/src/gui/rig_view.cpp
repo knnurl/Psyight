@@ -5,6 +5,7 @@
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/widgets.h"
+#include "io/dxf_rig.h"
 #include "io/presets.h"
 #include "output/node_setup.h"
 
@@ -14,13 +15,23 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
 namespace psyight {
 
 namespace {
+
+std::string lower_extension(const std::filesystem::path &path) {
+    std::string ext = path_to_utf8(path.extension());
+    for (char &ch : ext) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return ext;
+}
 
 constexpr int kPixelBudget = 1500; // SPEC 8: about 9 universes.
 constexpr std::array<ColourOrder, 6> kOrders = {ColourOrder::rgb, ColourOrder::grb,
@@ -154,7 +165,7 @@ void RigView::draw_template_controls() {
             draw_user_rigs(strips);
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("From SVG")) {
+        if (ImGui::BeginTabItem("From drawing")) {
             draw_svg(strips);
             ImGui::EndTabItem();
         }
@@ -405,7 +416,8 @@ void RigView::draw_svg(std::vector<StripSpec> &strips) {
     if (ImGui::Button("Choose a drawing...")) {
         svg_requested_ = true;
     }
-    ImGui::SetItemTooltip("An SVG from Inkscape or any vector editor, in real units (mm).");
+    ImGui::SetItemTooltip("An SVG (Inkscape) or a DXF (Fusion: right-click a sketch, Save As DXF; "
+                          "LibreCAD, KiCad), in real units such as mm.");
     if (!svg_status_.empty()) {
         ImGui::TextColored(theme().warning, "%s", svg_status_.c_str());
     }
@@ -414,7 +426,9 @@ void RigView::draw_svg(std::vector<StripSpec> &strips) {
             "Draw each light run as a path, the way its pixels run (Inkscape: Path > "
             "Reverse turns one round). Layers name the groups: put the contour in "
             "a layer called contour, the rings in rings. Hidden layers (a photo "
-            "traced over) are left out.");
+            "traced over) are left out. A DXF works too (Fusion: right-click the sketch, Save "
+            "As DXF): its layers are the groups, and arcs and circles on the left are turned "
+            "so mirrored halves run from the middle outwards.");
         return;
     }
     ImGui::TextUnformatted(svg_file_.c_str());
@@ -430,7 +444,8 @@ void RigView::draw_svg(std::vector<StripSpec> &strips) {
         return a.width_m == b.width_m && a.base_m == b.base_m && a.pixels_per_m == b.pixels_per_m;
     };
     if (!svg_built_ || !svg_built_options_ || !same(*svg_built_options_, svg_options_)) {
-        svg_built_ = rig_from_svg(svg_text_, svg_options_); // Only when a setting changed.
+        svg_built_ = svg_dxf_ ? rig_from_dxf(svg_text_, svg_options_)
+                              : rig_from_svg(svg_text_, svg_options_); // When a setting changed.
         svg_built_options_ = svg_options_;
     }
     if (!*svg_built_) {
@@ -463,14 +478,17 @@ void RigView::after_frame(void *owner) {
         return;
     }
     // Its own size first; the width field starts there.
-    const Result<SvgRig> made = rig_from_svg(
-        text.str(), SvgRigOptions{0.0, svg_options_.base_m, svg_options_.pixels_per_m});
+    const bool dxf = lower_extension(*chosen) == ".dxf";
+    const SvgRigOptions natural{0.0, svg_options_.base_m, svg_options_.pixels_per_m};
+    const Result<SvgRig> made =
+        dxf ? rig_from_dxf(text.str(), natural) : rig_from_svg(text.str(), natural);
     if (!made) {
         svg_status_ = path_to_utf8(chosen->filename()) + ": " + made.error().message;
         return;
     }
     svg_status_.clear();
     svg_text_ = text.str();
+    svg_dxf_ = dxf;
     svg_file_ = path_to_utf8(chosen->filename());
     svg_options_.width_m = made.value().natural_width_m;
     svg_built_.reset();

@@ -84,7 +84,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/io/midi_map.cpp src/io/png.cpp src/io/recent_files.cpp src/io/recovery.cpp
                                src/output/node_setup.cpp
                                src/io/user_settings.cpp src/io/presets.cpp src/output/test_patterns.cpp
-                               src/io/svg_rig.cpp)
+                               src/io/svg_rig.cpp src/io/dxf_rig.cpp)
 target_include_directories(psyight_lib PUBLIC src)
 target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohmann_json
                                           psyight_miniaudio pffft::pffft signalsmith_stretch
@@ -196,7 +196,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/test_patterns_test.cpp tests/scene_launch_test.cpp
                              tests/undo_history_test.cpp tests/sections_edit_test.cpp
                              tests/pattern_effects_test.cpp tests/labelling_test.cpp
-                             tests/svg_rig_test.cpp
+                             tests/svg_rig_test.cpp tests/dxf_rig_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)
