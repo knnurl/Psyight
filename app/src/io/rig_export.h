@@ -1,6 +1,7 @@
 // The rig as a drawing to build from (Rig > Export drawing...): SVG for Inkscape, DXF for Fusion
 // and laser cutters, the same content in both, in millimetres, y up as the rig (the SVG flips
-// it). Layers by kind, each optional:
+// it), centred on the middle of the rig's paths (the DXF's origin; the SVG page's centre).
+// Layers by kind, each optional:
 // - Centre lines: every strip's path, the line its LEDs sit on.
 // - Channels: each path offset by half the channel width either side (mitred corners), a closed
 //   slot outline per open strip and an inner and outer outline per closed one, to cut grooves or

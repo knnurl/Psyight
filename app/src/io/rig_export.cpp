@@ -148,7 +148,44 @@ std::vector<Prim> primitives(const std::vector<StripSpec> &strips,
             prims.push_back(dot);
         }
     }
+    // Centred on the middle of the rig's paths: the drawing's origin is the rig's centre.
+    double min_x = std::numeric_limits<double>::infinity();
+    double min_y = min_x;
+    double max_x = -min_x;
+    double max_y = -min_x;
+    for (const StripSpec &s : strips) {
+        for (const Vec3 &v : s.polyline) {
+            const P2 q = mm(v);
+            min_x = std::min(min_x, q.x);
+            max_x = std::max(max_x, q.x);
+            min_y = std::min(min_y, q.y);
+            max_y = std::max(max_y, q.y);
+        }
+    }
+    if (std::isfinite(min_x)) {
+        const P2 centre{0.5 * (min_x + max_x), 0.5 * (min_y + max_y)};
+        for (Prim &p : prims) {
+            for (P2 &q : p.points) {
+                q.x -= centre.x;
+                q.y -= centre.y;
+            }
+        }
+    }
     return prims;
+}
+
+// How far a primitive reaches from the origin in x and y (a text's width estimated).
+P2 reach(const Prim &p) {
+    P2 r;
+    for (const P2 &q : p.points) {
+        const double right = p.kind == Prim::text
+                                 ? q.x + 0.6 * kLabelHeightMm * static_cast<double>(p.label.size())
+                                 : q.x + p.radius;
+        r.x = std::max({r.x, std::abs(q.x - p.radius), std::abs(right)});
+        const double top = p.kind == Prim::text ? q.y + kLabelHeightMm : q.y + p.radius;
+        r.y = std::max({r.y, std::abs(q.y - p.radius), std::abs(top)});
+    }
+    return r;
 }
 
 std::string number(double v) {
@@ -170,25 +207,17 @@ std::string escaped(const std::string &s) {
 std::string rig_to_svg(const std::vector<StripSpec> &strips, const std::vector<std::string> &notes,
                        const RigExportOptions &options) {
     const std::vector<Prim> prims = primitives(strips, notes, options);
-    double min_x = std::numeric_limits<double>::infinity();
-    double min_y = min_x;
-    double max_x = -min_x;
-    double max_y = -min_x;
+    // The page symmetric about the rig's centre (the primitives' origin), with room for all.
+    P2 half;
     for (const Prim &p : prims) {
-        for (const P2 &q : p.points) {
-            min_x = std::min(min_x, q.x - p.radius);
-            max_x = std::max(max_x, q.x + p.radius);
-            min_y = std::min(min_y, q.y - p.radius);
-            max_y = std::max(max_y, q.y + p.radius);
-        }
+        const P2 r = reach(p);
+        half.x = std::max(half.x, r.x);
+        half.y = std::max(half.y, r.y);
     }
-    if (prims.empty()) {
-        min_x = min_y = max_x = max_y = 0.0;
-    }
-    const double width = max_x - min_x + 2.0 * kMarginMm;
-    const double height = max_y - min_y + 2.0 * kMarginMm;
-    const auto X = [&](double x) { return number(x - min_x + kMarginMm); };
-    const auto Y = [&](double y) { return number(max_y - y + kMarginMm); }; // SVG's y runs down.
+    const double width = 2.0 * (half.x + kMarginMm);
+    const double height = 2.0 * (half.y + kMarginMm);
+    const auto X = [&](double x) { return number(x + 0.5 * width); };
+    const auto Y = [&](double y) { return number(0.5 * height - y); }; // SVG's y runs down.
     std::string out = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                       "<!-- Exported from Psyight: the rig in millimetres. -->\n"
                       "<svg xmlns=\"http://www.w3.org/2000/svg\" "

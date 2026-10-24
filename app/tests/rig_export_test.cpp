@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -103,4 +104,44 @@ TEST_CASE("rig export: channels are slots or ring outlines; a mark per pixel; wi
     CHECK(count_of(dxf, "\nCIRCLE\n") == 130);
     CHECK(count_of(dxf, "\nTEXT\n") == 2);
     CHECK(dxf.find("$INSUNITS\n70\n4") != std::string::npos);
+}
+
+TEST_CASE("rig export: centred on the rig's middle, in DXF and SVG") {
+    std::vector<StripSpec> strips = hexagon_mandala(); // Its centre is well above the floor.
+    RigExportOptions only_lines;
+    only_lines.channels = only_lines.pixels = only_lines.wiring = false;
+    const std::string dxf = rig_to_dxf(strips, {}, only_lines);
+    // The DXF's coordinates: x and y each span about as far below 0 as above.
+    double lo_x = 1e9, hi_x = -1e9, lo_y = 1e9, hi_y = -1e9;
+    std::istringstream in(dxf);
+    std::string code;
+    std::string value;
+    while (std::getline(in, code) && std::getline(in, value)) {
+        if (code == "10" && std::stod(value) != 0.0) {
+            lo_x = std::min(lo_x, std::stod(value));
+            hi_x = std::max(hi_x, std::stod(value));
+        } else if (code == "20" && std::stod(value) != 0.0) {
+            lo_y = std::min(lo_y, std::stod(value));
+            hi_y = std::max(hi_y, std::stod(value));
+        }
+    }
+    CHECK(lo_x == doctest::Approx(-hi_x).epsilon(0.01));
+    CHECK(lo_y == doctest::Approx(-hi_y).epsilon(0.01));
+    // The SVG: the paths sit in the middle of the page (as far from its left edge as its right).
+    const std::string svg = rig_to_svg(strips, {}, only_lines);
+    const size_t box = svg.find("viewBox=\"0 0 ");
+    REQUIRE(box != std::string::npos);
+    const double page_width = std::stod(svg.substr(box + 13));
+    double lo = 1e9;
+    double hi = -1e9;
+    for (size_t at = svg.find("d=\"M "); at != std::string::npos; at = svg.find("d=\"M ", at + 1)) {
+        std::istringstream path(svg.substr(at + 5, svg.find('"', at + 5) - at - 5));
+        double x = 0.0;
+        double y = 0.0;
+        while (path >> x >> y) {
+            lo = std::min(lo, x);
+            hi = std::max(hi, x);
+        }
+    }
+    CHECK(lo == doctest::Approx(page_width - hi).epsilon(0.01));
 }

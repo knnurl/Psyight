@@ -98,10 +98,22 @@ void RigView::draw() {
     ImGui::BeginDisabled(!engineer);
     draw_project();
     draw_templates();
-    ImGui::Separator();
-    draw_strips();
-    ImGui::Separator();
-    draw_patch();
+    // The rig as it is: its strips (the data line's order) and patch, the summary in the title.
+    const Project &p = project_.project();
+    std::vector<StripSpec> specs;
+    for (const ProjectStrip &strip : p.strips) {
+        specs.push_back(strip.spec);
+    }
+    char title[128];
+    std::snprintf(title, sizeof(title),
+                  "Current rig: %zu strips, %zu pixels, %.2f m of strip###current", p.strips.size(),
+                  project_.rig().pixels.size(), strip_length_m(specs));
+    if (ImGui::TreeNodeEx(title, ImGuiTreeNodeFlags_DefaultOpen)) {
+        draw_strips();
+        ImGui::Separator();
+        draw_patch();
+        ImGui::TreePop();
+    }
     ImGui::EndDisabled();
     ImGui::End();
 }
