@@ -23,6 +23,7 @@ constexpr float kLibraryWidthEm = 22.0f;
 constexpr float kMinZoomBars = 8.0f;
 constexpr float kMaxZoomBars = 128.0f;
 constexpr float kHandleGrabPixels = 5.0f;
+constexpr float kPanStartPixels = 3.0f; // A press moving less is a click.
 
 ImU32 section_colour(const std::string &label, float alpha = 1.0f) {
     const ThemeTokens &t = theme();
@@ -831,7 +832,8 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
                   2.0f);
     draw->PopClipRect();
 
-    // Mouse: drag a boundary on the band, else seek (and scrub); right-click a section's menu.
+    // Mouse: drag a boundary on the band, else seek (and scrub); in the zoomed view, dragging the
+    // waveform and lanes pans; right-click a section's menu.
     const ImVec2 mouse = ImGui::GetIO().MousePos;
     int near_boundary = -1;
     if (hovered && mouse.y >= band_y && mouse.y <= band_y + band_h) {
@@ -858,8 +860,25 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
         const double t = ImGui::GetIO().KeyAlt ? t_of(mouse.x) : snap_to_bar(l.grid, t_of(mouse.x));
         const double gap = bar_s > 0.0 ? bar_s : 0.5;
         commit(move_boundary(working_sections(), static_cast<size_t>(dragging_), t, gap));
+    } else if (lanes && ImGui::IsItemActivated() && dragging_ < 0 &&
+               ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mouse.y > band_y + band_h) {
+        panning_ = true;
+        pan_start_x_ = pan_last_x_ = mouse.x;
+    } else if (active && panning_ && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        // The content follows the mouse: dragging right goes back in time.
+        if (std::fabs(mouse.x - pan_start_x_) > kPanStartPixels) {
+            seek(playhead_s() - (mouse.x - pan_last_x_) / width * length);
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+        }
+        pan_last_x_ = mouse.x;
     } else if (active && dragging_ < 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         seek(t_of(mouse.x)); // Click or scrub.
+    }
+    if (panning_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        if (std::fabs(mouse.x - pan_start_x_) <= kPanStartPixels) {
+            seek(t_of(pan_start_x_)); // A click, not a pan.
+        }
+        panning_ = false;
     }
     if (dragging_ >= 0 && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         session_.labels().end_gesture();
@@ -875,9 +894,18 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
         ImGui::SetItemTooltip("Click or drag to move the playhead; drag a boundary to move it "
                               "(Alt: off the bars); right-click a section for its menu.");
     }
-    if (hovered && lanes && ImGui::GetIO().MouseWheel != 0.0f) {
-        zoom_bars_ = std::clamp(zoom_bars_ * std::pow(0.85f, ImGui::GetIO().MouseWheel),
-                                kMinZoomBars, kMaxZoomBars);
+    const ImGuiIO &io = ImGui::GetIO();
+    if (hovered && lanes && (io.MouseWheelH != 0.0f || (io.KeyShift && io.MouseWheel != 0.0f))) {
+        // Shift and the wheel (or a sideways wheel or touchpad) pan by an eighth of the view.
+        const float steps = io.MouseWheelH != 0.0f ? -io.MouseWheelH : -io.MouseWheel;
+        seek(playhead_s() + steps * 0.125 * length);
+    } else if (hovered && lanes && io.MouseWheel != 0.0f) {
+        zoom_bars_ =
+            std::clamp(zoom_bars_ * std::pow(0.85f, io.MouseWheel), kMinZoomBars, kMaxZoomBars);
+    }
+    if (hovered && lanes) {
+        ImGui::SetItemTooltip("Drag the waveform to pan (click: move the playhead); the wheel "
+                              "zooms, Shift and the wheel pan; drag a boundary to move it.");
     }
     if (ImGui::BeginPopup("##section menu")) {
         if (menu_section_ >= 0 && menu_section_ < static_cast<int>(sections.size())) {

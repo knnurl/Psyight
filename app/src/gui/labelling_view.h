@@ -90,7 +90,12 @@ class LabellingView {
     std::string message_;        // The last save or scan outcome.
     float zoom_bars_ = 32.0f;    // The zoomed view's width.
     int dragging_ = -1;          // The boundary being dragged (index into the sections).
-    int menu_section_ = -1;      // The section whose right-click menu is open.
+    // Panning the zoomed view by dragging its waveform and lanes (the view follows the playhead,
+    // so a pan moves the playhead); a press that does not move seeks to where it was.
+    bool panning_ = false;
+    float pan_start_x_ = 0.0f;
+    float pan_last_x_ = 0.0f;
+    int menu_section_ = -1; // The section whose right-click menu is open.
     double menu_time_s_ = 0.0;
     const LoadedTrack *seen_track_ = nullptr; // Rescans the list's status after a track change.
     int last_frame_ = -10;                    // The last frame drawn: detects opening.
