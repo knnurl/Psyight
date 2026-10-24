@@ -21,12 +21,24 @@
 
 namespace psyight {
 
+// Colours a laser cutter's software maps to operations (LightBurn, RDWorks: one per colour). In
+// SVG pure RGB; in DXF the AutoCAD colour index (black is index 7, shown black on white).
+enum class ExportColour { black, red, green, blue, yellow, cyan, magenta };
+inline constexpr const char *kExportColourNames[] = {"Black",  "Red",  "Green",  "Blue",
+                                                     "Yellow", "Cyan", "Magenta"};
+
 struct RigExportOptions {
     bool centre_lines = true;
     bool channels = true;
     double channel_width_m = 0.012; // A 10 mm strip with a little room.
     bool pixels = true;
     bool wiring = true;
+    // Per layer; the defaults for a laser: channels cut (black), pixel dots engraved (red).
+    ExportColour centre_colour = ExportColour::blue;
+    ExportColour channel_colour = ExportColour::black;
+    ExportColour pixel_colour = ExportColour::red;
+    ExportColour wiring_colour = ExportColour::green;
+    bool fill_pixels = true; // SVG: pixel dots filled, to engrave (DXF circles are outlines).
 };
 
 // strips in data-line order; notes: one per strip (or none), shown in the wiring labels.

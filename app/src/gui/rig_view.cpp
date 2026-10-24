@@ -539,8 +539,19 @@ void RigView::draw_export() {
         return;
     }
     RigExportOptions &o = export_options_;
+    // Each layer's colour (laser software maps colours to cut, engrave and so on).
+    const auto colour = [](const char *id, ExportColour &c) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(6.0f * ImGui::GetFontSize());
+        int index = static_cast<int>(c);
+        if (ImGui::Combo(id, &index, kExportColourNames, IM_ARRAYSIZE(kExportColourNames))) {
+            c = static_cast<ExportColour>(index);
+        }
+    };
     ImGui::Checkbox("Centre lines (where the LEDs sit)", &o.centre_lines);
+    colour("##centre colour", o.centre_colour);
     ImGui::Checkbox("Channels", &o.channels);
+    colour("##channel colour", o.channel_colour);
     ImGui::SetItemTooltip("Each path offset either side: grooves or a mount to cut.");
     if (o.channels) {
         ImGui::SameLine();
@@ -551,8 +562,15 @@ void RigView::draw_export() {
         }
     }
     ImGui::Checkbox("Pixels (a dot at every LED)", &o.pixels);
+    colour("##pixel colour", o.pixel_colour);
+    ImGui::SameLine();
+    ImGui::Checkbox("filled (engrave)", &o.fill_pixels);
+    ImGui::SetItemTooltip("SVG only: DXF circles are outlines (laser software can fill them).");
     ImGui::Checkbox("Wiring (data-in arrows; order, name, line and pin)", &o.wiring);
-    ImGui::TextDisabled("Each on a layer of its own, in millimetres.");
+    colour("##wiring colour", o.wiring_colour);
+    ImGui::TextDisabled("Each on a layer of its own and in its colour, in millimetres; laser "
+                        "software maps the colours to operations (for example black cut, red "
+                        "engrave).");
     if (ImGui::Button("SVG...")) {
         export_requested_ = 1;
         ImGui::CloseCurrentPopup();

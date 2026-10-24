@@ -145,3 +145,21 @@ TEST_CASE("rig export: centred on the rig's middle, in DXF and SVG") {
     }
     CHECK(lo == doctest::Approx(page_width - hi).epsilon(0.01));
 }
+
+TEST_CASE("rig export: layer colours for laser software, pixel dots filled to engrave") {
+    StripSpec line;
+    line.name = "Bar";
+    line.polyline = {{0, 1, 0}, {1, 1, 0}};
+    line.pixels_per_m = 10.0;
+    line.count = 10;
+    RigExportOptions o; // Defaults: channels black, pixels red.
+    const std::string svg = rig_to_svg({line}, {}, o);
+    CHECK(svg.find("inkscape:label=\"Channels\" fill=\"none\" stroke=\"#000000\"") !=
+          std::string::npos);
+    CHECK(svg.find("fill=\"#ff0000\"/>") != std::string::npos); // Filled red dots.
+    const std::string dxf = rig_to_dxf({line}, {}, o);
+    CHECK(dxf.find("Channels\n70\n0\n62\n7\n") != std::string::npos); // Black: index 7.
+    CHECK(dxf.find("Pixels\n70\n0\n62\n1\n") != std::string::npos);   // Red: index 1.
+    o.channel_colour = ExportColour::blue;
+    CHECK(rig_to_dxf({line}, {}, o).find("Channels\n70\n0\n62\n5\n") != std::string::npos);
+}

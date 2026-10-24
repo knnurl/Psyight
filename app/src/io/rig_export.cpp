@@ -23,16 +23,29 @@ enum Layer { kCentre, kChannels, kPixels, kWiring, kLayers };
 struct LayerStyle {
     const char *svg_name;
     const char *dxf_name; // R12 layer names: letters, digits, $, - and _.
-    const char *svg_colour;
-    int dxf_colour;
 };
 
 constexpr std::array<LayerStyle, kLayers> kStyles = {{
-    {"Centre lines", "Centre_lines", "#00a0c0", 4},
-    {"Channels", "Channels", "#d03030", 1},
-    {"Pixels", "Pixels", "#c08000", 2},
-    {"Wiring", "Wiring", "#208040", 3},
+    {"Centre lines", "Centre_lines"},
+    {"Channels", "Channels"},
+    {"Pixels", "Pixels"},
+    {"Wiring", "Wiring"},
 }};
+
+constexpr std::array<const char *, 7> kSvgColours = {"#000000", "#ff0000", "#00ff00", "#0000ff",
+                                                     "#ffff00", "#00ffff", "#ff00ff"};
+constexpr std::array<int, 7> kDxfColours = {7, 1, 3, 5, 2, 4, 6}; // AutoCAD colour index.
+
+ExportColour colour_of(int layer, const RigExportOptions &o) {
+    return layer == kCentre     ? o.centre_colour
+           : layer == kChannels ? o.channel_colour
+           : layer == kPixels   ? o.pixel_colour
+                                : o.wiring_colour;
+}
+
+std::string svg_colour(int layer, const RigExportOptions &o) {
+    return kSvgColours[static_cast<size_t>(colour_of(layer, o))];
+}
 
 struct P2 {
     double x = 0.0;
@@ -239,19 +252,23 @@ std::string rig_to_svg(const std::vector<StripSpec> &strips, const std::vector<s
                 body += p.closed ? " Z\"/>\n" : "\"/>\n";
             } else if (p.kind == Prim::circle) {
                 body += "    <circle cx=\"" + X(p.points[0].x) + "\" cy=\"" + Y(p.points[0].y) +
-                        "\" r=\"" + number(p.radius) + "\"/>\n";
+                        "\" r=\"" + number(p.radius) + "\"" +
+                        (options.fill_pixels ? " fill=\"" + svg_colour(layer, options) + "\""
+                                             : std::string()) +
+                        "/>\n";
             } else {
                 body += "    <text x=\"" + X(p.points[0].x) + "\" y=\"" + Y(p.points[0].y) +
                         "\" font-size=\"" + number(kLabelHeightMm) + "\" fill=\"" +
-                        style.svg_colour + "\" stroke=\"none\">" + escaped(p.label) + "</text>\n";
+                        svg_colour(layer, options) + "\" stroke=\"none\">" + escaped(p.label) +
+                        "</text>\n";
             }
         }
         if (body.empty()) {
             continue;
         }
         out += "  <g inkscape:groupmode=\"layer\" inkscape:label=\"" + std::string(style.svg_name) +
-               "\" fill=\"none\" stroke=\"" + style.svg_colour +
-               "\" stroke-width=\"0.3\" font-family=\"sans-serif\">\n" + body + "  </g>\n";
+               "\" fill=\"none\" stroke=\"" + svg_colour(layer, options) +
+               "\" stroke-width=\"0.1\" font-family=\"sans-serif\">\n" + body + "  </g>\n";
     }
     out += "</svg>\n";
     return out;
@@ -287,11 +304,11 @@ std::string rig_to_dxf(const std::vector<StripSpec> &strips, const std::vector<s
     pair(0, "TABLE");
     pair(2, "LAYER");
     pair(70, std::to_string(kLayers));
-    for (const LayerStyle &style : kStyles) {
+    for (int layer = 0; layer < kLayers; ++layer) {
         pair(0, "LAYER");
-        pair(2, style.dxf_name);
+        pair(2, kStyles[static_cast<size_t>(layer)].dxf_name);
         pair(70, "0");
-        pair(62, std::to_string(style.dxf_colour));
+        pair(62, std::to_string(kDxfColours[static_cast<size_t>(colour_of(layer, options))]));
         pair(6, "CONTINUOUS");
     }
     pair(0, "ENDTAB");
