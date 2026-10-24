@@ -57,6 +57,9 @@ class LabellingView {
     void draw_track();
     void draw_header();
     void draw_grid_controls();
+    // Moves the grid (and the labelled phrase start and, with grid_moves_sections_, the sections)
+    // by by_s; part of the current undo gesture when one is open.
+    void shift_grid(double by_s);
     // A time strip: the sections (labelled, then detected), the grid and the lanes over `span`.
     // Clicks seek; boundaries drag. `lanes`: draw the per-bar kick, level and riser lanes.
     void draw_timeline(const char *id, Span span, float height, bool lanes);
@@ -93,6 +96,8 @@ class LabellingView {
     // Panning the zoomed view by dragging its waveform and lanes (the view follows the playhead,
     // so a pan moves the playhead); a press that does not move seeks to where it was.
     bool panning_ = false;
+    bool grid_dragging_ = false; // Ctrl and a drag on the waveform: the grid follows the mouse.
+    bool grid_moves_sections_ = true;
     float pan_start_x_ = 0.0f;
     float pan_last_x_ = 0.0f;
     int menu_section_ = -1; // The section whose right-click menu is open.

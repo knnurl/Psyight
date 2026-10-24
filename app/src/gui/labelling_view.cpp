@@ -393,7 +393,7 @@ void LabellingView::draw_track() {
     ImGui::SetItemTooltip("The zoomed view's width (or the mouse wheel over it).");
     ImGui::SameLine();
     ImGui::TextDisabled("Keys: Space play; 1 to 6 sections (Shift: phrase, Alt: exact); Del "
-                        "remove; P phrase; D downbeat; [ ] jump; "
+                        "remove; P phrase; D downbeat; , . grid shift; [ ] jump; "
                         "Enter done; N next.");
     ImGui::Spacing();
     draw_grid_controls();
@@ -471,6 +471,30 @@ void LabellingView::draw_header() {
     ImGui::SetItemTooltip("Save, then open the next track not marked done (N).");
 }
 
+void LabellingView::shift_grid(double by_s) {
+    LabelEditor &labels = session_.labels();
+    const Labels &l = labels.labels();
+    LabelGrid grid = l.grid;
+    const double bar_s = bar_length_s(grid);
+    grid.first_downbeat_s += by_s;
+    if (bar_s > 0.0) { // Kept within the first bar; the bar lines are the same.
+        grid.first_downbeat_s -= std::floor(grid.first_downbeat_s / bar_s) * bar_s;
+    }
+    labels.set_grid(grid);
+    if (l.phrases.set) {
+        LabelPhrases p = l.phrases;
+        p.start_s = std::max(0.0, p.start_s + by_s);
+        labels.set_phrases(p);
+    }
+    if (grid_moves_sections_ && sections_labelled()) {
+        std::vector<SectionLabel> sections = l.sections;
+        for (size_t i = 1; i < sections.size(); ++i) { // The first stays at 0 s.
+            sections[i].start_s = std::max(0.0, sections[i].start_s + by_s);
+        }
+        labels.set_sections(std::move(sections), true);
+    }
+}
+
 void LabellingView::draw_grid_controls() {
     const float em = ImGui::GetFontSize();
     LabelEditor &labels = session_.labels();
@@ -502,6 +526,28 @@ void LabellingView::draw_grid_controls() {
     }
     ImGui::SetItemTooltip("The beat nearest the playhead becomes a downbeat (the grid shifts by "
                           "whole beats; the tempo stays).");
+    ImGui::SameLine(0.0f, 2.0f * em);
+    ImGui::TextUnformatted("Shift");
+    const double beat_s = l.grid.bpm > 0.0 ? 60.0 / l.grid.bpm : 0.0;
+    const struct {
+        const char *text;
+        double by_s;
+    } shifts[] = {{"-beat", -beat_s}, {"-10 ms", -0.010}, {"-1 ms", -0.001},
+                  {"+1 ms", 0.001},   {"+10 ms", 0.010},  {"+beat", beat_s}};
+    for (const auto &shift : shifts) {
+        ImGui::SameLine(0.0f, 0.3f * em);
+        if (ImGui::SmallButton(shift.text) && shift.by_s != 0.0) {
+            session_.labels().begin_gesture();
+            shift_grid(shift.by_s);
+            session_.labels().end_gesture();
+        }
+    }
+    ImGui::SetItemTooltip("Moves the grid earlier or later. Keys: , and . (10 ms; Shift: 1 ms). "
+                          "Ctrl and a drag on the waveform moves it with the mouse.");
+    ImGui::SameLine();
+    ImGui::Checkbox("Sections follow", &grid_moves_sections_);
+    ImGui::SetItemTooltip("Your sections and phrase start move with the grid (they were placed on "
+                          "its bars).");
     ImGui::SameLine(0.0f, 2.0f * em);
     ImGui::TextUnformatted("Phrases of");
     ImGui::SameLine();
@@ -861,6 +907,16 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
         const double gap = bar_s > 0.0 ? bar_s : 0.5;
         commit(move_boundary(working_sections(), static_cast<size_t>(dragging_), t, gap));
     } else if (lanes && ImGui::IsItemActivated() && dragging_ < 0 &&
+               ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mouse.y > band_y + band_h &&
+               ImGui::GetIO().KeyCtrl) {
+        grid_dragging_ = true;
+        pan_last_x_ = mouse.x;
+        session_.labels().begin_gesture();
+    } else if (active && grid_dragging_ && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        shift_grid((mouse.x - pan_last_x_) / width * length); // The bar lines follow the mouse.
+        pan_last_x_ = mouse.x;
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    } else if (lanes && ImGui::IsItemActivated() && dragging_ < 0 &&
                ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mouse.y > band_y + band_h) {
         panning_ = true;
         pan_start_x_ = pan_last_x_ = mouse.x;
@@ -873,6 +929,10 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
         pan_last_x_ = mouse.x;
     } else if (active && dragging_ < 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         seek(t_of(mouse.x)); // Click or scrub.
+    }
+    if (grid_dragging_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        session_.labels().end_gesture();
+        grid_dragging_ = false;
     }
     if (panning_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         if (std::fabs(mouse.x - pan_start_x_) <= kPanStartPixels) {
@@ -904,8 +964,9 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
             std::clamp(zoom_bars_ * std::pow(0.85f, io.MouseWheel), kMinZoomBars, kMaxZoomBars);
     }
     if (hovered && lanes) {
-        ImGui::SetItemTooltip("Drag the waveform to pan (click: move the playhead); the wheel "
-                              "zooms, Shift and the wheel pan; drag a boundary to move it.");
+        ImGui::SetItemTooltip("Drag the waveform to pan (click: move the playhead); Ctrl and a "
+                              "drag moves the grid; the wheel zooms, Shift and the wheel pan; "
+                              "drag a boundary to move it.");
     }
     if (ImGui::BeginPopup("##section menu")) {
         if (menu_section_ >= 0 && menu_section_ < static_cast<int>(sections.size())) {
@@ -987,6 +1048,12 @@ void LabellingView::handle_keys() {
             if (removed.size() != sections.size()) {
                 commit(removed);
             }
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Comma) || ImGui::IsKeyPressed(ImGuiKey_Period)) {
+            const double nudge_s = ImGui::GetIO().KeyShift ? 0.001 : 0.010;
+            session_.labels().begin_gesture();
+            shift_grid(ImGui::IsKeyPressed(ImGuiKey_Comma) ? -nudge_s : nudge_s);
+            session_.labels().end_gesture();
         }
         if (ImGui::IsKeyPressed(ImGuiKey_P, false)) {
             LabelPhrases p = effective_phrases();
