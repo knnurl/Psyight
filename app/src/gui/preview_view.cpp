@@ -6,6 +6,7 @@
 #include "engine/effect_spec.h"
 #include "gui/icons.h"
 #include "gui/layout.h"
+#include "gui/stage_canvas.h"
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/widgets.h"
@@ -1667,7 +1668,7 @@ void PreviewView::draw_perform(bool *open) {
             ImGui::TextColored(config_.blackout ? theme().danger : theme().accent, "%s",
                                config_.blackout ? "BLACKOUT" : "HOLD");
         }
-        draw_rig(*frame);
+        draw_rig(*frame, false); // Perform: viewing only.
     } else {
         ImGui::TextDisabled("No show yet: load a track or start live input.");
     }
@@ -1937,129 +1938,10 @@ void PreviewView::draw_output(const ShowFrame &frame) {
     }
 }
 
-void PreviewView::draw_rig(const ShowFrame &frame) {
-    const Rig &rig = config_.rig;
-    const ImVec2 origin = ImGui::GetCursorScreenPos();
-    const ImVec2 size = ImGui::GetContentRegionAvail();
-    if (size.x < 2.0f * kMarginPixels || size.y < 2.0f * kMarginPixels) {
-        return;
-    }
-    ImDrawList *draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y),
-                        to_u32(theme().preview_bg));
-    const double width_m = std::max(1e-3, rig.max.x - rig.min.x);
-    const double height_m = std::max(1e-3, rig.max.y - rig.min.y);
-    const double scale = std::min((size.x - 2.0f * kMarginPixels) / width_m,
-                                  (size.y - 2.0f * kMarginPixels) / height_m);
-    const float radius = std::max(1.5f, static_cast<float>(0.45 * scale / 60.0));
-    const float left = origin.x + 0.5f * (size.x - static_cast<float>(width_m * scale));
-    const float bottom = origin.y + 0.5f * (size.y + static_cast<float>(height_m * scale));
-    const auto screen = [&](const Vec3 &q) {
-        return ImVec2(left + static_cast<float>((q.x - rig.min.x) * scale),
-                      bottom - static_cast<float>((q.y - rig.min.y) * scale)); // y up.
-    };
-    for (size_t i = 0; i < rig.pixels.size() && 3 * i + 2 < frame.node_rgb.size(); ++i) {
-        draw->AddCircleFilled(screen(rig.pixels[i].position), radius,
-                              to_imgui(&frame.node_rgb[3 * i], config_.limiter.gamma));
-    }
-    ImGui::Dummy(size);
-
-    // Hovering: each strip's name and an arrow along its first pixels (the wiring direction);
-    // the strip under the mouse outlined, with a tooltip. The Rig tab's hovered row is outlined
-    // too (highlighted_strip_).
-    const bool hovered = ImGui::IsItemHovered();
-    hovered_strip_ = -1;
-    if (hovered) {
-        const ImVec2 mouse = ImGui::GetMousePos();
-        float best = std::max(8.0f, 3.0f * radius);
-        best *= best;
-        for (const Pixel &p : rig.pixels) {
-            const ImVec2 at = screen(p.position);
-            const float d =
-                (at.x - mouse.x) * (at.x - mouse.x) + (at.y - mouse.y) * (at.y - mouse.y);
-            if (d < best) {
-                best = d;
-                hovered_strip_ = p.strip;
-            }
-        }
-    }
-    const int outlined = hovered_strip_ >= 0 ? hovered_strip_ : highlighted_strip_;
-    if (outlined >= 0) {
-        for (const Pixel &p : rig.pixels) {
-            if (p.strip == outlined) {
-                draw->AddCircle(screen(p.position), radius + 2.0f, to_u32(theme().accent), 0, 1.5f);
-            }
-        }
-    }
-    if (hovered) {
-        // The first pixel of each strip, and one a few pixels on (the direction).
-        std::vector<int> first(rig.strips.size(), -1);
-        std::vector<int> next(rig.strips.size(), -1);
-        for (size_t i = 0; i < rig.pixels.size(); ++i) {
-            const Pixel &p = rig.pixels[i];
-            if (p.strip < 0 || p.strip >= static_cast<int>(rig.strips.size())) {
-                continue;
-            }
-            const auto strip = static_cast<size_t>(p.strip);
-            if (p.index == 0) {
-                first[strip] = static_cast<int>(i);
-            } else if (p.index <= 3) {
-                next[strip] = static_cast<int>(i);
-            }
-        }
-        ImFont *font = theme_font(ThemeFont::plot);
-        const float font_px = font != nullptr ? font->FontSize : ImGui::GetFontSize();
-        for (size_t s = 0; s < rig.strips.size(); ++s) {
-            if (first[s] < 0) {
-                continue;
-            }
-            const ImVec2 p0 = screen(rig.pixels[static_cast<size_t>(first[s])].position);
-            ImVec2 dir(1.0f, 0.0f);
-            if (next[s] >= 0) {
-                const ImVec2 p1 = screen(rig.pixels[static_cast<size_t>(next[s])].position);
-                const float len = std::hypot(p1.x - p0.x, p1.y - p0.y);
-                if (len > 1e-3f) {
-                    dir = ImVec2((p1.x - p0.x) / len, (p1.y - p0.y) / len);
-                }
-            }
-            // The side facing the middle of the preview, so labels stay off the edges.
-            ImVec2 perp(-dir.y, dir.x);
-            const ImVec2 middle(origin.x + 0.5f * size.x, origin.y + 0.5f * size.y);
-            if (perp.x * (middle.x - p0.x) + perp.y * (middle.y - p0.y) < 0.0f) {
-                perp = ImVec2(-perp.x, -perp.y);
-            }
-            const float a = 3.0f * radius + 4.0f; // Arrow size.
-            const ImU32 colour =
-                to_u32(static_cast<int>(s) == outlined ? theme().accent : theme().text);
-            draw->AddTriangleFilled(ImVec2(p0.x + dir.x * a, p0.y + dir.y * a),
-                                    ImVec2(p0.x - dir.x * 0.4f * a + perp.x * 0.6f * a,
-                                           p0.y - dir.y * 0.4f * a + perp.y * 0.6f * a),
-                                    ImVec2(p0.x - dir.x * 0.4f * a - perp.x * 0.6f * a,
-                                           p0.y - dir.y * 0.4f * a - perp.y * 0.6f * a),
-                                    colour);
-            // The name beside the arrow, kept inside the preview.
-            const char *name = rig.strips[s].name.c_str();
-            const float text_w =
-                font != nullptr ? font->CalcTextSizeA(font_px, FLT_MAX, 0.0f, name).x : 0.0f;
-            const float tx =
-                std::clamp(p0.x + perp.x * a + 2.0f, origin.x + 2.0f,
-                           std::max(origin.x + 2.0f, origin.x + size.x - text_w - 2.0f));
-            const float ty =
-                std::clamp(p0.y + perp.y * a - 0.5f * font_px, origin.y + 2.0f,
-                           std::max(origin.y + 2.0f, origin.y + size.y - font_px - 2.0f));
-            draw->AddText(font, font_px, ImVec2(tx, ty), colour, name);
-        }
-        if (hovered_strip_ >= 0 && hovered_strip_ < static_cast<int>(rig.strips.size())) {
-            const StripSpec &spec = rig.strips[static_cast<size_t>(hovered_strip_)];
-            std::string groups;
-            for (const std::string &g : spec.groups) {
-                groups += (groups.empty() ? "" : ", ") + g;
-            }
-            ImGui::SetTooltip("%s: %d pixels, %.0f per m%s%s. The arrow marks its first pixel.",
-                              spec.name.c_str(), spec.count, spec.pixels_per_m,
-                              groups.empty() ? "" : "; groups ", groups.c_str());
-        }
-    }
+void PreviewView::draw_rig(const ShowFrame &frame, bool tools) {
+    // The pixels, zoom and pan, hover arrows and the strip editor (gui/stage_canvas.h).
+    canvas_.draw(config_.rig, frame.node_rgb, config_.limiter.gamma, highlighted_strip_, tools);
+    hovered_strip_ = canvas_.hovered_strip();
 }
 
 void PreviewView::draw_library() {

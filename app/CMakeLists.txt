@@ -67,7 +67,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/analysis/align.cpp src/analysis/residual.cpp
                                src/analysis/bass_aggregates.cpp src/engine/rig.cpp
                                src/engine/colour.cpp src/engine/inputs.cpp
-                               src/engine/scene.cpp src/engine/rig_templates.cpp src/engine/presets.cpp src/engine/limiters.cpp
+                               src/engine/scene.cpp src/engine/rig_templates.cpp src/engine/strip_edit.cpp src/engine/presets.cpp src/engine/limiters.cpp
                                src/engine/automation.cpp src/engine/modulation.cpp
                                src/engine/effect_spec.cpp src/engine/space.cpp
                                src/engine/pattern_effects.cpp
@@ -95,7 +95,7 @@ add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/comma
                        src/gui/session.cpp src/gui/file_flow.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
                        src/gui/analysis_view.cpp src/gui/bass_roll_view.cpp src/gui/time_plot.cpp
                        src/gui/spectrogram_textures.cpp
-                       src/gui/spectrogram_image.cpp src/gui/preview_view.cpp
+                       src/gui/spectrogram_image.cpp src/gui/preview_view.cpp src/gui/stage_canvas.cpp
                        src/gui/project_state.cpp src/gui/rig_view.cpp
                        src/gui/preflight_view.cpp src/gui/tier.cpp
                        src/gui/labelling_view.cpp
@@ -198,7 +198,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/undo_history_test.cpp tests/sections_edit_test.cpp
                              tests/pattern_effects_test.cpp tests/labelling_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp
-                             tests/rig_export_test.cpp
+                             tests/rig_export_test.cpp tests/strip_edit_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
                              ../firmware/node-f767/src/core/node_config.c)

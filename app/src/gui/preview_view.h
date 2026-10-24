@@ -16,6 +16,7 @@
 
 #include "gui/project_state.h"
 #include "gui/session.h"
+#include "gui/stage_canvas.h"
 #include "io/midi_input.h"
 #include "io/presets.h"
 #include "io/user_settings.h"
@@ -121,13 +122,14 @@ class PreviewView {
     std::string source_label(ModSource source) const; // Macros by their project names.
     void draw_palettes();
     void draw_group_caps();
-    void draw_rig(const ShowFrame &frame);
+    void draw_rig(const ShowFrame &frame, bool tools = true);
     void draw_preview(const ShowFrame *frame, const char *message);
     // The audition's frame as node bytes (rig order), or empty when nothing is auditioned.
     std::vector<std::uint8_t> audition_bytes(const ShowFrame &frame) const;
 
     Session &session_;
     ProjectState &project_;
+    StageCanvas canvas_{project_};
     std::uint64_t project_version_ = 0; // The project version config_ was built from.
     ShowConfig config_;
     bool dirty_ = true;
