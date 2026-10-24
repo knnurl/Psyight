@@ -18,6 +18,7 @@
 
 #include <array>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -49,8 +50,19 @@ const char *node_loss_policy_id(NodeLossPolicy policy); // "hold", "fade", "fall
 inline constexpr std::array<NodeLossPolicy, 4> kNodeLossPolicies = {
     NodeLossPolicy::hold, NodeLossPolicy::fade, NodeLossPolicy::fallback, NodeLossPolicy::blackout};
 
+// The built-in preset the rig was made from (Rig > New rig > Presets), with its settings by id,
+// so Current rig can show and change them; locked: the strips stay as edited, the settings are
+// shown but do not rebuild them. An empty preset: a rig of its own (a template, the user's,
+// a drawing, or edited strips only).
+struct RigSource {
+    std::string preset;
+    std::map<std::string, double> values;
+    bool locked = false;
+};
+
 struct Project {
     std::vector<ProjectStrip> strips;
+    RigSource rig_source;
     int first_universe = 1;
     int pixels_per_universe = 170;
     OutputSettings output;               // cid is derived from source_name.
@@ -71,6 +83,13 @@ struct Project {
 
 // "Macro n" (from 1) unless the project names it.
 std::string macro_name(const Project &project, int index);
+
+// A preset's strips rebuilt with new settings, keeping what still fits of the current ones: a
+// strip with the same name keeps its colour order and its place in the wiring (data line)
+// order; new names follow in the preset's order with the first strip's colour order. Moved
+// points are not kept (the shape comes from the settings).
+std::vector<ProjectStrip> rebuilt_strips(const std::vector<ProjectStrip> &current,
+                                         std::vector<StripSpec> made);
 
 // The default frame rig (engine/rig.h default_rig) with default settings.
 Project default_project();

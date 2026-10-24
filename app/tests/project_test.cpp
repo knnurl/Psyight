@@ -250,3 +250,37 @@ TEST_CASE("project: MIDI bindings and port round-trip; older files load with non
                     R"({"schema": 1, "midi": {"bindings": [{"target": "hold", "kind": "pitch"}]}})")
                     .ok());
 }
+
+TEST_CASE("project: the rig's preset source round trips; a rebuild keeps colour and wiring order") {
+    Project p = default_project();
+    p.rig_source.preset = "Hive stage";
+    p.rig_source.values = {{"rays", 6.0}, {"hexagon_m", 0.3}};
+    p.rig_source.locked = true;
+    const Result<std::string> text = to_project_json(p);
+    REQUIRE(text);
+    const Result<Project> back = parse_project_json(text.value());
+    REQUIRE(back);
+    CHECK(back.value().rig_source.preset == "Hive stage");
+    CHECK(back.value().rig_source.values.at("rays") == 6.0);
+    CHECK(back.value().rig_source.values.at("hexagon_m") == doctest::Approx(0.3));
+    CHECK(back.value().rig_source.locked);
+
+    const auto spec = [](const char *name) {
+        StripSpec s;
+        s.name = name;
+        s.polyline = {{0, 0, 0}, {1, 0, 0}};
+        s.count = 60;
+        return s;
+    };
+    // Current: B then A (rewired), A in rgb; the rebuild makes A, B and a new C.
+    const std::vector<ProjectStrip> current = {{spec("B"), ColourOrder::grb},
+                                               {spec("A"), ColourOrder::rgb}};
+    const std::vector<ProjectStrip> rebuilt =
+        rebuilt_strips(current, {spec("A"), spec("B"), spec("C")});
+    REQUIRE(rebuilt.size() == 3);
+    CHECK(rebuilt[0].spec.name == "B");
+    CHECK(rebuilt[1].spec.name == "A");
+    CHECK(rebuilt[1].order == ColourOrder::rgb);
+    CHECK(rebuilt[2].spec.name == "C");
+    CHECK(rebuilt[2].order == ColourOrder::grb); // New: the first strip's order.
+}

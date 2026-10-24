@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -326,6 +327,31 @@ int pixels_to_fill(const StripSpec &spec) {
     return static_cast<int>(std::floor(length_m * spec.pixels_per_m + 1e-9));
 }
 
+std::vector<ProjectStrip> rebuilt_strips(const std::vector<ProjectStrip> &current,
+                                         std::vector<StripSpec> made) {
+    const ColourOrder fallback = current.empty() ? ColourOrder::grb : current.front().order;
+    const auto place = [&](const std::string &name) {
+        for (size_t i = 0; i < current.size(); ++i) {
+            if (current[i].spec.name == name) {
+                return i;
+            }
+        }
+        return current.size(); // New: after the ones kept.
+    };
+    std::vector<size_t> index(made.size());
+    for (size_t i = 0; i < made.size(); ++i) {
+        index[i] = i;
+    }
+    std::stable_sort(index.begin(), index.end(),
+                     [&](size_t a, size_t b) { return place(made[a].name) < place(made[b].name); });
+    std::vector<ProjectStrip> out;
+    for (const size_t i : index) {
+        const size_t old = place(made[i].name);
+        out.push_back({std::move(made[i]), old < current.size() ? current[old].order : fallback});
+    }
+    return out;
+}
+
 Project default_project() {
     Project project;
     for (const StripSpec &spec : default_rig().strips) {
@@ -356,6 +382,19 @@ namespace {
 
 // A strip's geometry and groups, as the project and rig presets write them (the project adds the
 // colour order).
+// The rig section: its strips and, when a preset made it, the preset and its settings.
+json rig_json(const json &strips, const RigSource &source) {
+    json rig = {{"strips", strips}};
+    if (!source.preset.empty()) {
+        json values = json::object();
+        for (const auto &[id, value] : source.values) {
+            values[id] = finite(value, "rig source value");
+        }
+        rig["source"] = {{"preset", source.preset}, {"values", values}, {"locked", source.locked}};
+    }
+    return rig;
+}
+
 json strip_spec_json(const StripSpec &s) {
     json polyline = json::array();
     for (const Vec3 &q : s.polyline) {
@@ -407,6 +446,17 @@ Result<Project> parse_project_json(std::string_view json_text) {
                 strip.spec = parse_strip_spec(item);
                 strip.order = parse_order(optional<std::string>(item, "colour_order", "grb"));
                 p.strips.push_back(std::move(strip));
+            }
+            if (const auto source = rig->find("source"); source != rig->end()) {
+                p.rig_source.preset = optional<std::string>(*source, "preset", "");
+                p.rig_source.locked = optional<bool>(*source, "locked", false);
+                if (const auto values = source->find("values"); values != source->end()) {
+                    for (const auto &[id, value] : values->items()) {
+                        if (value.is_number()) {
+                            p.rig_source.values[id] = value.get<double>();
+                        }
+                    }
+                }
             }
         }
         const json &patch = section(root, "patch");
@@ -558,7 +608,7 @@ Result<std::string> to_project_json(const Project &p) {
         }
         const json root = {
             {"schema", kProjectSchemaVersion},
-            {"rig", {{"strips", strips}}},
+            {"rig", rig_json(strips, p.rig_source)},
             {"patch",
              {{"first_universe", p.first_universe},
               {"pixels_per_universe", p.pixels_per_universe}}},

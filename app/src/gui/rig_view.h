@@ -39,6 +39,9 @@ class RigView {
     // Each source sets the strips it would make (none: nothing chosen yet).
     void draw_generators(std::vector<StripSpec> &strips);
     void draw_presets(std::vector<StripSpec> &strips);
+    bool draw_preset_params(const RigPreset &preset, std::vector<double> &values);
+    // Current rig: the preset it was made from, its settings (rebuilding the rig) and the lock.
+    void draw_current_settings();
     // The user's rigs: saved in presets/rigs (io/presets.h); saving the current one.
     void draw_user_rigs(std::vector<StripSpec> &strips);
     void draw_save_rig();
@@ -46,7 +49,7 @@ class RigView {
     void reload_user_rigs();
     int rig_list(const char *id, const std::vector<RigPreset> &rigs, int chosen);
     // The strips' summary against the budgets, and Replace the rig after a confirmation.
-    void draw_replace(std::vector<StripSpec> strips);
+    void draw_replace(std::vector<StripSpec> strips, const RigSource &source);
     void draw_strips();
     void draw_export();
     void export_drawing(void *owner);

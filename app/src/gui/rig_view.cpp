@@ -109,6 +109,8 @@ void RigView::draw() {
                   "Current rig: %zu strips, %zu pixels, %.2f m of strip###current", p.strips.size(),
                   project_.rig().pixels.size(), strip_length_m(specs));
     if (ImGui::TreeNodeEx(title, ImGuiTreeNodeFlags_DefaultOpen)) {
+        draw_current_settings();
+        ImGui::Separator();
         draw_strips();
         ImGui::Separator();
         draw_patch();
@@ -168,6 +170,7 @@ void RigView::draw_template_controls() {
     // rigs saved by the user, and a drawing. Each gives strips; the summary and Replace below are
     // shared.
     std::vector<StripSpec> strips;
+    RigSource source; // The preset, when the Presets tab makes the strips.
     bool mine = false;
     // Tabs inside a panel: the chosen one lighter with an accent line, the others blending in
     // (the theme's tab colours are for docked windows, whose chosen tab merges into the window).
@@ -185,6 +188,12 @@ void RigView::draw_template_controls() {
         }
         if (ImGui::BeginTabItem("Presets")) {
             draw_presets(strips);
+            const RigPreset &preset = presets_[static_cast<size_t>(preset_)];
+            source.preset = preset.name;
+            for (size_t k = 0; k < preset.params.size(); ++k) {
+                source.values[preset.params[k].id] =
+                    preset_values_[static_cast<size_t>(preset_)][k];
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("My rigs")) {
@@ -200,7 +209,7 @@ void RigView::draw_template_controls() {
     }
     ImGui::PopStyleColor(6); // Read as each tab is drawn: kept until the bar ends.
     if (!strips.empty()) {
-        draw_replace(std::move(strips));
+        draw_replace(std::move(strips), source);
     }
     if (mine) {
         draw_save_rig();
@@ -275,24 +284,10 @@ int RigView::rig_list(const char *id, const std::vector<RigPreset> &rigs, int ch
     return chosen;
 }
 
-void RigView::draw_presets(std::vector<StripSpec> &strips) {
-    preset_ = rig_list("##presets", presets_, preset_);
-    const RigPreset &preset = presets_[static_cast<size_t>(preset_)];
-    ImGui::TextUnformatted(preset.name.c_str());
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", preset.description.c_str());
-    ImGui::PopTextWrapPos();
-    // Its settings, kept per preset while the app runs; the strips follow them.
-    if (preset_values_.size() != presets_.size()) {
-        preset_values_.resize(presets_.size());
-    }
-    std::vector<double> &values = preset_values_[static_cast<size_t>(preset_)];
-    if (values.size() != preset.params.size()) {
-        values.clear();
-        for (const RigPresetParam &q : preset.params) {
-            values.push_back(q.value);
-        }
-    }
+// A preset's settings as controls (Overall width and Density shown in metres and pixels per
+// metre); true when one changed.
+bool RigView::draw_preset_params(const RigPreset &preset, std::vector<double> &values) {
+    const std::vector<double> before = values;
     const float field = 7.0f * ImGui::GetFontSize();
     for (size_t k = 0; k < preset.params.size(); ++k) {
         const RigPresetParam &q = preset.params[k];
@@ -366,13 +361,78 @@ void RigView::draw_presets(std::vector<StripSpec> &strips) {
         }
         ImGui::PopID();
     }
+    return values != before;
+}
+
+void RigView::draw_current_settings() {
+    const Project &p = project_.project();
+    if (p.rig_source.preset.empty()) {
+        ImGui::TextDisabled("A rig of its own (a template, one of your rigs or a drawing): edit "
+                            "its strips below or on the Stage.");
+        return;
+    }
+    const auto found = std::find_if(presets_.begin(), presets_.end(), [&](const RigPreset &r) {
+        return r.name == p.rig_source.preset;
+    });
+    if (found == presets_.end()) {
+        ImGui::TextDisabled("Made from the %s preset, which is no longer built in.",
+                            p.rig_source.preset.c_str());
+        return;
+    }
+    std::vector<double> values;
+    for (const RigPresetParam &q : found->params) {
+        const auto v = p.rig_source.values.find(q.id);
+        values.push_back(v != p.rig_source.values.end() ? v->second : q.value);
+    }
+    ImGui::Text("Made from the %s preset.", found->name.c_str());
+    ImGui::SameLine();
+    bool locked = p.rig_source.locked;
+    if (ImGui::Checkbox("Lock", &locked)) {
+        project_.edit().rig_source.locked = locked;
+        project_.changed();
+    }
+    ImGui::SetItemTooltip("Locked, the strips stay exactly as they are (hand edits, moved "
+                          "points). Unlocked, changing a setting rebuilds the shape: strips keep "
+                          "their colour order and wiring place by name, moved points are lost.");
+    ImGui::PushID("current settings");
+    ImGui::BeginDisabled(locked);
+    if (draw_preset_params(*found, values)) {
+        project_.edit().strips = rebuilt_strips(p.strips, build_rig_preset(*found, values));
+        for (size_t k = 0; k < found->params.size(); ++k) {
+            project_.edit().rig_source.values[found->params[k].id] = values[k];
+        }
+        project_.changed();
+    }
+    ImGui::EndDisabled();
+    ImGui::PopID();
+}
+
+void RigView::draw_presets(std::vector<StripSpec> &strips) {
+    preset_ = rig_list("##presets", presets_, preset_);
+    const RigPreset &preset = presets_[static_cast<size_t>(preset_)];
+    ImGui::TextUnformatted(preset.name.c_str());
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", preset.description.c_str());
+    ImGui::PopTextWrapPos();
+    // Its settings, kept per preset while the app runs; the strips follow them.
+    if (preset_values_.size() != presets_.size()) {
+        preset_values_.resize(presets_.size());
+    }
+    std::vector<double> &values = preset_values_[static_cast<size_t>(preset_)];
+    if (values.size() != preset.params.size()) {
+        values.clear();
+        for (const RigPresetParam &q : preset.params) {
+            values.push_back(q.value);
+        }
+    }
+    draw_preset_params(preset, values);
     if (!preset.params.empty() && ImGui::SmallButton("Defaults")) {
         values.clear(); // Refilled with the defaults next frame.
     }
     strips = build_rig_preset(preset, values);
 }
 
-void RigView::draw_replace(std::vector<StripSpec> strips) {
+void RigView::draw_replace(std::vector<StripSpec> strips, const RigSource &source) {
     // What it would make, against the budgets.
     const Project &p = project_.project();
     const ColourOrder order = p.strips.empty() ? ColourOrder::grb : p.strips.front().order;
@@ -403,6 +463,7 @@ void RigView::draw_replace(std::vector<StripSpec> strips) {
                 made.push_back({std::move(s), order});
             }
             project_.edit().strips = std::move(made);
+            project_.edit().rig_source = source; // Empty unless a preset made it.
             project_.changed();
             ImGui::CloseCurrentPopup();
         }
