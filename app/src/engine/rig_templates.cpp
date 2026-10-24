@@ -755,6 +755,115 @@ RigPreset hive_temple() {
         });
 }
 
+// A quadratic Bezier from p0 to p2 (pulled towards p1) with `teeth` triangular spikes of
+// height_m standing out to its left (sign 1) or right (sign -1): one edge of a carved silhouette.
+std::vector<Vec3> spiked_edge(Vec3 p0, Vec3 p1, Vec3 p2, int teeth, double height_m, double sign) {
+    if (teeth <= 0) {
+        return bezier(p0, p1, p2);
+    }
+    const std::vector<Vec3> curve = bezier(p0, p1, p2, 2 * teeth);
+    std::vector<Vec3> points;
+    for (size_t i = 0; i < curve.size(); ++i) {
+        Vec3 p = curve[i];
+        if (i % 2 == 1) { // The tooth's tip, off the curve's tangent.
+            const double dx = curve[i + 1].x - curve[i - 1].x;
+            const double dy = curve[i + 1].y - curve[i - 1].y;
+            const double length = std::hypot(dx, dy);
+            p.x += sign * height_m * -dy / length;
+            p.y += sign * height_m * dx / length;
+        }
+        points.push_back(p);
+    }
+    return points;
+}
+
+RigPreset hive_stage() {
+    // A carved stage front in the round, 1.4 by 0.75 m (a wall frame at home): a mandala with an
+    // eye in the middle, a tunnel of rings either side, a spiked silhouette, gems around the
+    // mandala and a halo behind it all. Mirrored halves run from the centre outwards.
+    return make_preset(
+        "Hive stage",
+        "A carved stage front, 1.4 by 0.75 m: a mandala (core, ring, rays), a tunnel of rings "
+        "either side, a spiked contour, gems (single pixels) and a halo 4 cm behind, along the "
+        "contour. Groups: "
+        "stage, mandala, core, ring, rays, tunnels, outer, inner, contour, gems, halo.",
+        {count_param("rays", "Mandala rays", 8, 0, 24),
+         count_param("tunnel_rings", "Rings per tunnel", 2, 0, 4),
+         count_param("spikes", "Spikes per edge", 4, 0, 12), count_param("gems", "Gems", 8, 0, 24),
+         toggle_param("halo", "Halo behind", true)},
+        [](const PresetValues &v) {
+            Strips s;
+            const Vec3 centre{0.0, 1.4, 0.0};
+            const auto at = [&](double x, double y) { return Vec3{x, centre.y + y, 0.0}; };
+            s.push_back(preset_strip("Core", polygon(centre, 0.08, 24), 60.0,
+                                     {"stage", "mandala", "core"}));
+            s.push_back(preset_strip("Mandala ring", polygon(centre, 0.22, 48), 60.0,
+                                     {"stage", "mandala", "ring"}));
+            const int n_rays = v.count("rays");
+            for (int i = 0; i < n_rays; ++i) {
+                const double a = 0.5 * kPi + 2.0 * kPi * i / n_rays;
+                s.push_back(preset_strip("Ray " + std::to_string(i + 1),
+                                         {polar(centre, 0.11, a), polar(centre, 0.205, a)}, 60.0,
+                                         {"stage", "mandala", "rays"}));
+            }
+            // Tunnels: rings around a bore 0.43 m out, each from its point nearest the centre,
+            // the right one turning the other way (mirrored).
+            const int n_rings = v.count("tunnel_rings");
+            for (int k = 0; k < n_rings; ++k) {
+                const double radius_m = n_rings == 1 ? 0.12 : 0.12 - 0.06 * k / (n_rings - 1);
+                const char *layer = layer_name(k, n_rings);
+                const std::string ring = n_rings == 1 ? "ring" : capitalised(layer) + " ring";
+                s.push_back(preset_strip("Left tunnel " + ring,
+                                         arc(at(-0.43, 0.0), radius_m, 0.0, 2.0 * kPi, 32), 60.0,
+                                         {"stage", "tunnels", layer}));
+                s.push_back(preset_strip("Right tunnel " + ring,
+                                         arc(at(0.43, 0.0), radius_m, kPi, -kPi, 32), 60.0,
+                                         {"stage", "tunnels", layer}));
+            }
+            // Contour: upper and lower edges, each from the middle out to the side tip.
+            const int teeth = v.count("spikes");
+            for (const double side : {-1.0, 1.0}) {
+                const std::string name = side < 0.0 ? "Left" : "Right";
+                // Outwards is to the left of the upper edge's direction on the right side.
+                s.push_back(preset_strip(name + " upper contour",
+                                         spiked_edge(at(0.0, 0.33), at(side * 0.45, 0.33),
+                                                     at(side * 0.68, 0.0), teeth, 0.04, side),
+                                         60.0, {"stage", "contour"}));
+                s.push_back(preset_strip(name + " lower contour",
+                                         spiked_edge(at(0.0, -0.33), at(side * 0.45, -0.33),
+                                                     at(side * 0.68, 0.0), teeth, 0.04, -side),
+                                         60.0, {"stage", "contour"}));
+            }
+            // Gems: one pixel each, around the mandala from the bottom; the strip's pitch is the
+            // gems' spacing, its polyline starting half a pitch before the first.
+            if (const int n_gems = v.count("gems"); n_gems > 0) {
+                const double half_step = kPi / n_gems;
+                std::vector<Vec3> ring =
+                    arc(centre, 0.28, -0.5 * kPi - half_step, 1.5 * kPi - half_step, 8 * n_gems);
+                const double per_m = n_gems / polyline_length_m(ring);
+                s.push_back(preset_strip("Gems", std::move(ring), per_m, {"stage", "gems"}));
+            }
+            // Halo: the contour's shape, smooth and 0.95 of its size, 4 cm behind (lighting the
+            // back panel along the silhouette, clear of the tunnels); each half from the top
+            // centre round its side tip to the bottom.
+            if (v.on("halo")) {
+                for (const double side : {-1.0, 1.0}) {
+                    const auto behind = [&](double x, double y) {
+                        return Vec3{0.95 * x, centre.y + 0.95 * y, -0.04};
+                    };
+                    std::vector<Vec3> halo = bezier(behind(0.0, 0.33), behind(side * 0.45, 0.33),
+                                                    behind(side * 0.68, 0.0));
+                    const std::vector<Vec3> lower = bezier(
+                        behind(side * 0.68, 0.0), behind(side * 0.45, -0.33), behind(0.0, -0.33));
+                    halo.insert(halo.end(), lower.begin() + 1, lower.end());
+                    s.push_back(preset_strip(side < 0.0 ? "Left halo" : "Right halo",
+                                             std::move(halo), 60.0, {"stage", "halo"}));
+                }
+            }
+            return s;
+        });
+}
+
 } // namespace
 
 double PresetValues::operator[](std::string_view id) const {
@@ -809,7 +918,7 @@ std::vector<RigPreset> builtin_rig_presets() {
     };
     add("Stage builds", {dj_booth_chevron(), arch_tunnel(), goalpost_truss(), triangle_row(),
                          pixel_curtain(), pixel_wall()});
-    add("Hive", {hive_temple(), hive_portal(), honeycomb()});
+    add("Hive", {hive_stage(), hive_temple(), hive_portal(), honeycomb()});
     add("Sacred geometry",
         {sunburst(), hexagon_mandala(), string_art_star(), vortex(), third_eye()});
     add("Organic", {lotus(), alien_ribcage(), fractal_tree()});

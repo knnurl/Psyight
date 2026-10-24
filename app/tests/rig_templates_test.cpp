@@ -296,3 +296,65 @@ TEST_CASE("rig presets: settings rebuild the shape; defaults reproduce the prese
     CHECK(tree.strips.size() == 31);
     CHECK(build_rig_preset(tree, values(tree, "splits", 2)).size() == 7);
 }
+
+TEST_CASE("rig presets: the hive stage fits a 1.4 by 0.75 m frame, mirrored, gems one pixel each") {
+    RigPreset stage;
+    for (const RigPreset &p : builtin_rig_presets()) {
+        if (p.name == "Hive stage") {
+            stage = p;
+        }
+    }
+    REQUIRE(stage.build);
+    const Rig rig = build_rig(stage.strips);
+    CHECK(rig.max.x - rig.min.x <= 1.40);
+    CHECK(rig.max.y - rig.min.y <= 0.75);
+    CHECK(rig.pixels.size() >= 500); // About 600 at the defaults, as planned for the build.
+    CHECK(rig.pixels.size() <= 800);
+    const auto strip = [&](const char *name) -> const StripSpec & {
+        const auto it = std::find_if(stage.strips.begin(), stage.strips.end(),
+                                     [&](const StripSpec &s) { return s.name == name; });
+        REQUIRE(it != stage.strips.end());
+        return *it;
+    };
+    // Mirrored halves from the middle outwards: tunnels from their inner point, contour edges
+    // from the centre line.
+    for (const char *side : {"Outer", "Inner"}) {
+        const StripSpec &l = strip((std::string("Left tunnel ") + side + " ring").c_str());
+        const StripSpec &r = strip((std::string("Right tunnel ") + side + " ring").c_str());
+        CHECK(l.count == r.count);
+        CHECK(l.polyline[5].x == doctest::Approx(-r.polyline[5].x));
+        CHECK(l.polyline[5].y == doctest::Approx(r.polyline[5].y));
+        CHECK(l.polyline.front().x > -0.43); // Starts on the side nearest the centre.
+    }
+    for (const char *edge : {"upper", "lower"}) {
+        const StripSpec &l = strip((std::string("Left ") + edge + " contour").c_str());
+        const StripSpec &r = strip((std::string("Right ") + edge + " contour").c_str());
+        CHECK(l.polyline.front().x == doctest::Approx(0.0));
+        CHECK(l.count == r.count);
+        // Spikes stand outwards: the tooth tips lie further from the centre than the curve.
+        const double tip = std::abs(l.polyline[1].y - 1.4);
+        const double base = std::abs(l.polyline[2].y - 1.4);
+        CHECK(tip > base + 0.03);
+    }
+    // Gems: one pixel per gem, on the ring.
+    const StripSpec &gems = strip("Gems");
+    CHECK(gems.count == 8);
+    const auto values = [&](const char *id, double value) {
+        std::vector<double> v;
+        for (const RigPresetParam &q : stage.params) {
+            v.push_back(q.id == id ? value : q.value);
+        }
+        return v;
+    };
+    const std::vector<StripSpec> twelve = build_rig_preset(stage, values("gems", 12));
+    const auto it = std::find_if(twelve.begin(), twelve.end(),
+                                 [](const StripSpec &s) { return s.name == "Gems"; });
+    REQUIRE(it != twelve.end());
+    CHECK(it->count == 12);
+    const Rig gem_rig = build_rig({*it});
+    for (const Pixel &p : gem_rig.pixels) {
+        CHECK(std::hypot(p.position.x, p.position.y - 1.4) == doctest::Approx(0.28).epsilon(0.01));
+    }
+    CHECK(gem_rig.pixels.front().position.x == doctest::Approx(0.0).epsilon(1e-6)); // Bottom.
+    CHECK(gem_rig.pixels.front().position.y == doctest::Approx(1.12));
+}
