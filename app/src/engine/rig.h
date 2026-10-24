@@ -44,9 +44,11 @@ Rig build_rig(std::vector<StripSpec> strips);
 // along the bottom and top, 72 up each side: 444 pixels, under the SPEC's 1,500).
 Rig default_rig();
 
-// Wiring on one data line: from strip `first` as it runs, each next strip is the one whose
-// start lies nearest the last one's end; with allow_reverse, a strip whose end lies nearer is
-// turned round instead (closed loops never are: that changes nothing but their direction).
+// Wiring on one data line, changed only where it helps: from strip `first` as it runs, the next
+// strip stays the next in the current order unless another strip's start (or, with
+// allow_reverse, its end: it is turned round) lies at least kWiringMinGainM nearer the last
+// one's end. Closed loops are never turned round (that changes nothing but their direction).
+inline constexpr double kWiringMinGainM = 0.05;
 struct WiringStep {
     size_t strip = 0;
     bool reversed = false;

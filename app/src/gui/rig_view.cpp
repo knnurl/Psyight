@@ -440,8 +440,19 @@ void RigView::draw_svg(std::vector<StripSpec> &strips) {
     drag_double("Bottom above the floor", &svg_options_.base_m, 0.01f, 0.0, 20.0, "%.2f m");
     ImGui::SetNextItemWidth(field);
     drag_double("Density", &svg_options_.pixels_per_m, 1.0f, 1.0, 1000.0, "%.0f px/m");
+    ImGui::Checkbox("Centre lines of solid rings", &svg_options_.centre_lines);
+    ImGui::SetItemTooltip("A ring drawn as two outlines (a cut part's inner and outer edge) "
+                          "becomes one strip along its middle.");
+    if (svg_options_.centre_lines) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(field);
+        drag_double("up to##ring width", &svg_options_.ring_width_m, 0.001f, 0.002, 0.5,
+                    "%.3f m wide");
+        ImGui::SetItemTooltip("Outlines further apart than this stay two strips (as drawn).");
+    }
     const auto same = [](const SvgRigOptions &a, const SvgRigOptions &b) {
-        return a.width_m == b.width_m && a.base_m == b.base_m && a.pixels_per_m == b.pixels_per_m;
+        return a.width_m == b.width_m && a.base_m == b.base_m && a.pixels_per_m == b.pixels_per_m &&
+               a.centre_lines == b.centre_lines && a.ring_width_m == b.ring_width_m;
     };
     if (!svg_built_ || !svg_built_options_ || !same(*svg_built_options_, svg_options_)) {
         svg_built_ = svg_dxf_ ? rig_from_dxf(svg_text_, svg_options_)
@@ -454,6 +465,10 @@ void RigView::draw_svg(std::vector<StripSpec> &strips) {
     }
     const SvgRig &rig = svg_built_->value();
     mono_text("%.2f by %.2f m (drawn %.2f m wide)", rig.width_m, rig.height_m, rig.natural_width_m);
+    if (rig.centre_lines > 0) {
+        ImGui::TextDisabled("%d solid ring%s as centre lines.", rig.centre_lines,
+                            rig.centre_lines == 1 ? "" : "s");
+    }
     if (rig.too_short > 0) {
         ImGui::TextDisabled("%d path%s shorter than a pixel left out.", rig.too_short,
                             rig.too_short == 1 ? "" : "s");
@@ -479,7 +494,8 @@ void RigView::after_frame(void *owner) {
     }
     // Its own size first; the width field starts there.
     const bool dxf = lower_extension(*chosen) == ".dxf";
-    const SvgRigOptions natural{0.0, svg_options_.base_m, svg_options_.pixels_per_m};
+    SvgRigOptions natural = svg_options_;
+    natural.width_m = 0.0; // The drawing's own size first: the width field starts there.
     const Result<SvgRig> made =
         dxf ? rig_from_dxf(text.str(), natural) : rig_from_svg(text.str(), natural);
     if (!made) {
@@ -579,13 +595,28 @@ void RigView::draw_wiring_order(std::vector<ProjectStrip> &strips, bool &changed
         wiring_order(specs, static_cast<size_t>(wiring_first_), wiring_reverse_);
     std::vector<StripSpec> ordered;
     int turned = 0;
-    for (const WiringStep &step : order) {
+    int moved = 0;
+    for (size_t k = 0; k < order.size(); ++k) {
+        const WiringStep &step = order[k];
         ordered.push_back(step.reversed ? reversed_strip(specs[step.strip]) : specs[step.strip]);
         turned += step.reversed;
+        moved += step.strip != k;
     }
-    mono_text("Jumpers: %.2f m now, %.2f m in this order; %d strip%s turned round",
-              jumper_length_m(specs), jumper_length_m(ordered), turned, turned == 1 ? "" : "s");
-    if (ImGui::Button("Apply")) {
+    const bool unchanged = turned == 0 && moved == 0;
+    if (unchanged) {
+        ImGui::TextUnformatted("The order is already good for wiring: nothing to change.");
+    } else {
+        mono_text("Jumpers: %.2f m now, %.2f m after; %d strip%s moved, %d turned round",
+                  jumper_length_m(specs), jumper_length_m(ordered), moved, moved == 1 ? "" : "s",
+                  turned);
+        ImGui::TextDisabled("Strips change place or direction only where that saves %.0f cm or "
+                            "more of jumper.",
+                            100.0 * kWiringMinGainM);
+    }
+    ImGui::BeginDisabled(unchanged);
+    const bool apply = ImGui::Button("Apply");
+    ImGui::EndDisabled();
+    if (apply) {
         std::vector<ProjectStrip> made;
         for (size_t k = 0; k < order.size(); ++k) {
             made.push_back({ordered[k], strips[order[k].strip].order});

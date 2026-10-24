@@ -394,3 +394,22 @@ TEST_CASE("rig: wiring order chains strips by nearest ends, turning them round w
         strip("Ring", {{1.2, 0, 0}, {1.2, 1, 0}, {2, 1, 0}, {1.2, 0, 0}})};
     CHECK_FALSE(wiring_order(loop, 0, true)[1].reversed);
 }
+
+TEST_CASE("rig: wiring order keeps the current order where a change saves little") {
+    const auto strip = [](std::vector<Vec3> points) {
+        StripSpec s;
+        s.polyline = std::move(points);
+        s.count = 10;
+        return s;
+    };
+    // B starts 3 cm further from A's end than C does: not worth moving; D is far: C, then D.
+    const std::vector<StripSpec> strips = {
+        strip({{0, 0, 0}, {1, 0, 0}}), strip({{1.05, 0, 0}, {1.5, 0, 0}}),
+        strip({{1.02, 0.01, 0}, {1.02, 0.5, 0}}), strip({{5, 0, 0}, {6, 0, 0}})};
+    const std::vector<WiringStep> order = wiring_order(strips, 0, true);
+    for (size_t k = 0; k < order.size(); ++k) {
+        CAPTURE(k);
+        CHECK(order[k].strip == k);
+        CHECK_FALSE(order[k].reversed);
+    }
+}

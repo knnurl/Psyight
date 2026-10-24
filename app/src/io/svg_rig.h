@@ -28,6 +28,11 @@ struct SvgRigOptions {
     double width_m = 0.0; // 0: the drawing's own size.
     double base_m = 1.0;
     double pixels_per_m = 60.0;
+    // Solid rings drawn as two outlines (a laser-cut ring's inner and outer edge): two closed
+    // shapes, one inside the other with a steady gap of at most ring_width_m (as drawn), become
+    // one strip along the middle, named and grouped as the outer one and running its way.
+    bool centre_lines = false;
+    double ring_width_m = 0.03;
 };
 
 struct SvgRig {
@@ -36,6 +41,7 @@ struct SvgRig {
     double height_m = 0.0;
     double natural_width_m = 0.0; // At the document's own size.
     int too_short = 0;            // Subpaths dropped: shorter than one pixel.
+    int centre_lines = 0;         // Pairs of outlines made into one strip along their middle.
 };
 
 Result<SvgRig> rig_from_svg(std::string_view svg, const SvgRigOptions &options);

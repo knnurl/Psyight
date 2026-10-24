@@ -98,6 +98,14 @@ std::vector<WiringStep> wiring_order(const std::vector<StripSpec> &strips, size_
     used[first] = true;
     Vec3 end = strips[first].polyline.empty() ? Vec3{} : strips[first].polyline.back();
     while (order.size() < strips.size()) {
+        // The current order's next strip, as it runs.
+        size_t keep = strips.size();
+        for (size_t i = 0; i < strips.size(); ++i) {
+            if (!used[i] && !strips[i].polyline.empty()) {
+                keep = i;
+                break;
+            }
+        }
         WiringStep best;
         double best_m = std::numeric_limits<double>::infinity();
         for (size_t i = 0; i < strips.size(); ++i) {
@@ -124,6 +132,10 @@ std::vector<WiringStep> wiring_order(const std::vector<StripSpec> &strips, size_
                 }
             }
             break;
+        }
+        if (keep < strips.size() &&
+            distance_m(end, strips[keep].polyline.front()) - best_m < kWiringMinGainM) {
+            best = {keep, false}; // Not worth changing.
         }
         used[best.strip] = true;
         order.push_back(best);

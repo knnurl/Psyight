@@ -155,3 +155,33 @@ TEST_CASE("svg rig: pixel documents and errors") {
     CHECK_FALSE(rig_from_svg(drawing(""), {}));
     CHECK_FALSE(rig_from_svg(drawing(R"svg(<path d="M 0 0 L 0.001 0"/>)svg"), {}));
 }
+
+TEST_CASE("svg rig: a solid ring's two outlines become one centre line when asked") {
+    // A 1 cm wide ring (radii 100 and 110 mm) and two separate rings 6 cm apart.
+    const std::string svg = drawing(R"svg(
+  <g inkscape:label="Mandala">
+    <circle id="outer" cx="300" cy="300" r="110"/>
+    <circle id="inner" cx="300" cy="300" r="100"/>
+  </g>
+  <g inkscape:label="Tunnels">
+    <circle id="big" cx="700" cy="300" r="120"/>
+    <circle id="small" cx="700" cy="300" r="60"/>
+  </g>)svg");
+    SvgRigOptions options;
+    options.pixels_per_m = 1000.0;
+    const Result<SvgRig> plain = rig_from_svg(svg, options);
+    REQUIRE(plain);
+    CHECK(plain.value().strips.size() == 4);
+    options.centre_lines = true;
+    const Result<SvgRig> merged = rig_from_svg(svg, options);
+    REQUIRE(merged);
+    const SvgRig &rig = merged.value();
+    CHECK(rig.centre_lines == 1);
+    REQUIRE(rig.strips.size() == 3); // The tunnels' rings are too far apart: two strips.
+    const StripSpec &middle = *find(rig, "outer");
+    CHECK(length_m(middle) == doctest::Approx(2.0 * kPi * 0.105).epsilon(0.002));
+    CHECK(has(middle, "mandala"));
+    CHECK(find(rig, "inner") == nullptr);
+    CHECK(find(rig, "big") != nullptr);
+    CHECK(find(rig, "small") != nullptr);
+}

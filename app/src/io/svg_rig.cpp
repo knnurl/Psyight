@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -867,10 +868,137 @@ Result<SvgRig> rig_from_svg(std::string_view svg, const SvgRigOptions &options) 
     return rig_from_shapes(std::move(drawn), options);
 }
 
+namespace {
+
+constexpr double kCentreLineStepM = 0.005; // The outer outline resampled this finely.
+
+bool closed_shape(const DrawingShape &s) {
+    return s.points.size() > 3 && std::hypot(s.points.front().x - s.points.back().x,
+                                             s.points.front().y - s.points.back().y) < 1e-6;
+}
+
+// The nearest point to p on the polyline.
+Vec3 nearest_on(const std::vector<Vec3> &line, const Vec3 &p) {
+    Vec3 best = line.front();
+    double best_d = std::numeric_limits<double>::infinity();
+    for (size_t i = 1; i < line.size(); ++i) {
+        const Vec3 &a = line[i - 1];
+        const Vec3 &b = line[i];
+        const double dx = b.x - a.x;
+        const double dy = b.y - a.y;
+        const double len2 = dx * dx + dy * dy;
+        const double t =
+            len2 > 0.0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0.0, 1.0) : 0.0;
+        const Vec3 q{a.x + t * dx, a.y + t * dy, 0.0};
+        const double d = std::hypot(q.x - p.x, q.y - p.y);
+        if (d < best_d) {
+            best_d = d;
+            best = q;
+        }
+    }
+    return best;
+}
+
+bool inside(const std::vector<Vec3> &polygon, const Vec3 &p) {
+    bool in = false;
+    for (size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+        const Vec3 &a = polygon[i];
+        const Vec3 &b = polygon[j];
+        if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) {
+            in = !in;
+        }
+    }
+    return in;
+}
+
+std::vector<Vec3> resampled(const std::vector<Vec3> &line, double step_m) {
+    std::vector<Vec3> out{line.front()};
+    for (size_t i = 1; i < line.size(); ++i) {
+        const Vec3 &a = line[i - 1];
+        const Vec3 &b = line[i];
+        const int n =
+            std::max(1, static_cast<int>(std::ceil(std::hypot(b.x - a.x, b.y - a.y) / step_m)));
+        for (int k = 1; k <= n; ++k) {
+            const double t = static_cast<double>(k) / n;
+            out.push_back({a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), 0.0});
+        }
+    }
+    return out;
+}
+
+// Pairs of nested closed outlines with a steady gap become one centre line; returns the pairs.
+int merge_centre_lines(std::vector<DrawingShape> &shapes, double max_width_m) {
+    struct Pairing {
+        double gap_m;
+        size_t outer;
+        size_t inner;
+    };
+    std::vector<Pairing> pairings;
+    for (size_t a = 0; a < shapes.size(); ++a) {
+        if (!closed_shape(shapes[a])) {
+            continue;
+        }
+        for (size_t b = 0; b < shapes.size(); ++b) {
+            if (b == a || !closed_shape(shapes[b]) ||
+                !inside(shapes[a].points, shapes[b].points.front())) {
+                continue;
+            }
+            double sum = 0.0;
+            double sum2 = 0.0;
+            bool all_in = true;
+            for (const Vec3 &p : shapes[b].points) {
+                all_in = all_in && inside(shapes[a].points, p);
+                const Vec3 q = nearest_on(shapes[a].points, p);
+                const double d = std::hypot(q.x - p.x, q.y - p.y);
+                sum += d;
+                sum2 += d * d;
+            }
+            const double n = static_cast<double>(shapes[b].points.size());
+            const double mean = sum / n;
+            const double sd = std::sqrt(std::max(0.0, sum2 / n - mean * mean));
+            if (all_in && mean > 0.0 && mean <= max_width_m && sd <= 0.25 * mean + 0.002) {
+                pairings.push_back({mean, a, b});
+            }
+        }
+    }
+    std::sort(pairings.begin(), pairings.end(),
+              [](const Pairing &x, const Pairing &y) { return x.gap_m < y.gap_m; });
+    std::vector<bool> used(shapes.size(), false);
+    std::vector<bool> remove(shapes.size(), false);
+    int merged = 0;
+    for (const Pairing &p : pairings) {
+        if (used[p.outer] || used[p.inner]) {
+            continue;
+        }
+        used[p.outer] = used[p.inner] = true;
+        std::vector<Vec3> middle;
+        for (const Vec3 &q : resampled(shapes[p.outer].points, kCentreLineStepM)) {
+            const Vec3 r = nearest_on(shapes[p.inner].points, q);
+            middle.push_back({0.5 * (q.x + r.x), 0.5 * (q.y + r.y), 0.0});
+        }
+        middle.back() = middle.front(); // Still closed.
+        shapes[p.outer].points = std::move(middle);
+        remove[p.inner] = true;
+        ++merged;
+    }
+    std::vector<DrawingShape> kept;
+    for (size_t i = 0; i < shapes.size(); ++i) {
+        if (!remove[i]) {
+            kept.push_back(std::move(shapes[i]));
+        }
+    }
+    shapes = std::move(kept);
+    return merged;
+}
+
+} // namespace
+
 Result<SvgRig> rig_from_shapes(std::vector<DrawingShape> shapes, const SvgRigOptions &options) {
     shapes.erase(std::remove_if(shapes.begin(), shapes.end(),
                                 [](const DrawingShape &s) { return s.points.size() < 2; }),
                  shapes.end());
+    const int centre_lines =
+        options.centre_lines ? merge_centre_lines(shapes, options.ring_width_m) : 0;
     if (shapes.empty()) {
         return Error{"The drawing has no visible paths or shapes."};
     }
@@ -887,6 +1015,7 @@ Result<SvgRig> rig_from_shapes(std::vector<DrawingShape> shapes, const SvgRigOpt
         }
     }
     SvgRig rig;
+    rig.centre_lines = centre_lines;
     rig.natural_width_m = max_x - min_x;
     const double k = options.width_m > 0.0 && rig.natural_width_m > 0.0
                          ? options.width_m / rig.natural_width_m
