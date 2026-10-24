@@ -179,6 +179,19 @@ std::filesystem::path labels_path_for(const std::filesystem::path &audio_path) {
     return path;
 }
 
+double first_downbeat_in_audio_s(const LabelGrid &grid) {
+    if (grid.bpm <= 0.0 || grid.first_downbeat_s >= 0.0) {
+        return grid.first_downbeat_s;
+    }
+    const double bar_s = 4.0 * 60.0 / grid.bpm;
+    return grid.first_downbeat_s + std::ceil(-grid.first_downbeat_s / bar_s - 1e-9) * bar_s;
+}
+
+Grid analysis_grid(const LabelGrid &grid, int sample_rate_hz) {
+    return {grid.bpm, seconds_to_samples(first_downbeat_in_audio_s(grid), sample_rate_hz),
+            sample_rate_hz};
+}
+
 Result<Labels> load_labels(const std::filesystem::path &path) {
     const Result<std::string> contents = read_text_file(path);
     if (!contents) {

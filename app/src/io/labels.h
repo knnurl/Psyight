@@ -3,6 +3,7 @@
 #pragma once
 
 #include "core/result.h"
+#include "core/timebase.h"
 
 #include <filesystem>
 #include <string>
@@ -15,6 +16,8 @@ inline constexpr int kLabelsSchemaVersion = 1;
 
 struct LabelGrid {
     double bpm = 160.0;
+    // Bar 1. It may lie before the audio starts, so the bar numbers can match the music's (a
+    // track whose first bars are cut); analyses take the first downbeat in the audio.
     double first_downbeat_s = 0.0;
 
     bool operator==(const LabelGrid &) const = default;
@@ -98,6 +101,10 @@ Result<std::string> to_labels_json(const Labels &labels);
 
 // "<dir>/<name>.<ext>" becomes "<dir>/<name>.<ext>.labels.json".
 std::filesystem::path labels_path_for(const std::filesystem::path &audio_path);
+
+// The first downbeat at 0 s or later, and the grid as the analyses use it (from there).
+double first_downbeat_in_audio_s(const LabelGrid &grid);
+Grid analysis_grid(const LabelGrid &grid, int sample_rate_hz);
 
 Result<Labels> load_labels(const std::filesystem::path &path);
 Result<void> save_labels(const std::filesystem::path &path, const Labels &labels);

@@ -164,10 +164,7 @@ Session::LoadResult Session::load(std::filesystem::path path,
         analysis_stems_exist(stem_paths_for(path)) ? AnalysisSource::stems : AnalysisSource::mix;
     if (std::filesystem::exists(labels_path_for(path))) {
         if (const Result<Labels> labels = load_labels(labels_path_for(path)); labels) {
-            options.grid = Grid{
-                labels.value().grid.bpm,
-                seconds_to_samples(labels.value().grid.first_downbeat_s, buffer.sample_rate_hz),
-                buffer.sample_rate_hz};
+            options.grid = analysis_grid(labels.value().grid, buffer.sample_rate_hz);
         }
     }
     Result<TrackAnalysis> analysis = analyse_track(mono, buffer.sample_rate_hz, path, options);
@@ -338,8 +335,7 @@ double Session::playhead_s() const {
 
 Grid Session::grid() const {
     const int sample_rate_hz = has_track() ? track_->sample_rate_hz : kAnalysisSampleRateHz;
-    const LabelGrid &grid = labels_.labels().grid;
-    return {grid.bpm, seconds_to_samples(grid.first_downbeat_s, sample_rate_hz), sample_rate_hz};
+    return analysis_grid(labels_.labels().grid, sample_rate_hz);
 }
 
 void Session::set_loop(const LoopRegion &loop) {
@@ -378,9 +374,7 @@ void Session::reanalyse(AnalysisSource source) {
     }
     TrackAnalysisOptions options;
     options.source = source;
-    const LabelGrid &grid = labels_.labels().grid;
-    options.grid = Grid{grid.bpm, seconds_to_samples(grid.first_downbeat_s, track_->sample_rate_hz),
-                        track_->sample_rate_hz};
+    options.grid = analysis_grid(labels_.labels().grid, track_->sample_rate_hz);
     reanalysis_track_ = track_.get();
     status_ = "Re-analysing " + track_->name + "...";
     reanalysis_ = std::async(std::launch::async, [path = track_->path, options] {

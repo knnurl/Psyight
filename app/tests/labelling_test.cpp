@@ -218,3 +218,16 @@ TEST_CASE("section marks: scoring detected sections against labelled ones") {
     CHECK(sum.matched == 5);
     CHECK(sum.bars == 100);
 }
+
+TEST_CASE("labelling: bar 1 may lie before the audio; analyses start at the first bar in it") {
+    // 192 BPM (1.25 s bars) with bar 27 at 31.6 s: bar 1 at -0.9 s.
+    const LabelGrid grid{192.0, 31.6 - 26 * 1.25};
+    CHECK(bar_index_at(grid, 31.6) + 1 == 27);
+    CHECK(bar_index_at(grid, 0.0) + 1 == 1);
+    CHECK(snap_to_bar(grid, 31.5) == doctest::Approx(31.6));
+    CHECK(first_downbeat_in_audio_s(grid) == doctest::Approx(0.35));
+    const Grid g = analysis_grid(grid, 48000);
+    CHECK(g.first_downbeat == 16800);                                         // 0.35 s.
+    CHECK(first_downbeat_in_audio_s({192.0, 0.35}) == doctest::Approx(0.35)); // Already in it.
+    CHECK(first_downbeat_in_audio_s({192.0, -1.25}) == doctest::Approx(0.0)); // On 0 s exactly.
+}

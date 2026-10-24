@@ -180,7 +180,7 @@ SectionScore score_sections(const std::vector<SectionLabel> &labelled,
         }
     }
     if (bar_s > 0.0) {
-        for (double start = grid.first_downbeat_s; start + bar_s <= duration_s + 1e-9;
+        for (double start = first_downbeat_in_audio_s(grid); start + bar_s <= duration_s + 1e-9;
              start += bar_s) {
             const double middle = start + 0.5 * bar_s;
             const int a = section_at(labelled, middle);

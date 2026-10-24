@@ -486,11 +486,7 @@ void LabellingView::shift_grid(double by_s) {
     LabelEditor &labels = session_.labels();
     const Labels &l = labels.labels();
     LabelGrid grid = l.grid;
-    const double bar_s = bar_length_s(grid);
-    grid.first_downbeat_s += by_s;
-    if (bar_s > 0.0) { // Kept within the first bar; the bar lines are the same.
-        grid.first_downbeat_s -= std::floor(grid.first_downbeat_s / bar_s) * bar_s;
-    }
+    grid.first_downbeat_s += by_s; // Every bar keeps its number.
     labels.set_grid(grid);
     if (l.phrases.set) {
         LabelPhrases p = l.phrases;
@@ -504,6 +500,28 @@ void LabellingView::shift_grid(double by_s) {
         }
         labels.set_sections(std::move(sections), true);
     }
+}
+
+void LabellingView::downbeat_at(double t_s) {
+    LabelGrid g = session_.labels().labels().grid;
+    if (g.bpm <= 0.0) {
+        return;
+    }
+    const double beat_s = 60.0 / g.bpm;
+    const double beat =
+        g.first_downbeat_s + std::round((t_s - g.first_downbeat_s) / beat_s) * beat_s;
+    g.first_downbeat_s += beat - snap_to_bar(g, beat); // The nearest bar line moves onto it.
+    session_.labels().set_grid(g);
+}
+
+void LabellingView::number_bar_at(double t_s, int number) {
+    LabelGrid g = session_.labels().labels().grid;
+    const double bar_s = bar_length_s(g);
+    if (bar_s <= 0.0) {
+        return;
+    }
+    g.first_downbeat_s = snap_to_bar(g, t_s) - (number - 1) * bar_s; // Bar 1 may be before 0 s.
+    session_.labels().set_grid(g);
 }
 
 void LabellingView::draw_grid_controls() {
@@ -520,23 +538,27 @@ void LabellingView::draw_grid_controls() {
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(6.0f * em);
-    if (drag_double("first downbeat (s)", &grid.first_downbeat_s, 0.001f, 0.0, 600.0, "%.3f")) {
+    if (drag_double("bar 1 at (s)", &grid.first_downbeat_s, 0.001f, -600.0, 600.0, "%.3f")) {
         labels.set_grid(grid);
     }
+    ImGui::SetItemTooltip("Where bar 1 starts; before 0 s when the track's first bars are cut.");
     ImGui::SameLine();
     if (ImGui::Button("Downbeat here (D)")) {
-        LabelGrid g = l.grid;
-        const double beat_s = g.bpm > 0.0 ? 60.0 / g.bpm : 0.0;
-        if (beat_s > 0.0) {
-            const double beat = g.first_downbeat_s +
-                                std::round((playhead_s() - g.first_downbeat_s) / beat_s) * beat_s;
-            const double bar_s = 4.0 * beat_s;
-            g.first_downbeat_s = beat - std::floor(beat / bar_s) * bar_s;
-            labels.set_grid(g);
-        }
+        downbeat_at(playhead_s());
     }
     ImGui::SetItemTooltip("The beat nearest the playhead becomes a downbeat (the grid shifts by "
                           "whole beats; the tempo stays).");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(5.0f * ImGui::GetFontSize());
+    ImGui::InputInt("##bar number", &bar_number_, 1, 8);
+    bar_number_ = std::clamp(bar_number_, 1, 9999);
+    ImGui::SameLine();
+    if (ImGui::Button("Number the bar here")) {
+        number_bar_at(playhead_s(), bar_number_);
+    }
+    ImGui::SetItemTooltip("The bar line nearest the playhead becomes bar %d; the bar lines stay "
+                          "(for phrases counted as the music counts them).",
+                          bar_number_);
     ImGui::SameLine(0.0f, 2.0f * em);
     ImGui::TextUnformatted("Shift");
     const double beat_s = l.grid.bpm > 0.0 ? 60.0 / l.grid.bpm : 0.0;
@@ -1080,13 +1102,8 @@ void LabellingView::handle_keys() {
             p.start_s = snap_to_bar(l.grid, t);
             session_.labels().set_phrases(p);
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_D, false) && l.grid.bpm > 0.0) {
-            LabelGrid g = l.grid;
-            const double beat_s = 60.0 / g.bpm;
-            const double beat =
-                g.first_downbeat_s + std::round((t - g.first_downbeat_s) / beat_s) * beat_s;
-            g.first_downbeat_s = beat - std::floor(beat / (4.0 * beat_s)) * 4.0 * beat_s;
-            session_.labels().set_grid(g);
+        if (ImGui::IsKeyPressed(ImGuiKey_D, false)) {
+            downbeat_at(t);
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
             ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
