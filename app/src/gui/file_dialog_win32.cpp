@@ -127,6 +127,20 @@ std::optional<std::filesystem::path> open_svg_file_dialog(void *owner) {
     return show_dialog(owner, false, {filters, 2, L"Make a rig from a drawing", nullptr, {}});
 }
 
+std::optional<std::filesystem::path>
+save_drawing_file_dialog(void *owner, const std::filesystem::path &suggested, bool dxf) {
+    const COMDLG_FILTERSPEC svg_filters[] = {{L"SVG drawing", L"*.svg"}, {L"All files", L"*.*"}};
+    const COMDLG_FILTERSPEC dxf_filters[] = {{L"DXF drawing", L"*.dxf"}, {L"All files", L"*.*"}};
+    std::optional<std::filesystem::path> chosen =
+        show_dialog(owner, true,
+                    {dxf ? dxf_filters : svg_filters, 2, L"Export the rig as a drawing",
+                     dxf ? L"dxf" : L"svg", suggested});
+    if (chosen && chosen->extension().empty()) {
+        *chosen += dxf ? ".dxf" : ".svg";
+    }
+    return chosen;
+}
+
 std::optional<std::filesystem::path> pick_folder_dialog(void *owner) {
     return show_dialog(owner, false, {nullptr, 0, L"Add a music folder", nullptr, {}, true});
 }

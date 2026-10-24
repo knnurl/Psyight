@@ -7,6 +7,7 @@
 #include "gui/widgets.h"
 #include "io/dxf_rig.h"
 #include "io/presets.h"
+#include "io/rig_export.h"
 #include "output/node_setup.h"
 
 #include <imgui.h>
@@ -24,6 +25,15 @@
 namespace psyight {
 
 namespace {
+
+// The strip to buy: each strip's pixels at its density.
+double strip_length_m(const std::vector<StripSpec> &strips) {
+    double total = 0.0;
+    for (const StripSpec &s : strips) {
+        total += s.pixels_per_m > 0.0 ? s.count / s.pixels_per_m : 0.0;
+    }
+    return total;
+}
 
 std::string lower_extension(const std::filesystem::path &path) {
     std::string ext = path_to_utf8(path.extension());
@@ -124,6 +134,11 @@ void RigView::draw_project() {
     }
     ImGui::SetItemTooltip("Replace everything with the 2.5 by 1.2 m test frame and default "
                           "settings.");
+    ImGui::SameLine();
+    draw_export();
+    if (!export_status_.empty()) {
+        ImGui::TextDisabled("%s", export_status_.c_str());
+    }
     if (!project_.status().empty()) {
         ImGui::TextWrapped("%s", project_.status().c_str());
     }
@@ -296,6 +311,29 @@ void RigView::draw_presets(std::vector<StripSpec> &strips) {
             ImGui::SameLine();
             ImGui::TextDisabled("%.2f m tall", height_m * values[k]);
             ImGui::SetItemTooltip("Scales the whole shape (%.2f x its own size).", values[k]);
+        } else if (q.id == "density") {
+            // Density shown in pixels per metre: the densest strip's at the multiplier (strips
+            // at other densities scale with it); typing a density sets the multiplier.
+            std::vector<double> plain = values;
+            plain[k] = 1.0;
+            double lowest = 1e9;
+            double highest = 0.0;
+            for (const StripSpec &s : build_rig_preset(preset, plain)) {
+                lowest = std::min(lowest, s.pixels_per_m);
+                highest = std::max(highest, s.pixels_per_m);
+            }
+            highest = std::max(1.0, highest);
+            double per_m = highest * values[k];
+            ImGui::SetNextItemWidth(field);
+            if (drag_double("Density", &per_m, 1.0f, q.min * highest, q.max * highest,
+                            "%.0f px/m")) {
+                values[k] = std::clamp(per_m / highest, q.min, q.max);
+            }
+            if (lowest < highest - 1e-9) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("(others %.0f px/m)", lowest * values[k]);
+            }
+            ImGui::SetItemTooltip("LEDs per metre of strip (60 is the common WS2812 strip).");
         } else if (q.toggle) {
             bool on = values[k] >= 0.5;
             if (ImGui::Checkbox(q.label.c_str(), &on)) {
@@ -331,8 +369,9 @@ void RigView::draw_replace(std::vector<StripSpec> strips) {
                                     std::vector<ColourOrder>(strips.size(), order));
     const auto pixels = static_cast<int>(rig.pixels.size());
     ImGui::Spacing();
-    mono_text("%zu strips, %d pixels, universes %d to %d, %.1f A at full white", strips.size(),
-              pixels, patch.universes.empty() ? 0 : patch.universes.front(),
+    mono_text("%zu strips, %d pixels, %.2f m of strip, universes %d to %d, %.1f A at full white",
+              strips.size(), pixels, strip_length_m(strips),
+              patch.universes.empty() ? 0 : patch.universes.front(),
               patch.universes.empty() ? 0 : patch.universes.back(),
               pixels * 3 * p.limiter.current_per_channel_ma * 1e-3);
     if (pixels > kPixelBudget) {
@@ -476,7 +515,87 @@ void RigView::draw_svg(std::vector<StripSpec> &strips) {
     strips = rig.strips;
 }
 
+// Export drawing: what to draw, then SVG or DXF; the file is written after the frame.
+void RigView::draw_export() {
+    if (ImGui::Button("Export drawing...")) {
+        ImGui::OpenPopup("Export the rig as a drawing");
+    }
+    ImGui::SetItemTooltip("The rig as an SVG or DXF to build from: paths, channels, pixels and "
+                          "wiring, in millimetres.");
+    if (!ImGui::BeginPopupModal("Export the rig as a drawing", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+    RigExportOptions &o = export_options_;
+    ImGui::Checkbox("Centre lines (where the LEDs sit)", &o.centre_lines);
+    ImGui::Checkbox("Channels", &o.channels);
+    ImGui::SetItemTooltip("Each path offset either side: grooves or a mount to cut.");
+    if (o.channels) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(7.0f * ImGui::GetFontSize());
+        double width_mm = o.channel_width_m * 1000.0;
+        if (drag_double("wide##channel", &width_mm, 0.1f, 1.0, 100.0, "%.1f mm")) {
+            o.channel_width_m = width_mm / 1000.0;
+        }
+    }
+    ImGui::Checkbox("Pixels (a dot at every LED)", &o.pixels);
+    ImGui::Checkbox("Wiring (data-in arrows; order, name, line and pin)", &o.wiring);
+    ImGui::TextDisabled("Each on a layer of its own, in millimetres.");
+    if (ImGui::Button("SVG...")) {
+        export_requested_ = 1;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("DXF...")) {
+        export_requested_ = 2;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void RigView::export_drawing(void *owner) {
+    const bool dxf = export_requested_ == 2;
+    export_requested_ = 0;
+    const Project &p = project_.project();
+    const std::filesystem::path suggested =
+        (project_.untitled() ? std::filesystem::path("rig") : project_.path().stem()).string() +
+        (dxf ? ".dxf" : ".svg");
+    const auto chosen = save_drawing_file_dialog(owner, suggested, dxf);
+    if (!chosen) {
+        return;
+    }
+    std::vector<StripSpec> strips;
+    std::vector<std::string> notes(p.strips.size());
+    for (const ProjectStrip &s : p.strips) {
+        strips.push_back(s.spec);
+    }
+    const NodePlan plan = plan_node(p); // The data line and pin of each strip, as Patch shows.
+    for (size_t l = 0; l < plan.lanes.size(); ++l) {
+        const NodeLane &lane = plan.lanes[l];
+        for (int k = 0; k < lane.strips; ++k) {
+            const auto s = static_cast<size_t>(lane.first_strip + k);
+            if (s < notes.size()) {
+                notes[s] =
+                    "line " + std::to_string(l + 1) + ", " + node_lane_pin(static_cast<int>(l));
+            }
+        }
+    }
+    const std::string text = dxf ? rig_to_dxf(strips, notes, export_options_)
+                                 : rig_to_svg(strips, notes, export_options_);
+    std::ofstream out(*chosen, std::ios::binary);
+    out << text;
+    export_status_ = out ? "Exported " + path_to_utf8(*chosen) + "."
+                         : "Could not write " + path_to_utf8(*chosen) + ".";
+}
+
 void RigView::after_frame(void *owner) {
+    if (export_requested_ != 0) {
+        export_drawing(owner);
+    }
     if (!svg_requested_) {
         return;
     }
@@ -808,8 +927,14 @@ void RigView::draw_patch() {
     }
     ImGui::SetItemTooltip("170 RGB pixels use 510 of a universe's 512 channels (SPEC 8).");
     const auto pixels = static_cast<int>(rig.pixels.size());
-    mono_text("%d pixels in %zu strips, universes %d to %d, %.1f by %.1f by %.1f m", pixels,
-              p.strips.size(), patch.universes.empty() ? 0 : patch.universes.front(),
+    std::vector<StripSpec> specs;
+    for (const ProjectStrip &s : p.strips) {
+        specs.push_back(s.spec);
+    }
+    mono_text("%d pixels in %zu strips (%.2f m of strip), universes %d to %d, %.1f by %.1f by "
+              "%.1f m",
+              pixels, p.strips.size(), strip_length_m(specs),
+              patch.universes.empty() ? 0 : patch.universes.front(),
               patch.universes.empty() ? 0 : patch.universes.back(), rig.max.x - rig.min.x,
               rig.max.y - rig.min.y, rig.max.z - rig.min.z);
     if (pixels > kPixelBudget) {

@@ -11,6 +11,7 @@
 
 #include "engine/rig_templates.h"
 #include "gui/project_state.h"
+#include "io/rig_export.h"
 #include "io/svg_rig.h"
 
 #include <cstdint>
@@ -47,6 +48,8 @@ class RigView {
     // The strips' summary against the budgets, and Replace the rig after a confirmation.
     void draw_replace(std::vector<StripSpec> strips);
     void draw_strips();
+    void draw_export();
+    void export_drawing(void *owner);
     void draw_wiring_order(std::vector<ProjectStrip> &strips, bool &changed);
     void draw_patch();
 
@@ -69,6 +72,9 @@ class RigView {
     int user_rig_ = 0;
     std::string rig_name_;
     std::string rig_status_;
+    RigExportOptions export_options_;
+    std::string export_status_;
+    int export_requested_ = 0;   // 1: SVG, 2: DXF, written after the frame.
     int wiring_first_ = 0;       // Order for wiring: the strip the data line starts at.
     bool wiring_reverse_ = true; // ...and whether strips may be turned round.
     bool svg_requested_ = false;
