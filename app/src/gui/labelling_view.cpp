@@ -24,6 +24,8 @@ constexpr float kMinZoomBars = 8.0f;
 constexpr float kMaxZoomBars = 128.0f;
 constexpr float kHandleGrabPixels = 5.0f;
 constexpr float kPanStartPixels = 3.0f; // A press moving less is a click.
+// Below this, the detected phrase offset is a guess: phrases are shown from bar 1 instead.
+constexpr double kTrustedPhraseConfidence = 0.5;
 
 ImU32 section_colour(const std::string &label, float alpha = 1.0f) {
     const ThemeTokens &t = theme();
@@ -177,11 +179,20 @@ LabelPhrases LabellingView::effective_phrases() const {
     const double bar_s = 4.0 * 60.0 / a->beats.bpm;
     detected.set = true;
     detected.bars = 8;
+    if (!detected_phrases_trusted()) {
+        detected.start_s = l.grid.first_downbeat_s; // Unsure: tracks start on a phrase.
+        return detected;
+    }
     detected.start_s =
         samples_to_seconds(a->beats.grid.first_downbeat, a->beats.grid.sample_rate_hz) +
         a->beats.phrase_bar_offset * bar_s;
     detected.start_s = snap_to_bar(l.grid, detected.start_s); // On the labelled grid's bars.
     return detected;
+}
+
+bool LabellingView::detected_phrases_trusted() const {
+    const TrackAnalysis *a = session_.has_track() ? session_.track().track_analysis.get() : nullptr;
+    return a != nullptr && a->beats.phrase_confidence >= kTrustedPhraseConfidence;
 }
 
 double LabellingView::snapped(double t_s) const {
@@ -577,7 +588,10 @@ void LabellingView::draw_grid_controls() {
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
-    ImGui::TextDisabled(l.phrases.set ? "labelled" : "detected");
+    ImGui::TextDisabled("%s", l.phrases.set ? "labelled"
+                              : detected_phrases_trusted()
+                                  ? "detected"
+                                  : "from bar 1 (the detection is unsure)");
 }
 
 void LabellingView::draw_section_table() {

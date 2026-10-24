@@ -77,6 +77,7 @@ class LabellingView {
     void commit(std::vector<SectionLabel> sections); // One undo step; marks them edited.
     // The labelled phrase grid, or the detection's when none is labelled.
     LabelPhrases effective_phrases() const;
+    bool detected_phrases_trusted() const; // The beat tracker's phrase offset, confident.
     double playhead_s() const;
     void seek(double t_s);
     double snapped(double t_s) const; // By the held modifier: bar, phrase (Shift) or free (Alt).
