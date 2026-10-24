@@ -22,6 +22,7 @@
 #include "io/label_editor.h"
 #include "ml/student.h"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -40,6 +41,13 @@ struct LoadedTrack {
     std::vector<double> overview_time_s; // Waveform overview: min and max per bucket.
     std::vector<double> overview_min;
     std::vector<double> overview_max;
+    // The detailed waveform (the labelling mode's zoomed view): per detail_bucket_samples
+    // samples, the lowest and highest sample and the RMS of three bands (low under 200 Hz, high
+    // over 4 kHz, mid between), so kicks and hats show as colour.
+    int detail_bucket_samples = 0;
+    std::vector<float> detail_min;
+    std::vector<float> detail_max;
+    std::vector<std::array<float, 3>> detail_bands;
     std::shared_ptr<const FrontEndResult> analysis; // The mix's features (in track_analysis).
     // Beats, kicks, bass notes, sections, hats, residual and aggregates; null when the analysis
     // found no tempo (then only `analysis` exists).

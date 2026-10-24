@@ -9,12 +9,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <numbers>
 
 namespace psyight {
 
 namespace {
 
 constexpr int kOverviewBuckets = 4000;
+constexpr double kDetailBucketS = 0.005; // The labelling mode's waveform: 5 ms a point.
+constexpr double kLowBandHz = 200.0;
+constexpr double kHighBandHz = 4000.0;
 constexpr auto kRecoveryInterval = std::chrono::seconds(60);
 constexpr double kPlayheadLead = 0.3; // Fraction of the view shown before the playhead.
 constexpr double kMinViewS = 0.25;
@@ -114,6 +118,41 @@ Session::LoadResult Session::load(std::filesystem::path path,
             samples_to_seconds((begin + end) / 2, buffer.sample_rate_hz));
         track->overview_min.push_back(std::min(0.0f, *low));
         track->overview_max.push_back(std::max(0.0f, *high));
+    }
+    // The detailed waveform, with one-pole filters splitting the bands.
+    const int detail = std::max(1, static_cast<int>(kDetailBucketS * buffer.sample_rate_hz));
+    track->detail_bucket_samples = detail;
+    const double fs = buffer.sample_rate_hz;
+    const auto low_coeff =
+        static_cast<float>(1.0 - std::exp(-2.0 * std::numbers::pi * kLowBandHz / fs));
+    const auto high_coeff =
+        static_cast<float>(1.0 - std::exp(-2.0 * std::numbers::pi * kHighBandHz / fs));
+    float low_state = 0.0f;
+    float below_high_state = 0.0f;
+    for (SampleIndex begin = 0; begin < frames; begin += detail) {
+        const SampleIndex end = std::min<SampleIndex>(frames, begin + detail);
+        float lowest = 0.0f;
+        float highest = 0.0f;
+        std::array<double, 3> energy{};
+        for (SampleIndex i = begin; i < end; ++i) {
+            const float x = mono[static_cast<size_t>(i)];
+            lowest = std::min(lowest, x);
+            highest = std::max(highest, x);
+            low_state += low_coeff * (x - low_state);
+            below_high_state += high_coeff * (x - below_high_state);
+            const float low = low_state;
+            const float high = x - below_high_state;
+            const float mid = below_high_state - low_state;
+            energy[0] += static_cast<double>(low) * low;
+            energy[1] += static_cast<double>(mid) * mid;
+            energy[2] += static_cast<double>(high) * high;
+        }
+        const auto n = static_cast<double>(end - begin);
+        track->detail_min.push_back(lowest);
+        track->detail_max.push_back(highest);
+        track->detail_bands.push_back({static_cast<float>(std::sqrt(energy[0] / n)),
+                                       static_cast<float>(std::sqrt(energy[1] / n)),
+                                       static_cast<float>(std::sqrt(energy[2] / n))});
     }
 
     // The whole file-mode analysis: from the Demucs stems when they exist, on the labelled grid

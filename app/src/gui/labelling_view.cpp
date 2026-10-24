@@ -10,8 +10,10 @@
 #include <imgui_stdlib.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 
 namespace psyight {
 
@@ -364,15 +366,34 @@ void LabellingView::draw_track() {
     double from = playhead_s() - window_s / 3.0;
     from = std::clamp(from, -0.02 * window_s, std::max(0.0, track.duration_s - 0.98 * window_s));
     draw_timeline("##zoom", {from, from + window_s}, 11.0f * em, true);
+    // The section keys as buttons in the sections' colours: a click marks at the playhead too.
+    for (int i = 0; i < 6; ++i) {
+        std::string name = kSectionNames[i];
+        name[0] = static_cast<char>(name[0] - 'a' + 'A');
+        const std::string text = std::to_string(i + 1) + "  " + name + "##mark";
+        ImGui::PushStyleColor(ImGuiCol_Button, section_colour(kSectionNames[i], 0.75f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, section_colour(kSectionNames[i], 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, section_colour(kSectionNames[i], 1.0f));
+        ImGui::PushID(i);
+        if (ImGui::Button(text.c_str(), ImVec2(7.5f * em, 0.0f))) {
+            mark(i);
+        }
+        ImGui::PopID();
+        ImGui::PopStyleColor(3);
+        ImGui::SetItemTooltip("Key %d: %s from the nearest bar to the playhead (Shift: phrase, "
+                              "Alt: exact).",
+                              i + 1, kSectionNames[i]);
+        ImGui::SameLine();
+    }
+    ImGui::NewLine();
     ImGui::SetNextItemWidth(14.0f * em);
     ImGui::SliderFloat("##zoom bars", &zoom_bars_, kMinZoomBars, kMaxZoomBars, "%.0f bars shown",
                        ImGuiSliderFlags_Logarithmic);
     ImGui::SetItemTooltip("The zoomed view's width (or the mouse wheel over it).");
     ImGui::SameLine();
-    ImGui::TextDisabled(
-        "Keys: Space play; 1 intro, 2 groove, 3 breakdown, 4 build, 5 drop, 6 outro "
-        "(Shift: phrase, Alt: exact); Del remove; P phrase; D downbeat; [ ] jump; "
-        "Enter done; N next.");
+    ImGui::TextDisabled("Keys: Space play; 1 to 6 sections (Shift: phrase, Alt: exact); Del "
+                        "remove; P phrase; D downbeat; [ ] jump; "
+                        "Enter done; N next.");
     ImGui::Spacing();
     draw_grid_controls();
     ImGui::Spacing();
@@ -598,6 +619,48 @@ void LabellingView::draw_section_table() {
     }
 }
 
+// The detailed waveform between y and y + h over [x0, x0 + width]: per pixel column, the lowest
+// and highest sample, coloured by its bands (low red, mid green, high blue).
+void LabellingView::draw_waveform(ImDrawList &draw, const LoadedTrack &track, float y, float h,
+                                  float x0, float width,
+                                  const std::function<double(float)> &t_of) const {
+    const double bucket_s =
+        static_cast<double>(track.detail_bucket_samples) / std::max(1, track.sample_rate_hz);
+    const auto buckets = static_cast<long long>(track.detail_min.size());
+    const float mid = y + 0.5f * h;
+    constexpr ImVec4 kLow(1.0f, 0.32f, 0.22f, 1.0f);
+    constexpr ImVec4 kMid(0.35f, 0.9f, 0.45f, 1.0f);
+    constexpr ImVec4 kHigh(0.35f, 0.65f, 1.0f, 1.0f);
+    for (float x = x0; x < x0 + width; x += 1.0f) {
+        const auto first = static_cast<long long>(std::floor(t_of(x) / bucket_s));
+        const auto last =
+            std::max(first, static_cast<long long>(std::floor(t_of(x + 1.0f) / bucket_s)));
+        if (last < 0 || first >= buckets) {
+            continue;
+        }
+        float lowest = 0.0f;
+        float highest = 0.0f;
+        std::array<float, 3> bands{};
+        for (long long b = std::max(0LL, first); b <= std::min(buckets - 1, last); ++b) {
+            const auto i = static_cast<size_t>(b);
+            lowest = std::min(lowest, track.detail_min[i]);
+            highest = std::max(highest, track.detail_max[i]);
+            for (size_t k = 0; k < 3; ++k) {
+                bands[k] = std::max(bands[k], track.detail_bands[i][k]);
+            }
+        }
+        const float sum = bands[0] + bands[1] + bands[2];
+        ImVec4 c = theme().text_dim;
+        if (sum > 0.0f) {
+            c = ImVec4((bands[0] * kLow.x + bands[1] * kMid.x + bands[2] * kHigh.x) / sum,
+                       (bands[0] * kLow.y + bands[1] * kMid.y + bands[2] * kHigh.y) / sum,
+                       (bands[0] * kLow.z + bands[1] * kMid.z + bands[2] * kHigh.z) / sum, 0.85f);
+        }
+        draw.AddLine(ImVec2(x + 0.5f, mid - std::min(1.0f, highest) * 0.5f * h),
+                     ImVec2(x + 0.5f, mid - std::max(-1.0f, lowest) * 0.5f * h + 1.0f), to_u32(c));
+    }
+}
+
 void LabellingView::draw_timeline(const char *id, Span span, float height, bool lanes) {
     const LoadedTrack &track = session_.track();
     const Labels &l = session_.labels().labels();
@@ -671,11 +734,16 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
         }
     }
     const TrackAnalysis *a = track.track_analysis.get();
+    // Zoomed: the waveform over the upper part, the per-bar features under it.
+    const float wave_h = lanes ? 0.55f * rest_h : 0.0f;
+    if (lanes && track.detail_bucket_samples > 0 && !track.detail_min.empty()) {
+        draw_waveform(*draw, track, rest_y, wave_h, p0.x, width, t_of);
+    }
     if (lanes && a != nullptr && !a->section_bars.empty()) {
         // Kick (a row), level (bars), riser (a line).
         const float kick_h = 0.6f * em;
-        const float level_y = rest_y + kick_h + 3.0f;
-        const float level_h = std::max(1.0f, rest_h - kick_h - 3.0f);
+        const float level_y = rest_y + wave_h + kick_h + 3.0f;
+        const float level_h = std::max(1.0f, rest_h - wave_h - kick_h - 3.0f);
         double lo = a->section_bars.front().level_db;
         double hi = lo;
         for (const SectionBar &b : a->section_bars) {
@@ -691,7 +759,7 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
             const float x1 = x_of(b.start_s + analysis_bar_s) - 1.0f;
             const float kick_share = b.kick_beats / 4.0f;
             draw->AddRectFilled(
-                ImVec2(x0, rest_y), ImVec2(x1, rest_y + kick_h),
+                ImVec2(x0, rest_y + wave_h), ImVec2(x1, rest_y + wave_h + kick_h),
                 to_u32(with_alpha(theme().text, b.kick ? 0.15f + 0.6f * kick_share : 0.06f)));
             const float level = hi > lo ? static_cast<float>((b.level_db - lo) / (hi - lo)) : 0.5f;
             draw->AddRectFilled(ImVec2(x0, level_y + level_h * (1.0f - level)),

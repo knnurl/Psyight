@@ -28,9 +28,12 @@
 #include "io/user_settings.h"
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
+
+struct ImDrawList;
 
 namespace psyight {
 
@@ -57,6 +60,8 @@ class LabellingView {
     // A time strip: the sections (labelled, then detected), the grid and the lanes over `span`.
     // Clicks seek; boundaries drag. `lanes`: draw the per-bar kick, level and riser lanes.
     void draw_timeline(const char *id, Span span, float height, bool lanes);
+    void draw_waveform(ImDrawList &draw, const LoadedTrack &track, float y, float h, float x0,
+                       float width, const std::function<double(float)> &t_of) const;
     void draw_section_table();
     void handle_keys();
     void rescan();
