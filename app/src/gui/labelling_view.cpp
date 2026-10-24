@@ -749,14 +749,17 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
             const float x = x_of(tb);
             const int in_phrase = bar_in_phrase(l.grid, phrases, tb + 1e-6);
             const bool phrase_start = in_phrase == 0;
-            if (!phrase_start && bar_px < 4.0f) {
+            // Halfway through the phrase (bar 4 of 8, 8 of 16): a line between the two.
+            const bool phrase_middle = phrases.bars >= 2 && in_phrase == phrases.bars / 2;
+            if (!phrase_start && !phrase_middle && bar_px < 4.0f) {
                 continue;
             }
-            draw->AddLine(ImVec2(x, ruler_y + (phrase_start ? 0.0f : 0.55f * ruler_h)),
-                          ImVec2(x, p0.y + height),
-                          to_u32(with_alpha(phrase_start ? theme().phrase_tick : theme().text_dim,
-                                            phrase_start ? 0.9f : 0.18f)),
-                          phrase_start ? 1.5f : 1.0f);
+            const float top = phrase_start ? 0.0f : phrase_middle ? 0.3f : 0.55f;
+            const float alpha = phrase_start ? 0.9f : phrase_middle ? 0.45f : 0.18f;
+            draw->AddLine(
+                ImVec2(x, ruler_y + top * ruler_h), ImVec2(x, p0.y + height),
+                to_u32(with_alpha(phrase_start ? theme().phrase_tick : theme().text_dim, alpha)),
+                phrase_start ? 1.5f : 1.0f);
             if (phrase_start && 8.0f * bar_px > 2.2f * em) {
                 char text[16];
                 std::snprintf(text, sizeof(text), "%lld", b + 1);
