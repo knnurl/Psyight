@@ -3,10 +3,11 @@
 //
 // View: Front (x across, y up: as the audience sees it), Top (from above, the audience at the
 // bottom), Side (from the right, the audience to the left) or Orbit (a drag turns the rig; far
-// pixels are drawn first and dimmer). The mouse wheel zooms about the pointer; a drag on empty
-// space (or the middle button) pans; Fit view (or a double-click on empty space) shows the whole
-// rig again. Editing works in the Front view. Hovering shows each
-// strip's data-in arrow and name, and outlines the strip under the pointer with a tooltip.
+// pixels are drawn first and dimmer). Names hides or shows the strip names and arrows. The mouse
+// wheel zooms about the pointer; a drag on empty space (or the middle button) pans; Fit view (or a
+// double-click on empty space) shows the whole rig again. Editing works in the Front view. Hovering
+// shows each strip's data-in arrow and name, and outlines the strip under the pointer with a
+// tooltip.
 //
 // Edit strips (a toggle above the view) edits the project's strips (gui/project_state.h, undoable
 // as any other change), drawing each strip's path over its pixels:
@@ -59,6 +60,7 @@ class StageCanvas {
 
     ProjectState &project_;
     bool editing_ = false;
+    bool show_names_ = true; // Strip names and data-in arrows on hover.
     View view_ = View::front;
     double yaw_rad_ = 0.6; // Orbit: turned about the vertical, then tilted.
     double pitch_rad_ = 0.35;

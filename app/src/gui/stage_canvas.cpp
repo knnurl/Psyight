@@ -108,6 +108,9 @@ void StageCanvas::draw_toolbar(const Rig &rig) {
                           "on empty space pans.");
     ImGui::SameLine();
     ImGui::TextDisabled("%.0f%%", 100.0 * zoom_);
+    ImGui::SameLine();
+    ImGui::Checkbox("Names", &show_names_);
+    ImGui::SetItemTooltip("Strip names and data-in arrows while the pointer is over the view.");
     if (!editing_ || view_ != View::front) {
         return;
     }
@@ -487,11 +490,11 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
             }
         }
     }
-    // Hovering: each strip's data-in arrow and name.
+    // Hovering: each strip's data-in arrow and name (unless hidden).
     if (hovered) {
         ImFont *font = theme_font(ThemeFont::plot);
         const float font_px = font != nullptr ? font->FontSize : ImGui::GetFontSize();
-        for (size_t s = 0; s < rig.strips.size(); ++s) {
+        for (size_t s = 0; show_names_ && s < rig.strips.size(); ++s) {
             const std::vector<Vec3> &line = rig.strips[s].polyline;
             if (line.size() < 2) {
                 continue;
