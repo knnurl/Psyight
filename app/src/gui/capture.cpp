@@ -61,6 +61,8 @@ parse_capture_args(const std::vector<std::filesystem::path> &args) {
             c.time_s = std::atof(a[++i].c_str());
         } else if (a[i] == "--frames" && has_value) {
             c.frames = std::atoi(a[++i].c_str());
+        } else if (a[i] == "--view" && has_value) {
+            c.view = a[++i];
         } else {
             return Result<CaptureArgs>(Error{"capture: unexpected argument " + a[i]});
         }
@@ -70,6 +72,9 @@ parse_capture_args(const std::vector<std::filesystem::path> &args) {
     }
     if (c.theme != "desk" && c.theme != "show") {
         return Result<CaptureArgs>(Error{"capture: --theme must be desk or show"});
+    }
+    if (c.view != "front" && c.view != "top" && c.view != "side" && c.view != "orbit") {
+        return Result<CaptureArgs>(Error{"capture: --view must be front, top, side or orbit"});
     }
     if (c.frames < 1 || c.time_s < 0.0) {
         return Result<CaptureArgs>(Error{"capture: --frames must be 1 or more, --time 0 or more"});

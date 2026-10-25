@@ -2,6 +2,7 @@
 // framebuffer and saves a PNG, so restyling can be compared capture to capture.
 //
 //   psyight --capture <out.png> --theme <desk|show> --audio <file> --time <seconds> --frames 60
+//           [--view front|top|side|orbit] (the rig preview's view)
 //
 // The window is hidden and 1920x1080 at a DPI scale of 1.0; no ini file is read or written (the
 // default layout is used); the crash marker is not touched. The app loads the audio, waits for
@@ -30,6 +31,7 @@ struct CaptureArgs {
     std::filesystem::path audio;
     double time_s = 0.0;
     int frames = 60;
+    std::string view = "front";
 };
 
 // Empty when the arguments do not ask for a capture; an error when they ask badly.

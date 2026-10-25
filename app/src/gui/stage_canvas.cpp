@@ -43,6 +43,17 @@ double length_m(const std::vector<Vec3> &p) {
 
 } // namespace
 
+bool StageCanvas::set_view(std::string_view name) {
+    constexpr std::string_view kNames[] = {"front", "top", "side", "orbit"};
+    for (size_t i = 0; i < std::size(kNames); ++i) {
+        if (name == kNames[i]) {
+            view_ = static_cast<View>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
 Vec3 StageCanvas::project(const Vec3 &q) const {
     switch (view_) {
     case View::front:

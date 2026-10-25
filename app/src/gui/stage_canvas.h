@@ -25,6 +25,7 @@
 #include "gui/project_state.h"
 
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 namespace psyight {
@@ -39,6 +40,8 @@ class StageCanvas {
               int highlighted_strip, bool tools = true);
     int hovered_strip() const { return hovered_strip_; }
     bool editing() const { return editing_; }
+    // "front", "top", "side" or "orbit" (capture mode's --view); false for another name.
+    bool set_view(std::string_view name);
 
   private:
     enum class Drag { none, pan, point, strips, orbit };

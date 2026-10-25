@@ -75,6 +75,7 @@ class PreviewView {
     // The strip under the mouse in the preview (-1: none), and the one to outline from elsewhere
     // (the Rig tab's hovered row).
     int hovered_strip() const { return hovered_strip_; }
+    void set_rig_view(std::string_view name) { canvas_.set_view(name); } // Capture's --view.
     void set_highlighted_strip(int strip) { highlighted_strip_ = strip; }
     void apply_settings(const UserSettings &settings) { preview_open_ = settings.preview_open; }
     void store_settings(UserSettings &settings) const { settings.preview_open = preview_open_; }

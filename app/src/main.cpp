@@ -267,6 +267,9 @@ int main() {
         psyight::ScoringView scoring_view(session);
         psyight::ProjectState project;
         psyight::PreviewView preview_view(session, project);
+        if (capture) {
+            preview_view.set_rig_view(capture->view);
+        }
         psyight::LabellingView labelling_view(session);
         psyight::RigView rig_view(project);
         psyight::PreflightView preflight_view(session, project, preview_view);
