@@ -147,3 +147,26 @@ TEST_CASE("dxf rig: binary files and files without entities are errors") {
     CHECK_FALSE(rig_from_dxf(dxf({{0, "SECTION"}, {2, "HEADER"}, {0, "ENDSEC"}, {0, "EOF"}}), {}));
     CHECK_FALSE(rig_from_dxf(drawing({}), {})); // No shapes.
 }
+
+TEST_CASE("dxf rig: depth comes in: 3D lines, 3D polylines, elevated circles, 3D splines") {
+    const std::string text = drawing(
+        {{0, "LINE"},   {8, "Depth"}, {10, "0"},       {20, "0"},     {30, "0"},     {11, "0"},
+         {21, "0"},     {31, "300"},  {0, "POLYLINE"}, {8, "Depth"},  {66, "1"},     {70, "8"},
+         {0, "VERTEX"}, {10, "100"},  {20, "0"},       {30, "0"},     {0, "VERTEX"}, {10, "100"},
+         {20, "0"},     {30, "400"},  {0, "SEQEND"},   {0, "CIRCLE"}, {8, "Depth"},  {10, "200"},
+         {20, "0"},     {30, "150"},  {40, "50"},      {0, "SPLINE"}, {8, "Depth"},  {71, "1"},
+         {40, "0"},     {40, "0"},    {40, "1"},       {40, "1"},     {10, "300"},   {20, "0"},
+         {30, "0"},     {10, "300"},  {20, "0"},       {30, "500"}});
+    const Result<SvgRig> made = rig_from_dxf(text, {0.0, 1.0, 1000.0});
+    REQUIRE(made);
+    const SvgRig &rig = made.value();
+    REQUIRE(rig.strips.size() == 4);
+    const StripSpec &line = rig.strips[0];
+    CHECK(line.polyline.back().z == doctest::Approx(0.3));
+    CHECK(line.count == 300); // 0.3 m deep at 1000 px/m: depth counts in the length.
+    CHECK(rig.strips[1].polyline.back().z == doctest::Approx(0.4));
+    for (const Vec3 &v : rig.strips[2].polyline) {
+        CHECK(v.z == doctest::Approx(0.15)); // The circle at its elevation.
+    }
+    CHECK(rig.strips[3].polyline.back().z == doctest::Approx(0.5));
+}

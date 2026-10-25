@@ -43,23 +43,61 @@ double length_m(const std::vector<Vec3> &p) {
 
 } // namespace
 
+Vec3 StageCanvas::project(const Vec3 &q) const {
+    switch (view_) {
+    case View::front:
+        return q;
+    case View::top: // From above: the audience (+z) at the bottom; higher points nearer.
+        return {q.x, -q.z, q.y};
+    case View::side: // From the right (+x): the audience to the left.
+        return {-q.z, q.y, q.x};
+    case View::orbit:
+    default: {
+        const double x = q.x - centre_.x;
+        const double y = q.y - centre_.y;
+        const double z = q.z - centre_.z;
+        const double x1 = x * std::cos(yaw_rad_) + z * std::sin(yaw_rad_);
+        const double z1 = -x * std::sin(yaw_rad_) + z * std::cos(yaw_rad_);
+        const double y2 = y * std::cos(pitch_rad_) - z1 * std::sin(pitch_rad_);
+        const double z2 = y * std::sin(pitch_rad_) + z1 * std::cos(pitch_rad_);
+        return {x1 + centre_.x, y2 + centre_.y, z2};
+    }
+    }
+}
+
 void StageCanvas::draw_toolbar(const Rig &rig) {
+    static constexpr const char *kViews[] = {"Front", "Top", "Side", "Orbit"};
+    int view = static_cast<int>(view_);
+    ImGui::SetNextItemWidth(6.0f * ImGui::GetFontSize());
+    if (ImGui::Combo("##view", &view, kViews, IM_ARRAYSIZE(kViews))) {
+        view_ = static_cast<View>(view);
+        zoom_ = 1.0;
+        pan_x_m_ = pan_y_m_ = 0.0;
+    }
+    ImGui::SetItemTooltip("Front: as the audience sees it. Top, Side: the depth. Orbit: drag to "
+                          "turn the rig.");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(view_ != View::front);
     if (ImGui::Checkbox("Edit strips", &editing_) && !editing_) {
         drawing_ = false;
         new_points_.clear();
         selected_.clear();
     }
-    ImGui::SetItemTooltip("Select, move, rotate, reshape, split, delete and draw strips here.");
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("Select, move, rotate, reshape, split, delete and draw strips here (in "
+                          "the Front view).");
     ImGui::SameLine();
     if (ImGui::SmallButton("Fit view")) {
         zoom_ = 1.0;
         pan_x_m_ = pan_y_m_ = 0.0;
+        yaw_rad_ = 0.6;
+        pitch_rad_ = 0.35;
     }
     ImGui::SetItemTooltip("The whole rig (or double-click empty space). The wheel zooms, a drag "
                           "on empty space pans.");
     ImGui::SameLine();
     ImGui::TextDisabled("%.0f%%", 100.0 * zoom_);
-    if (!editing_) {
+    if (!editing_ || view_ != View::front) {
         return;
     }
     ImGui::SameLine();
@@ -228,7 +266,7 @@ void StageCanvas::edit_menu() {
 
 void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_rgb, double gamma,
                        int highlighted_strip, bool tools) {
-    const bool edit = editing_ && tools;
+    const bool edit = editing_ && tools && view_ == View::front;
     const Rig &rig = edit ? project_.rig() : shown;
     if (tools) {
         draw_toolbar(rig);
@@ -247,14 +285,36 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
     draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y),
                         to_u32(theme().preview_bg));
 
-    // The fit: the whole rig in the view at zoom 1; frozen while dragging.
+    // The fit: the whole rig in the view at zoom 1 (its projected extent); frozen while
+    // dragging.
     if (drag_ == Drag::none) {
-        const double width_m = std::max(1e-3, rig.max.x - rig.min.x);
-        const double height_m = std::max(1e-3, rig.max.y - rig.min.y);
+        centre_ = {0.5 * (rig.min.x + rig.max.x), 0.5 * (rig.min.y + rig.max.y),
+                   0.5 * (rig.min.z + rig.max.z)};
+        double lo_u = 1e9, hi_u = -1e9, lo_v = 1e9, hi_v = -1e9;
+        const auto extend = [&](const Vec3 &q) {
+            const Vec3 p = project(q);
+            lo_u = std::min(lo_u, p.x);
+            hi_u = std::max(hi_u, p.x);
+            lo_v = std::min(lo_v, p.y);
+            hi_v = std::max(hi_v, p.y);
+        };
+        for (const Pixel &px : rig.pixels) {
+            extend(px.position);
+        }
+        for (const StripSpec &s : rig.strips) {
+            for (const Vec3 &v : s.polyline) {
+                extend(v);
+            }
+        }
+        if (lo_u > hi_u) {
+            lo_u = hi_u = lo_v = hi_v = 0.0;
+        }
+        const double width_m = std::max(1e-3, hi_u - lo_u);
+        const double height_m = std::max(1e-3, hi_v - lo_v);
         fit_scale_ = std::min((size.x - 2.0f * kMarginPixels) / width_m,
                               (size.y - 2.0f * kMarginPixels) / height_m);
-        mid_x_m_ = 0.5 * (rig.min.x + rig.max.x);
-        mid_y_m_ = 0.5 * (rig.min.y + rig.max.y);
+        mid_x_m_ = 0.5 * (lo_u + hi_u);
+        mid_y_m_ = 0.5 * (lo_v + hi_v);
     }
     origin_x_ = origin.x;
     origin_y_ = origin.y;
@@ -263,10 +323,12 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
     const double scale = fit_scale_ * zoom_;
     const float cx = origin.x + 0.5f * size.x;
     const float cy = origin.y + 0.5f * size.y;
-    const auto screen = [&](const Vec3 &q) {
+    const auto screen = [&](const Vec3 &world_point) {
+        const Vec3 q = project(world_point);
         return ImVec2(cx + static_cast<float>((q.x - mid_x_m_ - pan_x_m_) * scale),
                       cy - static_cast<float>((q.y - mid_y_m_ - pan_y_m_) * scale));
     };
+    // The view's point under a screen position (the rig's x and y in the Front view).
     const auto world = [&](const ImVec2 &m) {
         return Vec3{(m.x - cx) / scale + mid_x_m_ + pan_x_m_,
                     -(m.y - cy) / scale + mid_y_m_ + pan_y_m_, 0.0};
@@ -292,10 +354,32 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
     // The pixels: the show's colours where they match the rig drawn, else dim.
     const bool colours = node_rgb.size() >= 3 * rig.pixels.size() &&
                          (&rig == &shown || shown.pixels.size() == rig.pixels.size());
+    // Far pixels first; in the Orbit view also dimmer.
+    std::vector<size_t> order(rig.pixels.size());
+    std::vector<double> depth(rig.pixels.size());
+    double nearest = -1e9;
+    double farthest = 1e9;
     for (size_t i = 0; i < rig.pixels.size(); ++i) {
-        draw->AddCircleFilled(screen(rig.pixels[i].position), radius,
-                              colours ? to_screen_colour(&node_rgb[3 * i], gamma)
-                                      : to_u32(with_alpha(theme().text_dim, 0.35f)));
+        order[i] = i;
+        depth[i] = project(rig.pixels[i].position).z;
+        nearest = std::max(nearest, depth[i]);
+        farthest = std::min(farthest, depth[i]);
+    }
+    if (view_ != View::front) {
+        std::stable_sort(order.begin(), order.end(),
+                         [&](size_t a, size_t b) { return depth[a] < depth[b]; });
+    }
+    for (const size_t i : order) {
+        ImU32 colour = colours ? to_screen_colour(&node_rgb[3 * i], gamma)
+                               : to_u32(with_alpha(theme().text_dim, 0.35f));
+        if (view_ == View::orbit && nearest > farthest) {
+            const float shade =
+                0.45f + 0.55f * static_cast<float>((depth[i] - farthest) / (nearest - farthest));
+            const ImVec4 c = ImGui::ColorConvertU32ToFloat4(colour);
+            colour =
+                ImGui::ColorConvertFloat4ToU32(ImVec4(c.x * shade, c.y * shade, c.z * shade, 1.0f));
+        }
+        draw->AddCircleFilled(screen(rig.pixels[i].position), radius, colour);
     }
 
     // The strip under the pointer: by its pixels, or (editing) its path.
@@ -360,15 +444,26 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
             }
         }
         handle_edit(rig);
-    } else if (hovered) {
-        // Not editing: a drag on the view pans; a double-click fits.
+    } else if (hovered || drag_ == Drag::orbit) {
+        // Not editing: a drag pans (in the Orbit view, turns the rig); a double-click fits.
         if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
-            pan_x_m_ -= io.MouseDelta.x / scale;
-            pan_y_m_ += io.MouseDelta.y / scale;
+            if (view_ == View::orbit) {
+                drag_ = Drag::orbit; // The fit stays put while turning.
+                yaw_rad_ += 0.01 * io.MouseDelta.x;
+                pitch_rad_ = std::clamp(pitch_rad_ + 0.01 * io.MouseDelta.y, -1.5, 1.5);
+            } else {
+                pan_x_m_ -= io.MouseDelta.x / scale;
+                pan_y_m_ += io.MouseDelta.y / scale;
+            }
         }
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        if (drag_ == Drag::orbit && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            drag_ = Drag::none;
+        }
+        if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
             zoom_ = 1.0;
             pan_x_m_ = pan_y_m_ = 0.0;
+            yaw_rad_ = 0.6;
+            pitch_rad_ = 0.35;
         }
     }
 

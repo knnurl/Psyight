@@ -1,8 +1,11 @@
 // The rig drawn as its pixels in the preview and the Stage (gui/preview_view.h), with zoom and
 // pan, and an edit mode for the strips.
 //
-// View: the mouse wheel zooms about the pointer; a drag on empty space (or the middle button)
-// pans; Fit view (or a double-click on empty space) shows the whole rig again. Hovering shows each
+// View: Front (x across, y up: as the audience sees it), Top (from above, the audience at the
+// bottom), Side (from the right, the audience to the left) or Orbit (a drag turns the rig; far
+// pixels are drawn first and dimmer). The mouse wheel zooms about the pointer; a drag on empty
+// space (or the middle button) pans; Fit view (or a double-click on empty space) shows the whole
+// rig again. Editing works in the Front view. Hovering shows each
 // strip's data-in arrow and name, and outlines the strip under the pointer with a tooltip.
 //
 // Edit strips (a toggle above the view) edits the project's strips (gui/project_state.h, undoable
@@ -38,7 +41,11 @@ class StageCanvas {
     bool editing() const { return editing_; }
 
   private:
-    enum class Drag { none, pan, point, strips };
+    enum class Drag { none, pan, point, strips, orbit };
+    enum class View { front, top, side, orbit };
+
+    // A rig point in the view: u across, v up (metres) and its depth (larger: nearer).
+    Vec3 project(const Vec3 &q) const;
 
     void draw_toolbar(const Rig &rig);
     void handle_edit(const Rig &rig);
@@ -49,6 +56,10 @@ class StageCanvas {
 
     ProjectState &project_;
     bool editing_ = false;
+    View view_ = View::front;
+    double yaw_rad_ = 0.6; // Orbit: turned about the vertical, then tilted.
+    double pitch_rad_ = 0.35;
+    Vec3 centre_; // The rig's middle in 3D, the orbit's pivot.
     double zoom_ = 1.0;
     double pan_x_m_ = 0.0; // The view's centre, from the rig's middle.
     double pan_y_m_ = 0.0;

@@ -758,7 +758,8 @@ struct Shape {
 double polyline_length(const std::vector<Vec3> &points) {
     double length_m = 0.0;
     for (size_t i = 1; i < points.size(); ++i) {
-        length_m += std::hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+        length_m += std::hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y,
+                               points[i].z - points[i - 1].z); // DXF may have depth.
     }
     return length_m;
 }
@@ -1031,7 +1032,8 @@ Result<SvgRig> rig_from_shapes(std::vector<DrawingShape> shapes, const SvgRigOpt
         double hi = 0.0;
         for (size_t i = 0; i < s.points.size(); ++i) {
             const Vec3 p{(s.points[i].x - centre_x) * k,
-                         options.base_m + (s.points[i].y - min_y) * k, 0.0};
+                         options.base_m + (s.points[i].y - min_y) * k,
+                         s.points[i].z * k}; // Depth as drawn (DXF), scaled with the rest.
             lo = i == 0 ? p.x : std::min(lo, p.x);
             hi = i == 0 ? p.x : std::max(hi, p.x);
             strip.polyline.push_back(p);
