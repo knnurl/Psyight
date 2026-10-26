@@ -347,7 +347,19 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
         return Vec3{(m.x - cx) / scale + mid_x_m_ + pan_x_m_,
                     -(m.y - cy) / scale + mid_y_m_ + pan_y_m_, 0.0};
     };
-    const float radius = std::max(1.5f, static_cast<float>(0.45 * scale / 60.0));
+    // A pixel's dot: 45% of its strip's pitch (a 60 px/m strip: 7.5 mm), so dense strips do
+    // not overlap; `radius` (the densest strip's) sizes the hover hits and arrows.
+    double densest = 60.0;
+    for (const StripSpec &strip : rig.strips) {
+        densest = std::max(densest, strip.pixels_per_m);
+    }
+    const auto dot = [&](int strip) {
+        const double per_m = strip >= 0 && strip < static_cast<int>(rig.strips.size())
+                                 ? rig.strips[static_cast<size_t>(strip)].pixels_per_m
+                                 : 60.0;
+        return std::max(1.5f, static_cast<float>(0.45 * scale / std::max(1.0, per_m)));
+    };
+    const float radius = std::max(1.5f, static_cast<float>(0.45 * scale / densest));
     const ImVec2 mouse = ImGui::GetMousePos();
     const ImGuiIO &io = ImGui::GetIO();
 
@@ -393,7 +405,7 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
             colour =
                 ImGui::ColorConvertFloat4ToU32(ImVec4(c.x * shade, c.y * shade, c.z * shade, 1.0f));
         }
-        draw->AddCircleFilled(screen(rig.pixels[i].position), radius, colour);
+        draw->AddCircleFilled(screen(rig.pixels[i].position), dot(rig.pixels[i].strip), colour);
     }
 
     // The strip under the pointer: by its pixels, or (editing) its path.
@@ -486,7 +498,8 @@ void StageCanvas::draw(const Rig &shown, const std::vector<std::uint8_t> &node_r
     if (outlined >= 0) {
         for (const Pixel &p : rig.pixels) {
             if (p.strip == outlined) {
-                draw->AddCircle(screen(p.position), radius + 2.0f, to_u32(theme().accent), 0, 1.5f);
+                draw->AddCircle(screen(p.position), dot(p.strip) + 2.0f, to_u32(theme().accent), 0,
+                                1.5f);
             }
         }
     }
