@@ -163,3 +163,26 @@ TEST_CASE("rig export: layer colours for laser software, pixel dots filled to en
     o.channel_colour = ExportColour::blue;
     CHECK(rig_to_dxf({line}, {}, o).find("Channels\n70\n0\n62\n5\n") != std::string::npos);
 }
+
+TEST_CASE("rig export: wiring order numbers drawn in lines beside each arrow") {
+    std::vector<StripSpec> strips;
+    for (int i = 0; i < 12; ++i) { // Numbers 1 to 12: one and two digits.
+        StripSpec s;
+        s.name = "S" + std::to_string(i + 1);
+        s.polyline = {{0.0, 0.1 * i, 0.0}, {1.0, 0.1 * i, 0.0}};
+        s.pixels_per_m = 10.0;
+        s.count = 10;
+        strips.push_back(s);
+    }
+    RigExportOptions only_wiring;
+    only_wiring.centre_lines = only_wiring.channels = only_wiring.pixels = false;
+    const std::string dxf = rig_to_dxf(strips, {}, only_wiring);
+    // Arrows: 12 closed triangles. Strokes: 1-9 (1,1,2,2,1,1,1,2,1 strokes: 12), then 10, 11, 12
+    // (1+1, 1+1, 1+1 strokes: 6). 12 + 12 + 6 polylines on the Wiring layer.
+    size_t polylines = 0;
+    for (size_t at = dxf.find("\nPOLYLINE\n8\nWiring\n"); at != std::string::npos;
+         at = dxf.find("\nPOLYLINE\n8\nWiring\n", at + 1)) {
+        ++polylines;
+    }
+    CHECK(polylines == 12 + 12 + 6);
+}

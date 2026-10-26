@@ -8,7 +8,8 @@
 //   a mount.
 // - Pixels: a 3 mm circle at every LED.
 // - Wiring: an arrow at each strip's data-in end and a label (its place on the data line, its
-//   name and the note given: the node line and pin).
+//   name and the note given: the node line and pin), and its place as an 8 mm number drawn in
+//   lines on the arrow's other side (CAD and laser software keep lines; text not always).
 // The DXF is AutoCAD R12 text (POLYLINE, CIRCLE, TEXT, LINE), which old and new readers open;
 // the SVG keeps Inkscape layers. Importing one back (From drawing) reads every visible layer:
 // hide all but Centre lines first.

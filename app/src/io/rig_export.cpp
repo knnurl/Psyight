@@ -16,7 +16,10 @@ constexpr double kArrowLengthMm = 8.0;
 constexpr double kArrowHalfWidthMm = 3.0;
 constexpr double kLabelHeightMm = 4.0;
 constexpr double kMarginMm = 10.0;
-constexpr double kMaxMitre = 2.0; // Corner offsets at most this many half widths.
+constexpr double kMaxMitre = 2.0;       // Corner offsets at most this many half widths.
+constexpr double kNumberHeightMm = 8.0; // The wiring order's stroke digits.
+constexpr double kDigitWidth = 0.55;    // Of the height.
+constexpr double kDigitGap = 0.3;       // Between digits, of the height.
 
 enum Layer { kCentre, kChannels, kPixels, kWiring, kLayers };
 
@@ -61,6 +64,33 @@ struct Prim {
     std::string label;
     double angle_deg = 0.0;
 };
+
+// A digit as strokes in a unit box (x across, y up), seven-segment style.
+std::vector<std::vector<P2>> digit_strokes(int digit) {
+    switch (digit) {
+    case 0:
+        return {{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}};
+    case 1:
+        return {{{0.5, 0}, {0.5, 1}}};
+    case 2:
+        return {{{0, 1}, {1, 1}, {1, 0.5}, {0, 0.5}, {0, 0}, {1, 0}}};
+    case 3:
+        return {{{0, 1}, {1, 1}, {1, 0}, {0, 0}}, {{0, 0.5}, {1, 0.5}}};
+    case 4:
+        return {{{0, 1}, {0, 0.5}, {1, 0.5}}, {{1, 1}, {1, 0}}};
+    case 5:
+        return {{{1, 1}, {0, 1}, {0, 0.5}, {1, 0.5}, {1, 0}, {0, 0}}};
+    case 6:
+        return {{{1, 1}, {0, 1}, {0, 0}, {1, 0}, {1, 0.5}, {0, 0.5}}};
+    case 7:
+        return {{{0, 1}, {1, 1}, {1, 0}}};
+    case 8:
+        return {{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}, {{0, 0.5}, {1, 0.5}}};
+    case 9:
+    default:
+        return {{{1, 0.5}, {0, 0.5}, {0, 1}, {1, 1}, {1, 0}, {0, 0}}};
+    }
+}
 
 P2 mm(const Vec3 &v) { return {v.x * kMmPerM, v.y * kMmPerM}; }
 
@@ -152,6 +182,26 @@ std::vector<Prim> primitives(const std::vector<StripSpec> &strips,
                 label.label += ", " + notes[s];
             }
             prims.push_back(label);
+            // The order number in strokes (CAD and laser software keep lines, not always text),
+            // on the arrow's other side, centred on its data-in point.
+            const std::string number = std::to_string(s + 1);
+            const double digit_w = kDigitWidth * kNumberHeightMm;
+            const double advance = digit_w + kDigitGap * kNumberHeightMm;
+            const double total_w = number.size() * advance - kDigitGap * kNumberHeightMm;
+            const P2 centre{p[0].x - nrm.x * (2.0 * kArrowHalfWidthMm + 0.5 * kNumberHeightMm),
+                            p[0].y - nrm.y * (2.0 * kArrowHalfWidthMm + 0.5 * kNumberHeightMm)};
+            for (size_t k = 0; k < number.size(); ++k) {
+                const double left = centre.x - 0.5 * total_w + k * advance;
+                const double bottom = centre.y - 0.5 * kNumberHeightMm;
+                for (const std::vector<P2> &stroke : digit_strokes(number[k] - '0')) {
+                    Prim line{kWiring, Prim::polyline, {}, false};
+                    for (const P2 &q : stroke) {
+                        line.points.push_back(
+                            {left + q.x * digit_w, bottom + q.y * kNumberHeightMm});
+                    }
+                    prims.push_back(line);
+                }
+            }
         }
     }
     if (options.pixels) {
