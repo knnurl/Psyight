@@ -42,6 +42,10 @@ struct RigExportOptions {
     bool fill_pixels = true; // SVG: pixel dots filled, to engrave (DXF circles are outlines).
 };
 
+// A digit (0 to 9) as strokes in a unit box (x across, y up), seven-segment style: numbers drawn
+// in lines, which CAD and laser software keep.
+std::vector<std::vector<Vec3>> digit_strokes(int digit);
+
 // strips in data-line order; notes: one per strip (or none), shown in the wiring labels.
 std::string rig_to_svg(const std::vector<StripSpec> &strips, const std::vector<std::string> &notes,
                        const RigExportOptions &options);

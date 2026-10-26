@@ -11,6 +11,7 @@
 
 #include "engine/rig_templates.h"
 #include "gui/project_state.h"
+#include "io/build_kit.h"
 #include "io/rig_export.h"
 #include "io/svg_rig.h"
 
@@ -76,8 +77,9 @@ class RigView {
     std::string rig_name_;
     std::string rig_status_;
     RigExportOptions export_options_;
+    BuildKitOptions kit_options_; // Export drawing > Build kit.
     std::string export_status_;
-    int export_requested_ = 0;   // 1: SVG, 2: DXF, written after the frame.
+    int export_requested_ = 0;   // 1: SVG, 2: DXF, 3 and 4: build kit; after the frame.
     int wiring_first_ = 0;       // Order for wiring: the strip the data line starts at.
     bool wiring_reverse_ = true; // ...and whether strips may be turned round.
     bool svg_requested_ = false;

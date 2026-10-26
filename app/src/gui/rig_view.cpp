@@ -5,6 +5,7 @@
 #include "gui/theme.h"
 #include "gui/tier.h"
 #include "gui/widgets.h"
+#include "io/build_kit.h"
 #include "io/dxf_rig.h"
 #include "io/presets.h"
 #include "io/rig_export.h"
@@ -641,6 +642,45 @@ void RigView::draw_export() {
         export_requested_ = 2;
         ImGui::CloseCurrentPopup();
     }
+    // The build kit: the panel's parts to cut, one file each.
+    ImGui::SeparatorText("Build kit (a layered panel)");
+    ImGui::TextDisabled("Four files to cut: back panel, spacer islands (the channels' walls), one "
+                        "acrylic lattice, front mask. Bolt holes, wire holes and numbered "
+                        "islands included; cut black, engrave red.");
+    BuildKitOptions &k = kit_options_;
+    k.channel_width_m = o.channel_width_m;
+    const auto mm_field = [](const char *label, double &metres, double lo, double hi,
+                             const char *tip) {
+        ImGui::SetNextItemWidth(7.0f * ImGui::GetFontSize());
+        double v = metres * 1000.0;
+        if (drag_double(label, &v, 0.1f, lo, hi, "%.1f mm")) {
+            metres = v / 1000.0;
+        }
+        ImGui::SetItemTooltip("%s", tip);
+    };
+    mm_field("Window", k.window_width_m, 2.0, 100.0,
+             "The front mask's openings: a little narrower than the channels, to clamp the "
+             "acrylic.");
+    ImGui::SameLine();
+    mm_field("Acrylic overlap", k.overlap_m, 0.0, 30.0,
+             "How far the acrylic reaches past each side of a channel.");
+    mm_field("Margin", k.margin_m, 2.0, 200.0, "The panel beyond the outermost channels.");
+    ImGui::SameLine();
+    mm_field("Bolt hole", k.bolt_hole_m, 1.0, 20.0, "3.4 mm clears M3; 4.5 mm clears M4.");
+    mm_field("Wire hole", k.wire_hole_m, 1.0, 30.0, "At every strip end, through the back.");
+    k.cut_colour = o.channel_colour;
+    k.engrave_colour = o.pixel_colour;
+    ImGui::TextDisabled("Uses the channel width above; cut in the Channels colour, engrave in the "
+                        "Pixels colour.");
+    if (ImGui::Button("Build kit SVG...")) {
+        export_requested_ = 3;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Build kit DXF...")) {
+        export_requested_ = 4;
+        ImGui::CloseCurrentPopup();
+    }
     ImGui::SameLine();
     if (ImGui::Button("Cancel")) {
         ImGui::CloseCurrentPopup();
@@ -649,9 +689,39 @@ void RigView::draw_export() {
 }
 
 void RigView::export_drawing(void *owner) {
-    const bool dxf = export_requested_ == 2;
+    const bool kit = export_requested_ >= 3;
+    const bool dxf = export_requested_ == 2 || export_requested_ == 4;
     export_requested_ = 0;
     const Project &p = project_.project();
+    if (kit) {
+        // The parts beside the chosen name: <name>_1_back, _2_spacer, _3_acrylic, _4_front.
+        const std::filesystem::path suggested =
+            (project_.untitled() ? std::string("rig") : project_.path().stem().string()) + "_kit" +
+            (dxf ? ".dxf" : ".svg");
+        const auto chosen = save_drawing_file_dialog(owner, suggested, dxf);
+        if (!chosen) {
+            return;
+        }
+        std::vector<StripSpec> strips;
+        for (const ProjectStrip &s : p.strips) {
+            strips.push_back(s.spec);
+        }
+        const BuildKit made = build_kit(strips, kit_options_);
+        bool ok = true;
+        for (size_t i = 0; i < made.parts.size(); ++i) {
+            std::filesystem::path file = *chosen;
+            file.replace_filename(chosen->stem().string() + "_" + std::to_string(i + 1) + "_" +
+                                  made.parts[i].name + (dxf ? ".dxf" : ".svg"));
+            std::ofstream out(file, std::ios::binary);
+            out << (dxf ? made.parts[i].dxf : made.parts[i].svg);
+            ok = ok && static_cast<bool>(out);
+        }
+        export_status_ = ok ? "Build kit: " + std::to_string(made.parts.size()) + " files beside " +
+                                  path_to_utf8(*chosen) + " (" + std::to_string(made.islands) +
+                                  " spacer islands, " + std::to_string(made.bolts) + " bolts)."
+                            : "Could not write the build kit beside " + path_to_utf8(*chosen) + ".";
+        return;
+    }
     const std::filesystem::path suggested =
         (project_.untitled() ? std::filesystem::path("rig") : project_.path().stem()).string() +
         (dxf ? ".dxf" : ".svg");

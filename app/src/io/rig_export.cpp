@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <utility>
 
 namespace psyight {
 
@@ -66,7 +67,7 @@ struct Prim {
 };
 
 // A digit as strokes in a unit box (x across, y up), seven-segment style.
-std::vector<std::vector<P2>> digit_strokes(int digit) {
+std::vector<std::vector<P2>> stroke_digit(int digit) {
     switch (digit) {
     case 0:
         return {{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}};
@@ -193,7 +194,7 @@ std::vector<Prim> primitives(const std::vector<StripSpec> &strips,
             for (size_t k = 0; k < number.size(); ++k) {
                 const double left = centre.x - 0.5 * total_w + k * advance;
                 const double bottom = centre.y - 0.5 * kNumberHeightMm;
-                for (const std::vector<P2> &stroke : digit_strokes(number[k] - '0')) {
+                for (const std::vector<P2> &stroke : stroke_digit(number[k] - '0')) {
                     Prim line{kWiring, Prim::polyline, {}, false};
                     for (const P2 &q : stroke) {
                         line.points.push_back(
@@ -266,6 +267,18 @@ std::string escaped(const std::string &s) {
 }
 
 } // namespace
+
+std::vector<std::vector<Vec3>> digit_strokes(int digit) {
+    std::vector<std::vector<Vec3>> out;
+    for (const std::vector<P2> &stroke : stroke_digit(digit)) {
+        std::vector<Vec3> line;
+        for (const P2 &q : stroke) {
+            line.push_back({q.x, q.y, 0.0});
+        }
+        out.push_back(std::move(line));
+    }
+    return out;
+}
 
 std::string rig_to_svg(const std::vector<StripSpec> &strips, const std::vector<std::string> &notes,
                        const RigExportOptions &options) {
