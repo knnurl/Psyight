@@ -16,10 +16,6 @@ double length_m(const std::vector<Vec3> &p) {
     return length;
 }
 
-int fill_of(const StripSpec &s) {
-    return std::max(0, static_cast<int>(std::floor(length_m(s.polyline) * s.pixels_per_m + 1e-9)));
-}
-
 } // namespace
 
 PolylineHit nearest_on_polyline(const std::vector<Vec3> &polyline, const Vec3 &p) {
@@ -47,12 +43,7 @@ bool is_closed(const StripSpec &strip) {
     return p.size() > 2 && std::hypot(p.front().x - p.back().x, p.front().y - p.back().y) < 1e-6;
 }
 
-int refilled_count(const StripSpec &before, const StripSpec &after) {
-    return std::abs(before.count - fill_of(before)) <= 1 ? fill_of(after) : before.count;
-}
-
 StripSpec with_point_moved(StripSpec strip, size_t index, const Vec3 &to) {
-    const StripSpec before = strip;
     if (index >= strip.polyline.size()) {
         return strip;
     }
@@ -63,7 +54,6 @@ StripSpec with_point_moved(StripSpec strip, size_t index, const Vec3 &to) {
     } else if (ring && index + 1 == strip.polyline.size()) {
         strip.polyline.front() = to;
     }
-    strip.count = refilled_count(before, strip);
     return strip;
 }
 
@@ -76,7 +66,6 @@ StripSpec with_point_inserted(StripSpec strip, size_t segment, const Vec3 &at) {
 }
 
 StripSpec with_point_removed(StripSpec strip, size_t index) {
-    const StripSpec before = strip;
     const bool ring = is_closed(strip);
     const size_t minimum = ring ? 4 : 2; // A ring: three corners and the closing point.
     if (index >= strip.polyline.size() || strip.polyline.size() <= minimum) {
@@ -88,7 +77,6 @@ StripSpec with_point_removed(StripSpec strip, size_t index) {
     } else {
         strip.polyline.erase(strip.polyline.begin() + static_cast<std::ptrdiff_t>(index));
     }
-    strip.count = refilled_count(before, strip);
     return strip;
 }
 

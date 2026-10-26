@@ -1,7 +1,8 @@
 // Editing a strip's geometry (the Stage's edit mode, gui/preview_view.h): finding the nearest
 // point on a strip, inserting and removing points, splitting, moving, rotating and snapping.
-// Pure functions of the strips, in metres in the x-y plane (z kept). A strip whose pixels filled
-// its polyline keeps filling it after an edit (refilled); one set shorter keeps its count.
+// Pure functions of the strips, in metres in the x-y plane (z kept). Counts stand: the project
+// refits them after the edit with every strip in view (refit_counts, engine/rig.h), so a strip
+// that filled its path keeps filling it, joints included.
 #pragma once
 
 #include "engine/rig.h"
@@ -21,9 +22,6 @@ struct PolylineHit {
 PolylineHit nearest_on_polyline(const std::vector<Vec3> &polyline, const Vec3 &p);
 
 bool is_closed(const StripSpec &strip); // Its last point on its first (a ring).
-
-// The count after the polyline changed from `before`: refilled when it filled the old one.
-int refilled_count(const StripSpec &before, const StripSpec &after);
 
 // Point `index` moved to `to`; a ring's first and last points move together.
 StripSpec with_point_moved(StripSpec strip, size_t index, const Vec3 &to);

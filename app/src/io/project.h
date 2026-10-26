@@ -105,9 +105,6 @@ const char *colour_order_name(ColourOrder order); // "rgb", "grb" and so on.
 std::optional<std::vector<Vec3>> parse_polyline_text(const std::string &text);
 std::string polyline_text(const std::vector<Vec3> &polyline);
 
-// Pixels for the strip's polyline length at its density, rounded down.
-int pixels_to_fill(const StripSpec &spec);
-
 // Fails on malformed JSON, another schema, a wrongly typed or out-of-range field, a strip with
 // fewer than two polyline points, an unknown colour order, protocol, effect, blend mode or
 // modulation id, an empty scene or palette list, or a palette without colours.

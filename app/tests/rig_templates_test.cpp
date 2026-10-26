@@ -146,14 +146,14 @@ TEST_CASE("rig presets: mirrored halves run from the centre outwards, closed sha
     CHECK_FALSE(has(left_wing, "right"));
     CHECK(has(chevron.strips[2], "left")); // The centred booth front is both.
     CHECK(has(chevron.strips[2], "right"));
-    CHECK(build_rig(chevron.strips).pixels.size() == 408);
+    CHECK(build_rig(chevron.strips).pixels.size() == 406); // The wings' joint at the apex.
 
     const RigPreset &hexagon = find("Hexagon mandala");
     const StripSpec &outer = hexagon.strips[0];
     CHECK(outer.polyline.front().x == doctest::Approx(outer.polyline.back().x));
     CHECK(outer.polyline.front().y == doctest::Approx(outer.polyline.back().y));
-    CHECK(outer.count == 432); // Six 1.2 m sides at 60 px/m.
-    CHECK(build_rig(hexagon.strips).pixels.size() == 1152);
+    CHECK(outer.count == 426); // Six 1.2 m sides at 60 px/m, 16 mm out at each corner.
+    CHECK(build_rig(hexagon.strips).pixels.size() == 1116);
 
     const RigPreset &tunnel = find("Arch tunnel");
     REQUIRE(tunnel.strips.size() == 6);
@@ -306,9 +306,11 @@ TEST_CASE("rig presets: settings rebuild the shape; defaults reproduce the prese
         CHECK(end.x == doctest::Approx(spoke.x));
         CHECK(end.y == doctest::Approx(spoke.y));
     }
-    // Scale doubles lengths (and pixel counts); Density doubles pixels per metre.
+    // Scale doubles lengths (and a little more than doubles pixel counts: joints stay 8 mm);
+    // Density doubles pixels per metre.
     const std::vector<StripSpec> big = build_rig_preset(lotus, values(lotus, "scale", 2.0));
-    CHECK(big[0].count == doctest::Approx(2 * lotus.strips[0].count).epsilon(0.05));
+    CHECK(big[0].polyline.back().x == doctest::Approx(2 * lotus.strips[0].polyline.back().x));
+    CHECK(big[0].count >= 2 * lotus.strips[0].count);
     const std::vector<StripSpec> dense = build_rig_preset(lotus, values(lotus, "density", 2.0));
     CHECK(dense[1].pixels_per_m == doctest::Approx(120.0));
     // Fractal tree splits: 2^(n+1) - 1 strips.

@@ -1073,9 +1073,10 @@ void RigView::draw_strips() {
                 s.spec.count = std::clamp(s.spec.count, 0, 10000);
                 changed = true;
             }
-            const int fill = pixels_to_fill(s.spec);
-            ImGui::SetItemTooltip("%d fill the polyline at this density. Double-click to type.",
-                                  fill);
+            const std::vector<int> &fits = project_.rig().fits;
+            ImGui::SetItemTooltip("%d fill the polyline at this density, joints taken out. "
+                                  "Double-click to type.",
+                                  i < fits.size() ? fits[i] : 0);
             ImGui::TableNextColumn();
             ImGui::SetNextItemWidth(-1.0f);
             if (ImGui::BeginCombo("##order", colour_order_name(s.order),
@@ -1149,8 +1150,10 @@ void RigView::draw_strips() {
         project_.changed();
         texts_version_ = project_.version(); // Keep the texts as typed.
     }
-    for (const ProjectStrip &s : project_.project().strips) {
-        const int fill = pixels_to_fill(s.spec);
+    const Rig &laid = project_.rig();
+    for (size_t i = 0; i < project_.project().strips.size() && i < laid.fits.size(); ++i) {
+        const ProjectStrip &s = project_.project().strips[i];
+        const int fill = laid.fits[i];
         if (s.spec.count > fill + 1) {
             ImGui::TextColored(theme().warning, "%s: %d pixels run %.2f m past its polyline.",
                                s.spec.name.c_str(), s.spec.count,

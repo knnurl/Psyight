@@ -202,7 +202,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/undo_history_test.cpp tests/sections_edit_test.cpp
                              tests/pattern_effects_test.cpp tests/labelling_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp
-                             tests/rig_export_test.cpp tests/strip_edit_test.cpp
+                             tests/rig_export_test.cpp tests/strip_edit_test.cpp tests/joints_test.cpp
                              tests/build_kit_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c

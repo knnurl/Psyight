@@ -677,11 +677,11 @@ TEST_CASE("node setup: lines kept short enough for 60 fps when the eight allow i
         project.strips.push_back({s, ColourOrder::grb});
     }
     const NodePlan plan = plan_node(project);
-    CHECK(plan.pixels == 1427);
-    REQUIRE(plan.lanes.size() == 3); // Seed and inner 1 to 5; inner 6 to 8 and outer 1 to 3; ...
-    CHECK(plan.lanes[0].pixels == 537);
-    CHECK(plan.lanes[1].pixels == 510);
-    CHECK(plan.lanes[2].pixels == 380);
+    CHECK(plan.pixels == 1312); // Joints out where petals cross and at their tips.
+    REQUIRE(plan.lanes.size() == 3);
+    CHECK(plan.lanes[0].pixels == 468);
+    CHECK(plan.lanes[1].pixels == 474);
+    CHECK(plan.lanes[2].pixels == 370);
     CHECK(plan.notes.empty()); // Every line at 60 fps or more.
     for (const NodeLane &lane : plan.lanes) {
         CHECK(node_lane_max_fps(lane.pixels) >= 60.0);

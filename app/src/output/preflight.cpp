@@ -96,8 +96,9 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
             format("%d pixels in %zu strips%s.", pixels, p.strips.size(),
                    pixels > kPixelBudget ? ", over the 1,500-pixel budget" : ""));
     }
-    for (const ProjectStrip &s : p.strips) {
-        const int fill = pixels_to_fill(s.spec);
+    for (size_t i = 0; i < p.strips.size() && i < rig.fits.size(); ++i) {
+        const ProjectStrip &s = p.strips[i];
+        const int fill = rig.fits[i]; // Joints taken out (engine/rig.h).
         if (s.spec.count > fill + 1) {
             add("Rig", CheckLevel::warn,
                 format("%s: %d pixels run %.2f m past its polyline.", s.spec.name.c_str(),

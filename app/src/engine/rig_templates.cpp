@@ -921,9 +921,6 @@ std::vector<StripSpec> build_rig_preset(const RigPreset &preset,
                                          [](const RigPresetParam &q) { return q.id == "density"; });
     const double scale = v["scale"];
     const double density = has_density ? v["density"] : 1.0;
-    if (scale == 1.0 && density == 1.0) {
-        return strips;
-    }
     for (StripSpec &s : strips) {
         for (Vec3 &p : s.polyline) {
             p.x *= scale;
@@ -931,8 +928,8 @@ std::vector<StripSpec> build_rig_preset(const RigPreset &preset,
             p.z *= scale;
         }
         s.pixels_per_m *= density;
-        s.count = pixels_for(polyline_length_m(s.polyline), s.pixels_per_m);
     }
+    fit_counts(strips); // Every strip fills its pieces, joints taken out.
     return strips;
 }
 

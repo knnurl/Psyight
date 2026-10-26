@@ -216,8 +216,6 @@ TEST_CASE("project: polylines as text, and pixels to fill a polyline") {
     CHECK_FALSE(parse_polyline_text("0,0,0,0 1,1").has_value()); // Four coordinates.
     CHECK_FALSE(parse_polyline_text("0,0 1,x").has_value());
     CHECK_FALSE(parse_polyline_text("").has_value());
-    CHECK(pixels_to_fill({"s", {{0, 0, 0}, {2.5, 0, 0}}, 60.0, 0, {}}) == 150);
-    CHECK(pixels_to_fill({"s", {{0, 0, 0}, {3, 4, 0}, {3, 4, 1}}, 30.0, 0, {}}) == 180);
 }
 
 TEST_CASE("project: save and load through a file") {

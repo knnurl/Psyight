@@ -32,18 +32,22 @@ StripSpec square_ring() {
 
 } // namespace
 
-TEST_CASE("strip edit: nearest point, moving points, refilled counts") {
+TEST_CASE("strip edit: nearest point, moving points, counts refitted after") {
     const PolylineHit hit = nearest_on_polyline(square_ring().polyline, {1.2, 0.5, 0});
     CHECK(hit.segment == 1);
     CHECK(hit.point.x == doctest::Approx(1.0));
     CHECK(hit.distance_m == doctest::Approx(0.2));
 
-    // A full strip stays full when stretched; a shorter one keeps its count.
-    StripSpec longer = with_point_moved(line_strip(), 1, {2, 0, 0});
-    CHECK(longer.count == 120);
+    // The edit leaves the count; refitting fills a strip that was full, and keeps a shorter one.
+    std::vector<StripSpec> longer = {with_point_moved(line_strip(), 1, {2, 0, 0})};
+    CHECK(longer[0].count == 60);
+    refit_counts(longer, {line_strip()});
+    CHECK(longer[0].count == 120);
     StripSpec part = line_strip();
     part.count = 30;
-    CHECK(with_point_moved(part, 1, {2, 0, 0}).count == 30);
+    std::vector<StripSpec> stretched = {with_point_moved(part, 1, {2, 0, 0})};
+    refit_counts(stretched, {part});
+    CHECK(stretched[0].count == 30);
 
     // A ring's first and last points move together.
     const StripSpec ring = with_point_moved(square_ring(), 0, {-0.5, 0, 0});

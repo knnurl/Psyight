@@ -317,16 +317,6 @@ std::string polyline_text(const std::vector<Vec3> &polyline) {
     return out;
 }
 
-int pixels_to_fill(const StripSpec &spec) {
-    double length_m = 0.0;
-    for (size_t i = 1; i < spec.polyline.size(); ++i) {
-        const Vec3 &a = spec.polyline[i - 1];
-        const Vec3 &b = spec.polyline[i];
-        length_m += std::hypot(b.x - a.x, b.y - a.y, b.z - a.z);
-    }
-    return static_cast<int>(std::floor(length_m * spec.pixels_per_m + 1e-9));
-}
-
 std::vector<ProjectStrip> rebuilt_strips(const std::vector<ProjectStrip> &current,
                                          std::vector<StripSpec> made) {
     const ColourOrder fallback = current.empty() ? ColourOrder::grb : current.front().order;

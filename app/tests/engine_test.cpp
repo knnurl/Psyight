@@ -62,7 +62,7 @@ TEST_CASE("rig: strips laid along polylines, half a pitch in, with a bounding bo
     CHECK(rig.pixels[149].position.x == doctest::Approx(2.5 - 0.5 / 60.0));
     CHECK(rig.pixels[150].strip == 1);
     CHECK(rig.pixels[150].index == 0);
-    CHECK(rig.min.x == doctest::Approx(0.0).epsilon(0.01));
+    CHECK(rig.min.x == doctest::Approx(-1.0 / 60.0)); // The left side, a pitch out.
     CHECK(rig.max.y == doctest::Approx(1.2).epsilon(0.01));
     // A strip longer than its polyline continues along the last segment.
     const Rig longer = build_rig({{"long", {{0, 0, 0}, {1, 0, 0}}, 10.0, 15, {}}});

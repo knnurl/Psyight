@@ -1058,6 +1058,7 @@ Result<SvgRig> rig_from_shapes(std::vector<DrawingShape> shapes, const SvgRigOpt
     if (rig.strips.empty()) {
         return Error{"Every path in the drawing is shorter than one pixel."};
     }
+    fit_counts(rig.strips); // Each strip fills its pieces, joints taken out.
     return rig;
 }
 
