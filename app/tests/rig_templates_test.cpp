@@ -153,7 +153,7 @@ TEST_CASE("rig presets: mirrored halves run from the centre outwards, closed sha
     CHECK(outer.polyline.front().x == doctest::Approx(outer.polyline.back().x));
     CHECK(outer.polyline.front().y == doctest::Approx(outer.polyline.back().y));
     CHECK(outer.count == 426); // Six 1.2 m sides at 60 px/m, 10 mm out at each corner.
-    CHECK(build_rig(hexagon.strips).pixels.size() == 1128);
+    CHECK(build_rig(hexagon.strips).pixels.size() == 1134); // A pixel on each outer corner.
 
     const RigPreset &tunnel = find("Arch tunnel");
     REQUIRE(tunnel.strips.size() == 6);

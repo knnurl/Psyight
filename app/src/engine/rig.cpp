@@ -154,6 +154,7 @@ std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips
     std::vector<std::vector<double>> arcs(n);
     std::vector<std::pair<Vec3, Vec3>> boxes(n);
     std::vector<std::vector<Span>> cuts(n);
+    std::vector<std::vector<Vec3>> corner_points(n); // Each strip's sharp corners.
     for (size_t i = 0; i < n; ++i) {
         const std::vector<Vec3> &p = strips[i].polyline;
         arcs[i] = arc_lengths(p);
@@ -171,13 +172,20 @@ std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips
         for (size_t v = 1; v + 1 < p.size(); ++v) {
             if (turn_deg(p[v - 1], p[v], p[v + 1]) > kJointTurnDeg) {
                 cuts[i].push_back({arcs[i][v] - c, arcs[i][v] + c});
+                corner_points[i].push_back(p[v]);
             }
         }
         if (is_ring(strips[i]) && turn_deg(p[p.size() - 2], p[0], p[1]) > kJointTurnDeg) {
             cuts[i].push_back({0.0, c});
             cuts[i].push_back({arcs[i].back() - c, arcs[i].back()});
+            corner_points[i].push_back(p[0]);
         }
     }
+    // Whether p is one of strip s's corners.
+    const auto on_corner = [&](size_t s, const Vec3 &p) {
+        return std::any_of(corner_points[s].begin(), corner_points[s].end(),
+                           [&](const Vec3 &v) { return distance(v, p) < 1e-4; });
+    };
     const auto near_boxes = [&](size_t a, size_t b) {
         const auto &[la, ha] = boxes[a];
         const auto &[lb, hb] = boxes[b];
@@ -254,13 +262,19 @@ std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips
                 return !is_ring(strips[s]) &&
                        (x.from_m <= c + 1e-9 || x.to_m >= arcs[s].back() - c - 1e-9);
             };
+            // The end a contact is at.
+            const auto end_of = [&](size_t s, const Span &x) {
+                return x.from_m <= c + 1e-9 ? strips[s].polyline.front()
+                                            : strips[s].polyline.back();
+            };
             for (const Contact &k : contacts) {
                 const bool a_ends = at_end(a, k.on_a);
                 const bool b_ends = at_end(b, k.on_b);
-                if (a_ends) {
+                // An end on the other's corner runs on into the gap there.
+                if (a_ends && !on_corner(b, end_of(a, k.on_a))) {
                     cuts[a].push_back(k.on_a);
                 }
-                if (b_ends) {
+                if (b_ends && !on_corner(a, end_of(b, k.on_b))) {
                     cuts[b].push_back(k.on_b);
                 }
                 if (!a_ends && !b_ends) {
@@ -291,6 +305,22 @@ std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips
         if (at < length) {
             pieces[i].push_back({at, length});
         }
+        // Ends reaching another strip's corner.
+        if (pieces[i].empty() || is_ring(strips[i]) ||
+            strips[i].pixels_per_m < kJointMinPixelsPerM) {
+            continue;
+        }
+        for (size_t j = 0; j < n; ++j) {
+            if (j == i) {
+                continue;
+            }
+            if (pieces[i].front().from_m <= 1e-9 && on_corner(j, strips[i].polyline.front())) {
+                pieces[i].front().from_corner = true;
+            }
+            if (pieces[i].back().to_m >= length - 1e-9 && on_corner(j, strips[i].polyline.back())) {
+                pieces[i].back().to_corner = true;
+            }
+        }
     }
     return pieces;
 }
@@ -298,8 +328,10 @@ std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips
 int pixels_fitting(const std::vector<Span> &pieces, double pixels_per_m) {
     int total = 0;
     for (const Span &p : pieces) {
-        total +=
-            std::max(0, static_cast<int>(std::floor((p.to_m - p.from_m) * pixels_per_m + 1e-9)));
+        // A pixel on a corner end, then half a pitch clear of the other end at least.
+        const double extra = p.from_corner || p.to_corner ? 0.5 : 0.0;
+        total += std::max(
+            0, static_cast<int>(std::floor((p.to_m - p.from_m) * pixels_per_m + extra + 1e-9)));
     }
     return total;
 }
@@ -352,7 +384,13 @@ Rig build_rig(std::vector<StripSpec> strips) {
             on[k] = k + 1 == spans.size() ? left : std::min(left, room);
             left -= on[k];
             const double spare_m = spans[k].to_m - spans[k].from_m - room * pitch_m;
-            start_m[k] = spans[k].from_m + (on[k] >= room ? 0.5 * spare_m : 0.0);
+            if (spans[k].to_corner && on[k] >= room) {
+                start_m[k] = spans[k].to_m - (room - 0.5) * pitch_m; // The last on the corner.
+            } else if (spans[k].from_corner) {
+                start_m[k] = spans[k].from_m - 0.5 * pitch_m; // The first on the corner.
+            } else {
+                start_m[k] = spans[k].from_m + (on[k] >= room ? 0.5 * spare_m : 0.0);
+            }
         }
         size_t k = 0;
         int in_piece = 0;

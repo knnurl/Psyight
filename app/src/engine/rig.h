@@ -43,10 +43,11 @@ struct Rig {
 // along it) left after taking out, within kJointClearanceM:
 // - each sharp corner (a turn over kJointTurnDeg, a closed strip's start included): both sides;
 // - where it comes near another strip (where that strip really is: its own corners already cut
-//   out, so a spoke ending on a ring's corner runs into the gap there, level with the ring's
-//   pieces): a strip whose end is there stops short (both, when two ends meet); where two strips
-//   cross or run together away from their ends, one runs through and the other is cut, with a
-//   gap each side: an open strip runs through a closed one (spokes through rings), then the
+//   out): a strip whose end is there stops short (both, when two ends meet), except an end on
+//   the other strip's corner, which runs into the gap there and puts a pixel on the corner (a
+//   spoke ending on a ring's corner; with both ends on corners, the polyline's end); where two
+//   strips cross or run together away from their ends, one runs through and the other is cut, with
+//   a gap each side: an open strip runs through a closed one (spokes through rings), then the
 //   longer through the shorter, then the earlier in the list.
 // The clearance is measured to the other strip's centre line (or the corner): with 10 mm strip,
 // the pieces' edges just meet (the owner's choice, 2026-10-26). A strip under
@@ -58,6 +59,10 @@ inline constexpr double kJointMinPixelsPerM = 20.0;
 struct Span {
     double from_m = 0.0;
     double to_m = 0.0;
+    // The piece runs to the strip's end on another strip's corner (in the gap its pieces leave
+    // there): its pixels are laid from that end, the last one on the corner.
+    bool from_corner = false;
+    bool to_corner = false;
 };
 std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips,
                                             double clearance_m = kJointClearanceM);
