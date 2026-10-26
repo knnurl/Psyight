@@ -59,3 +59,52 @@ TEST_CASE("build kit: the hexagon mandala's islands between rings and spokes") {
         }
     }
 }
+
+TEST_CASE("build kit: one DXF with the parts stacked at their heights, as thick as their sheets") {
+    StripSpec ring;
+    ring.name = "Ring";
+    ring.polyline = {{-0.1, 0.9, 0}, {0.1, 0.9, 0}, {0.1, 1.1, 0}, {-0.1, 1.1, 0}, {-0.1, 0.9, 0}};
+    ring.pixels_per_m = 60.0;
+    ring.count = 48;
+    const BuildKit kit = build_kit({ring}, {}); // Sheets 6, 9, 3 and 3 mm.
+    CHECK(kit.height_m == doctest::Approx(0.021));
+    const std::string &dxf = kit.assembly_dxf;
+    for (const char *layer : {"1_back_cut", "1_back_engrave", "2_spacer_cut", "2_spacer_engrave",
+                              "3_acrylic_cut", "4_front_cut"}) {
+        CAPTURE(layer);
+        CHECK(dxf.find(std::string("\n2\n") + layer + "\n") != std::string::npos); // Declared.
+    }
+    // The spacer's outlines start on the back panel (6 mm up) and are 9 mm thick; the front's sit
+    // at 18 mm, 3 mm thick.
+    CHECK(dxf.find("POLYLINE\n8\n2_spacer_cut\n39\n9.000\n66\n1\n10\n0.0\n20\n0.0\n30\n6.000\n") !=
+          std::string::npos);
+    CHECK(dxf.find("POLYLINE\n8\n4_front_cut\n39\n3.000\n66\n1\n10\n0.0\n20\n0.0\n30\n18.000\n") !=
+          std::string::npos);
+    CHECK(dxf.find("\nEOF\n") != std::string::npos);
+}
+
+TEST_CASE("build kit: the one DXF can hold the rig export on the LEDs' plane") {
+    StripSpec ring;
+    ring.name = "Ring";
+    ring.polyline = {{-0.1, 0.9, 0}, {0.1, 0.9, 0}, {0.1, 1.1, 0}, {-0.1, 1.1, 0}, {-0.1, 0.9, 0}};
+    ring.pixels_per_m = 60.0;
+    ring.count = 48;
+    const RigExportOptions rig;
+    const BuildKit kit = build_kit({ring}, {}, &rig, {"line 1, PD0"});
+    const std::string &dxf = kit.assembly_dxf;
+    for (const char *layer : {"0_centre_lines", "0_channels", "0_pixels", "0_wiring"}) {
+        CAPTURE(layer);
+        CHECK(dxf.find(std::string("\n2\n") + layer + "\n") != std::string::npos);
+    }
+    // 48 pixel dots on the back panel's top face (6 mm up).
+    size_t dots = 0;
+    for (size_t at = dxf.find("CIRCLE\n8\n0_pixels\n"); at != std::string::npos;
+         at = dxf.find("CIRCLE\n8\n0_pixels\n", at + 1)) {
+        CHECK(dxf.substr(dxf.find("\n30\n", at) + 4, 5) == "6.000");
+        ++dots;
+    }
+    CHECK(dots == 48);
+    CHECK(dxf.find("1. Ring, line 1, PD0") != std::string::npos);
+    // Without the rig, none of its layers.
+    CHECK(build_kit({ring}, {}).assembly_dxf.find("0_pixels") == std::string::npos);
+}

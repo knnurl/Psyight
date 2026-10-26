@@ -46,6 +46,24 @@ struct RigExportOptions {
 // in lines, which CAD and laser software keep.
 std::vector<std::vector<Vec3>> digit_strokes(int digit);
 
+// The export's shapes in millimetres, centred as its files are (on the middle of the paths, y
+// up): layer 0 centre lines, 1 channels, 2 pixels, 3 wiring; a polyline, a circle (its centre
+// and radius) or a text (its position and label).
+struct ExportShape {
+    enum class Kind { polyline, circle, text };
+    int layer = 0;
+    Kind kind = Kind::polyline;
+    std::vector<Vec3> points;
+    bool closed = false;
+    double radius_mm = 0.0;
+    std::string label;
+};
+inline constexpr const char *kExportLayerIds[] = {"centre_lines", "channels", "pixels", "wiring"};
+std::vector<ExportShape> rig_export_shapes(const std::vector<StripSpec> &strips,
+                                           const std::vector<std::string> &notes,
+                                           const RigExportOptions &options);
+ExportColour export_layer_colour(int layer, const RigExportOptions &options);
+
 // strips in data-line order; notes: one per strip (or none), shown in the wiring labels.
 std::string rig_to_svg(const std::vector<StripSpec> &strips, const std::vector<std::string> &notes,
                        const RigExportOptions &options);

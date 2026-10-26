@@ -398,6 +398,132 @@ constexpr std::array<const char *, 7> kSvgColours = {"#000000", "#ff0000", "#00f
                                                      "#ffff00", "#00ffff", "#ff00ff"};
 constexpr std::array<int, 7> kDxfColours = {7, 1, 3, 5, 2, 4, 6};
 
+// An AutoCAD R12 text DXF in millimetres: layers with colours, then a part's outlines (closed
+// 2D polylines and circles) and engraving at an elevation, the outlines extruded by a thickness
+// (DXF entity thickness: 3D viewers show a sheet as a slab).
+class DxfWriter {
+  public:
+    explicit DxfWriter(const std::vector<std::pair<std::string, ExportColour>> &layers) {
+        for (const auto &[c, v] : std::vector<std::pair<int, std::string>>{
+                 {0, "SECTION"},   {2, "HEADER"},     {9, "$ACADVER"}, {1, "AC1009"},
+                 {9, "$INSUNITS"}, {70, "4"},         {0, "ENDSEC"},   {0, "SECTION"},
+                 {2, "TABLES"},    {0, "TABLE"},      {2, "LTYPE"},    {70, "1"},
+                 {0, "LTYPE"},     {2, "CONTINUOUS"}, {70, "0"},       {3, "Solid line"},
+                 {72, "65"},       {73, "0"},         {40, "0.0"},     {0, "ENDTAB"},
+                 {0, "TABLE"},     {2, "LAYER"}}) {
+            pair(c, v);
+        }
+        pair(70, std::to_string(layers.size()));
+        for (const auto &[name, colour] : layers) {
+            pair(0, "LAYER");
+            pair(2, name);
+            pair(70, "0");
+            pair(62, std::to_string(kDxfColours[static_cast<size_t>(colour)]));
+            pair(6, "CONTINUOUS");
+        }
+        pair(0, "ENDTAB");
+        pair(0, "ENDSEC");
+        pair(0, "SECTION");
+        pair(2, "ENTITIES");
+    }
+
+    // The drawing centred on `centre`: outlines and holes on cut_layer at elevation z_mm,
+    // extruded by thickness_mm; engraving on engrave_layer at engrave_z_mm.
+    void add(const Drawing &d, P centre, const std::string &cut_layer,
+             const std::string &engrave_layer, double z_mm, double thickness_mm,
+             double engrave_z_mm) {
+        for (const Loop &l : d.cut) {
+            polyline(cut_layer, l, true, centre, z_mm, thickness_mm);
+        }
+        for (const Circle &c : d.holes) {
+            pair(0, "CIRCLE");
+            pair(8, cut_layer);
+            if (thickness_mm > 0.0) {
+                pair(39, num(thickness_mm));
+            }
+            pair(10, num(c.centre.x - centre.x));
+            pair(20, num(c.centre.y - centre.y));
+            pair(30, num(z_mm));
+            pair(40, num(c.radius));
+        }
+        for (const std::vector<P> &l : d.engrave) {
+            polyline(engrave_layer, l, false, centre, engrave_z_mm, 0.0);
+        }
+    }
+
+    // The rig export's shapes (already centred, in mm) on layers 0_<layer id>, at z_mm.
+    void add_shapes(const std::vector<ExportShape> &shapes, double z_mm) {
+        const P origin{0.0, 0.0};
+        for (const ExportShape &s : shapes) {
+            const std::string layer = std::string("0_") + kExportLayerIds[s.layer];
+            if (s.kind == ExportShape::Kind::polyline) {
+                std::vector<P> line;
+                for (const Vec3 &v : s.points) {
+                    line.push_back({v.x, v.y});
+                }
+                if (s.closed && !line.empty()) {
+                    line.push_back(line.front()); // polyline() drops a closed one's last point.
+                }
+                polyline(layer, line, s.closed, origin, z_mm, 0.0);
+            } else if (s.kind == ExportShape::Kind::circle) {
+                pair(0, "CIRCLE");
+                pair(8, layer);
+                pair(10, num(s.points[0].x));
+                pair(20, num(s.points[0].y));
+                pair(30, num(z_mm));
+                pair(40, num(s.radius_mm));
+            } else {
+                pair(0, "TEXT");
+                pair(8, layer);
+                pair(10, num(s.points[0].x));
+                pair(20, num(s.points[0].y));
+                pair(30, num(z_mm));
+                pair(40, num(4.0));
+                pair(1, s.label);
+            }
+        }
+    }
+
+    std::string finish() {
+        pair(0, "ENDSEC");
+        pair(0, "EOF");
+        return std::move(text_);
+    }
+
+  private:
+    void pair(int code, const std::string &value) {
+        text_ += std::to_string(code) + "\n" + value + "\n";
+    }
+    // A 2D polyline in its plane at elevation z (the header point's z), its vertices in x and y.
+    void polyline(const std::string &layer, const std::vector<P> &l, bool closed, P centre,
+                  double z_mm, double thickness_mm) {
+        pair(0, "POLYLINE");
+        pair(8, layer);
+        if (thickness_mm > 0.0) {
+            pair(39, num(thickness_mm));
+        }
+        pair(66, "1");
+        pair(10, "0.0");
+        pair(20, "0.0");
+        pair(30, num(z_mm));
+        pair(70, closed ? "1" : "0");
+        for (size_t k = 0; k < l.size(); ++k) {
+            if (closed && k + 1 == l.size()) {
+                break; // A closed polyline does not repeat its first point.
+            }
+            pair(0, "VERTEX");
+            pair(8, layer);
+            pair(10, num(l[k].x - centre.x));
+            pair(20, num(l[k].y - centre.y));
+            pair(30, num(z_mm));
+        }
+        pair(0, "SEQEND");
+        pair(8, layer);
+    }
+
+    std::string text_;
+};
+
 // Both files for a part, centred on `centre`: Cut (outlines and holes) and Engrave layers.
 BuildKitPart write_part(const std::string &name, const Drawing &d, P centre,
                         const BuildKitOptions &o) {
@@ -463,74 +589,16 @@ BuildKitPart write_part(const std::string &name, const Drawing &d, P centre,
     svg += "</svg>\n";
     part.svg = std::move(svg);
 
-    std::string dxf;
-    const auto pair = [&](int code, const std::string &value) {
-        dxf += std::to_string(code) + "\n" + value + "\n";
-    };
-    for (const auto &[c, v] : std::vector<std::pair<int, std::string>>{
-             {0, "SECTION"},    {2, "HEADER"}, {9, "$ACADVER"}, {1, "AC1009"},     {9, "$INSUNITS"},
-             {70, "4"},         {0, "ENDSEC"}, {0, "SECTION"},  {2, "TABLES"},     {0, "TABLE"},
-             {2, "LTYPE"},      {70, "1"},     {0, "LTYPE"},    {2, "CONTINUOUS"}, {70, "0"},
-             {3, "Solid line"}, {72, "65"},    {73, "0"},       {40, "0.0"},       {0, "ENDTAB"},
-             {0, "TABLE"},      {2, "LAYER"},  {70, "2"}}) {
-        pair(c, v);
-    }
-    for (const auto &[layer, colour] :
-         {std::pair{"Cut", o.cut_colour}, std::pair{"Engrave", o.engrave_colour}}) {
-        pair(0, "LAYER");
-        pair(2, layer);
-        pair(70, "0");
-        pair(62, std::to_string(kDxfColours[static_cast<size_t>(colour)]));
-        pair(6, "CONTINUOUS");
-    }
-    pair(0, "ENDTAB");
-    pair(0, "ENDSEC");
-    pair(0, "SECTION");
-    pair(2, "ENTITIES");
-    const auto polyline = [&](const char *layer, const std::vector<P> &l, bool closed) {
-        pair(0, "POLYLINE");
-        pair(8, layer);
-        pair(66, "1");
-        pair(10, "0.0");
-        pair(20, "0.0");
-        pair(30, "0.0");
-        pair(70, closed ? "1" : "0");
-        for (size_t k = 0; k < l.size(); ++k) {
-            if (closed && k + 1 == l.size()) {
-                break; // A closed polyline does not repeat its first point.
-            }
-            pair(0, "VERTEX");
-            pair(8, layer);
-            pair(10, num(l[k].x - centre.x));
-            pair(20, num(l[k].y - centre.y));
-            pair(30, "0.0");
-        }
-        pair(0, "SEQEND");
-        pair(8, layer);
-    };
-    for (const Loop &l : d.cut) {
-        polyline("Cut", l, true);
-    }
-    for (const Circle &c : d.holes) {
-        pair(0, "CIRCLE");
-        pair(8, "Cut");
-        pair(10, num(c.centre.x - centre.x));
-        pair(20, num(c.centre.y - centre.y));
-        pair(30, "0.0");
-        pair(40, num(c.radius));
-    }
-    for (const std::vector<P> &l : d.engrave) {
-        polyline("Engrave", l, false);
-    }
-    pair(0, "ENDSEC");
-    pair(0, "EOF");
-    part.dxf = std::move(dxf);
+    DxfWriter dxf({{"Cut", o.cut_colour}, {"Engrave", o.engrave_colour}});
+    dxf.add(d, centre, "Cut", "Engrave", 0.0, 0.0, 0.0);
+    part.dxf = dxf.finish();
     return part;
 }
 
 } // namespace
 
-BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &options) {
+BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &options,
+                   const RigExportOptions *rig, const std::vector<std::string> &notes) {
     BuildKit kit;
     std::vector<std::vector<P>> lines;
     double lo_x = 1e18, hi_x = -1e18, lo_y = 1e18, hi_y = -1e18;
@@ -692,6 +760,41 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
     kit.parts.push_back(write_part("spacer", spacer_drawing, centre, options));
     kit.parts.push_back(write_part("acrylic", acrylic_drawing, centre, options));
     kit.parts.push_back(write_part("front", front_drawing, centre, options));
+
+    // The assembly: every part on its own layers, stacked at its height and as thick as its sheet
+    // (the back from 0 up); engraving on each part's top face.
+    const std::array<std::pair<const Drawing *, double>, 4> stack = {
+        {{&back, options.back_thickness_m},
+         {&spacer_drawing, options.spacer_thickness_m},
+         {&acrylic_drawing, options.acrylic_thickness_m},
+         {&front_drawing, options.front_thickness_m}}};
+    std::vector<std::pair<std::string, ExportColour>> layers;
+    if (rig != nullptr) {
+        for (int layer = 0; layer < 4; ++layer) {
+            layers.push_back(
+                {std::string("0_") + kExportLayerIds[layer], export_layer_colour(layer, *rig)});
+        }
+    }
+    for (size_t i = 0; i < kit.parts.size(); ++i) {
+        const std::string base = std::to_string(i + 1) + "_" + kit.parts[i].name;
+        layers.push_back({base + "_cut", options.cut_colour});
+        layers.push_back({base + "_engrave", options.engrave_colour});
+    }
+    DxfWriter assembly(layers);
+    double z = 0.0;
+    for (size_t i = 0; i < stack.size(); ++i) {
+        const double thick = 1000.0 * stack[i].second;
+        const std::string base = std::to_string(i + 1) + "_" + kit.parts[i].name;
+        assembly.add(*stack[i].first, centre, base + "_cut", base + "_engrave", z, thick,
+                     z + thick);
+        z += thick;
+    }
+    if (rig != nullptr) { // On the back panel's top face, where the strips sit.
+        assembly.add_shapes(rig_export_shapes(strips, notes, *rig),
+                            1000.0 * options.back_thickness_m);
+    }
+    kit.assembly_dxf = assembly.finish();
+    kit.height_m = z / 1000.0;
     return kit;
 }
 

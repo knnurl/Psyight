@@ -19,8 +19,10 @@ constexpr double kLabelHeightMm = 4.0;
 constexpr double kMarginMm = 10.0;
 constexpr double kMaxMitre = 2.0;       // Corner offsets at most this many half widths.
 constexpr double kNumberHeightMm = 8.0; // The wiring order's stroke digits.
-constexpr double kDigitWidth = 0.55;    // Of the height.
-constexpr double kDigitGap = 0.3;       // Between digits, of the height.
+constexpr double kNumberGapMm = 3.0;    // Between the arrow's tip and the number.
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kDigitWidth = 0.55; // Of the height.
+constexpr double kDigitGap = 0.3;    // Between digits, of the height.
 
 enum Layer { kCentre, kChannels, kPixels, kWiring, kLayers };
 
@@ -184,21 +186,30 @@ std::vector<Prim> primitives(const std::vector<StripSpec> &strips,
             }
             prims.push_back(label);
             // The order number in strokes (CAD and laser software keep lines, not always text),
-            // on the arrow's other side, centred on its data-in point.
+            // on the strip's line just past the arrow, running along it and kept upright (read
+            // left to right).
             const std::string number = std::to_string(s + 1);
             const double digit_w = kDigitWidth * kNumberHeightMm;
             const double advance = digit_w + kDigitGap * kNumberHeightMm;
             const double total_w = number.size() * advance - kDigitGap * kNumberHeightMm;
-            const P2 centre{p[0].x - nrm.x * (2.0 * kArrowHalfWidthMm + 0.5 * kNumberHeightMm),
-                            p[0].y - nrm.y * (2.0 * kArrowHalfWidthMm + 0.5 * kNumberHeightMm)};
+            const double along = kArrowLengthMm + kNumberGapMm + 0.5 * total_w;
+            const P2 centre{p[0].x + d.x * along, p[0].y + d.y * along};
+            double angle = std::atan2(d.y, d.x);
+            if (d.x < -1e-9 || (std::abs(d.x) <= 1e-9 && d.y < 0.0)) {
+                angle += kPi; // Upright: never upside down.
+            }
+            const double c = std::cos(angle);
+            const double sn = std::sin(angle);
             for (size_t k = 0; k < number.size(); ++k) {
-                const double left = centre.x - 0.5 * total_w + k * advance;
-                const double bottom = centre.y - 0.5 * kNumberHeightMm;
+                const double left = -0.5 * total_w + k * advance;
+                const double bottom = -0.5 * kNumberHeightMm;
                 for (const std::vector<P2> &stroke : stroke_digit(number[k] - '0')) {
                     Prim line{kWiring, Prim::polyline, {}, false};
                     for (const P2 &q : stroke) {
+                        const double u = left + q.x * digit_w;
+                        const double v = bottom + q.y * kNumberHeightMm;
                         line.points.push_back(
-                            {left + q.x * digit_w, bottom + q.y * kNumberHeightMm});
+                            {centre.x + u * c - v * sn, centre.y + u * sn + v * c});
                     }
                     prims.push_back(line);
                 }
@@ -278,6 +289,31 @@ std::vector<std::vector<Vec3>> digit_strokes(int digit) {
         out.push_back(std::move(line));
     }
     return out;
+}
+
+std::vector<ExportShape> rig_export_shapes(const std::vector<StripSpec> &strips,
+                                           const std::vector<std::string> &notes,
+                                           const RigExportOptions &options) {
+    std::vector<ExportShape> out;
+    for (const Prim &p : primitives(strips, notes, options)) {
+        ExportShape shape;
+        shape.layer = p.layer;
+        shape.kind = p.kind == Prim::polyline ? ExportShape::Kind::polyline
+                     : p.kind == Prim::circle ? ExportShape::Kind::circle
+                                              : ExportShape::Kind::text;
+        for (const P2 &q : p.points) {
+            shape.points.push_back({q.x, q.y, 0.0});
+        }
+        shape.closed = p.closed;
+        shape.radius_mm = p.radius;
+        shape.label = p.label;
+        out.push_back(std::move(shape));
+    }
+    return out;
+}
+
+ExportColour export_layer_colour(int layer, const RigExportOptions &options) {
+    return colour_of(layer, options);
 }
 
 std::string rig_to_svg(const std::vector<StripSpec> &strips, const std::vector<std::string> &notes,

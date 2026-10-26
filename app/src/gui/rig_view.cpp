@@ -36,6 +36,23 @@ double strip_length_m(const std::vector<StripSpec> &strips) {
     return total;
 }
 
+// Each strip's node line and pin, as Patch by strip shows them (the export's wiring labels).
+std::vector<std::string> wiring_notes(const Project &p) {
+    std::vector<std::string> notes(p.strips.size());
+    const NodePlan plan = plan_node(p);
+    for (size_t l = 0; l < plan.lanes.size(); ++l) {
+        const NodeLane &lane = plan.lanes[l];
+        for (int k = 0; k < lane.strips; ++k) {
+            const auto s = static_cast<size_t>(lane.first_strip + k);
+            if (s < notes.size()) {
+                notes[s] =
+                    "line " + std::to_string(l + 1) + ", " + node_lane_pin(static_cast<int>(l));
+            }
+        }
+    }
+    return notes;
+}
+
 std::string lower_extension(const std::filesystem::path &path) {
     std::string ext = path_to_utf8(path.extension());
     for (char &ch : ext) {
@@ -668,6 +685,14 @@ void RigView::draw_export() {
     ImGui::SameLine();
     mm_field("Bolt hole", k.bolt_hole_m, 1.0, 20.0, "3.4 mm clears M3; 4.5 mm clears M4.");
     mm_field("Wire hole", k.wire_hole_m, 1.0, 30.0, "At every strip end, through the back.");
+    ImGui::TextDisabled("Sheets (for the one-DXF assembly's heights):");
+    mm_field("Back##sheet", k.back_thickness_m, 1.0, 50.0, "The back panel's sheet.");
+    ImGui::SameLine();
+    mm_field("Spacer##sheet", k.spacer_thickness_m, 1.0, 50.0,
+             "The spacer's sheet: the distance from the LEDs to the acrylic.");
+    mm_field("Acrylic##sheet", k.acrylic_thickness_m, 1.0, 20.0, "The acrylic sheet.");
+    ImGui::SameLine();
+    mm_field("Front##sheet", k.front_thickness_m, 1.0, 50.0, "The front mask's sheet.");
     k.cut_colour = o.channel_colour;
     k.engrave_colour = o.pixel_colour;
     ImGui::TextDisabled("Uses the channel width above; cut in the Channels colour, engrave in the "
@@ -682,6 +707,13 @@ void RigView::draw_export() {
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
+    if (ImGui::Button("Build kit, one DXF...")) {
+        export_requested_ = 5;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SetItemTooltip("All four parts in one DXF, each on its own layers, stacked at its "
+                          "height and as thick as its sheet: the assembled panel in a 3D viewer.");
+    ImGui::SameLine();
     if (ImGui::Button("Cancel")) {
         ImGui::CloseCurrentPopup();
     }
@@ -690,9 +722,33 @@ void RigView::draw_export() {
 
 void RigView::export_drawing(void *owner) {
     const bool kit = export_requested_ >= 3;
-    const bool dxf = export_requested_ == 2 || export_requested_ == 4;
+    const bool one_file = export_requested_ == 5;
+    const bool dxf = export_requested_ == 2 || export_requested_ >= 4;
     export_requested_ = 0;
     const Project &p = project_.project();
+    if (one_file) {
+        const std::filesystem::path suggested =
+            (project_.untitled() ? std::string("rig") : project_.path().stem().string()) +
+            "_assembly.dxf";
+        const auto chosen = save_drawing_file_dialog(owner, suggested, true);
+        if (!chosen) {
+            return;
+        }
+        std::vector<StripSpec> strips;
+        for (const ProjectStrip &s : p.strips) {
+            strips.push_back(s.spec);
+        }
+        // With the rig export on the LEDs' plane (centre lines, pixels, wiring as ticked above).
+        const BuildKit made = build_kit(strips, kit_options_, &export_options_, wiring_notes(p));
+        std::ofstream out(*chosen, std::ios::binary);
+        out << made.assembly_dxf;
+        char height[32];
+        std::snprintf(height, sizeof(height), "%.0f", made.height_m * 1000.0);
+        export_status_ =
+            out ? "Build kit in one DXF: " + path_to_utf8(*chosen) + " (" + height + " mm deep)."
+                : "Could not write " + path_to_utf8(*chosen) + ".";
+        return;
+    }
     if (kit) {
         // The parts beside the chosen name: <name>_1_back, _2_spacer, _3_acrylic, _4_front.
         const std::filesystem::path suggested =
@@ -730,21 +786,10 @@ void RigView::export_drawing(void *owner) {
         return;
     }
     std::vector<StripSpec> strips;
-    std::vector<std::string> notes(p.strips.size());
     for (const ProjectStrip &s : p.strips) {
         strips.push_back(s.spec);
     }
-    const NodePlan plan = plan_node(p); // The data line and pin of each strip, as Patch shows.
-    for (size_t l = 0; l < plan.lanes.size(); ++l) {
-        const NodeLane &lane = plan.lanes[l];
-        for (int k = 0; k < lane.strips; ++k) {
-            const auto s = static_cast<size_t>(lane.first_strip + k);
-            if (s < notes.size()) {
-                notes[s] =
-                    "line " + std::to_string(l + 1) + ", " + node_lane_pin(static_cast<int>(l));
-            }
-        }
-    }
+    const std::vector<std::string> notes = wiring_notes(p);
     const std::string text = dxf ? rig_to_dxf(strips, notes, export_options_)
                                  : rig_to_svg(strips, notes, export_options_);
     std::ofstream out(*chosen, std::ios::binary);

@@ -29,6 +29,11 @@ struct BuildKitOptions {
     double margin_m = 0.015;        // Panel beyond the outermost channels.
     double bolt_hole_m = 0.0034;    // M3 clearance.
     double wire_hole_m = 0.005;
+    // Sheet thicknesses, for the assembly's heights.
+    double back_thickness_m = 0.006;
+    double spacer_thickness_m = 0.009;
+    double acrylic_thickness_m = 0.003;
+    double front_thickness_m = 0.003;
     ExportColour cut_colour = ExportColour::black;
     ExportColour engrave_colour = ExportColour::red;
 };
@@ -43,8 +48,18 @@ struct BuildKit {
     std::vector<BuildKitPart> parts; // In stacking order, back to front.
     int islands = 0;                 // Spacer pieces.
     int bolts = 0;
+    // All four parts in one DXF, stacked: each part on its own layers (1_back_cut,
+    // 1_back_engrave, 2_spacer_cut and so on), at its height from the back panel's underside
+    // (z 0) and extruded by its sheet's thickness (DXF entity thickness), engraving on its top.
+    std::string assembly_dxf;
+    double height_m = 0.0; // The stack's total thickness.
 };
 
-BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &options);
+// rig: when given, the assembly also holds the rig export (its centre lines, channels, pixels
+// and wiring, as Export drawing writes them, with `notes` in the wiring labels) on layers
+// 0_<layer>, at the LEDs' plane: the back panel's top face, where the strips sit.
+BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &options,
+                   const RigExportOptions *rig = nullptr,
+                   const std::vector<std::string> &notes = {});
 
 } // namespace psyight

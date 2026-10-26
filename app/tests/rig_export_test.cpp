@@ -186,3 +186,26 @@ TEST_CASE("rig export: wiring order numbers drawn in lines beside each arrow") {
     }
     CHECK(polylines == 12 + 12 + 6);
 }
+
+TEST_CASE("rig export: the wiring number sits on the strip's line, past the arrow, upright") {
+    StripSpec bar;
+    bar.name = "Bar";
+    bar.polyline = {{1.0, 1.0, 0}, {0.0, 1.0, 0}}; // Running right to left.
+    bar.pixels_per_m = 10.0;
+    bar.count = 10;
+    RigExportOptions only_wiring;
+    only_wiring.centre_lines = only_wiring.channels = only_wiring.pixels = false;
+    const std::vector<ExportShape> shapes = rig_export_shapes({bar}, {}, only_wiring);
+    // The digit "1": one stroke, after the arrow (a closed triangle) and the text label.
+    const ExportShape &digit = shapes.back();
+    REQUIRE(digit.kind == ExportShape::Kind::polyline);
+    REQUIRE_FALSE(digit.closed);
+    for (const Vec3 &q : digit.points) {
+        CHECK(std::abs(q.y) <= 4.0 + 1e-6); // On the line (y 0 once centred), within its height.
+    }
+    // Past the arrow along the strip: the strip runs to -x from its start at +500 mm.
+    CHECK(digit.points.front().x < 500.0 - 8.0);
+    // Kept upright although the strip runs right to left: the stroke of "1" points up.
+    CHECK(std::abs(digit.points.front().x - digit.points.back().x) < 1e-6);
+    CHECK(digit.points.back().y > digit.points.front().y);
+}
