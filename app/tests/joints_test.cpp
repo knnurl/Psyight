@@ -157,25 +157,34 @@ TEST_CASE("joints: the owner's 30 cm hexagon with its centre Y keeps every pixel
     }
 }
 
-TEST_CASE("joints: refitting keeps counts set by hand and fills strips that were full") {
+TEST_CASE("joints: counts follow the path unless set by hand; old files infer which") {
     const StripSpec bar = strip("bar", {{-1, 0, 0}, {1, 0, 0}}, 60.0, 120);
-    StripSpec stem = strip("stem", {{0, 1, 0}, {0, 0.5, 0}}, 60.0, 30);
-    std::vector<StripSpec> before = {bar, stem};
-    // The stem lengthened down onto the bar: full before, so it fills its piece now.
-    std::vector<StripSpec> after = before;
-    after[1].polyline.back() = {0, 0, 0};
-    refit_counts(after, before);
-    CHECK(after[1].count == 59); // 1 m less 8 mm at 60 px/m.
-    CHECK(after[0].count == 120);
-    // A count set by hand in the same edit stands.
-    after = before;
-    after[1].polyline.back() = {0, 0, 0};
-    after[1].count = 10;
-    refit_counts(after, before);
-    CHECK(after[1].count == 10);
-    // A new strip whose count fills its path is fitted.
-    after = before;
-    after.push_back(strip("new", {{-1, 0, 0}, {-1, 1, 0}}, 60.0, 60));
-    refit_counts(after, before);
-    CHECK(after[2].count == 59);
+    StripSpec stem = strip("stem", {{0, 1, 0}, {0, 0, 0}}, 60.0, 60);
+    std::vector<StripSpec> strips = {bar, stem};
+    fit_counts(strips);
+    CHECK(strips[1].count == 59); // 1 m less 5 mm at 60 px/m.
+    CHECK(strips[0].count == 120);
+    strips[1].count = 10;
+    strips[1].fills = false;
+    fit_counts(strips);
+    CHECK(strips[1].count == 10);
+
+    // From a file without the flag: a count up to the whole path and at least three quarters of
+    // what its pieces hold filled it (an earlier layout's); half of it was set by hand.
+    std::vector<StripSpec> old = {bar, stem, stem, stem};
+    old[1].count = 60; // The whole path.
+    old[2].count = 56; // An earlier, tighter layout's.
+    old[3].count = 30; // By hand.
+    for (StripSpec &s : old) {
+        s.fills = false;
+    }
+    old[2].name = "stem 2";
+    old[3].name = "stem 3";
+    old[2].polyline = {{0.5, 1, 0}, {0.5, 0, 0}}; // Apart, each ending on the bar.
+    old[3].polyline = {{-0.5, 1, 0}, {-0.5, 0, 0}};
+    infer_fills(old);
+    CHECK(old[0].fills);
+    CHECK(old[1].fills);
+    CHECK(old[2].fills);
+    CHECK_FALSE(old[3].fills);
 }

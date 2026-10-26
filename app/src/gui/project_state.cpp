@@ -24,10 +24,10 @@ std::vector<StripSpec> specs_of(const Project &p) {
     return specs;
 }
 
-// Counts refitted after the strips changed (engine/rig.h: joints), against `before`.
-void refit(Project &p, const Project &before) {
+// Counts of the strips that fill their paths, fitted to their pieces (engine/rig.h: joints).
+void fit(Project &p) {
     std::vector<StripSpec> specs = specs_of(p);
-    refit_counts(specs, specs_of(before));
+    fit_counts(specs);
     for (size_t i = 0; i < specs.size(); ++i) {
         p.strips[i].spec.count = specs[i].count;
     }
@@ -40,8 +40,8 @@ bool same_strips(const Project &a, const Project &b) {
     for (size_t i = 0; i < a.strips.size(); ++i) {
         const StripSpec &x = a.strips[i].spec;
         const StripSpec &y = b.strips[i].spec;
-        if (x.name != y.name || x.count != y.count || x.pixels_per_m != y.pixels_per_m ||
-            x.polyline.size() != y.polyline.size()) {
+        if (x.name != y.name || x.count != y.count || x.fills != y.fills ||
+            x.pixels_per_m != y.pixels_per_m || x.polyline.size() != y.polyline.size()) {
             return false;
         }
         for (size_t k = 0; k < x.polyline.size(); ++k) {
@@ -57,7 +57,7 @@ bool same_strips(const Project &a, const Project &b) {
 } // namespace
 
 ProjectState::ProjectState() {
-    refit(project_, project_);
+    fit(project_);
     committed_ = project_;
     rebuild();
 }
@@ -74,7 +74,7 @@ std::string ProjectState::name() const {
 
 void ProjectState::changed() {
     if (!same_strips(project_, committed_)) {
-        refit(project_, committed_);
+        fit(project_);
     }
     history_.record(committed_, now_s());
     committed_ = project_;
@@ -90,7 +90,7 @@ void ProjectState::rebuild() {
 
 void ProjectState::replace(Project project) {
     project_ = std::move(project);
-    refit(project_, project_); // Counts that filled their paths fill their pieces.
+    fit(project_); // Strips that fill their paths fill their pieces.
     committed_ = project_;
     history_.clear();
     rebuild();
@@ -226,7 +226,7 @@ bool ProjectState::redo() {
 void ProjectState::reset_to_default() {
     history_.record(committed_, now_s());
     project_ = default_project();
-    refit(project_, project_);
+    fit(project_);
     committed_ = project_;
     rebuild();
     ++version_;

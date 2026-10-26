@@ -1071,11 +1071,16 @@ void RigView::draw_strips() {
                     return ImGui::DragInt(id, &s.spec.count, 1.0f, 0, 10000);
                 })) {
                 s.spec.count = std::clamp(s.spec.count, 0, 10000);
+                // Set by hand, unless set to what fits: then it follows the path again.
+                const std::vector<int> &fits = project_.rig().fits;
+                s.spec.fills = i < fits.size() && s.spec.count == fits[i];
                 changed = true;
             }
             const std::vector<int> &fits = project_.rig().fits;
-            ImGui::SetItemTooltip("%d fill the polyline at this density, joints taken out. "
-                                  "Double-click to type.",
+            ImGui::SetItemTooltip("%d fill the polyline at this density, joints taken out%s. "
+                                  "Double-click to type; type %d to follow the path again.",
+                                  i < fits.size() ? fits[i] : 0,
+                                  s.spec.fills ? " (this strip follows it)" : "",
                                   i < fits.size() ? fits[i] : 0);
             ImGui::TableNextColumn();
             ImGui::SetNextItemWidth(-1.0f);

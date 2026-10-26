@@ -1,8 +1,8 @@
 // Editing a strip's geometry (the Stage's edit mode, gui/preview_view.h): finding the nearest
 // point on a strip, inserting and removing points, splitting, moving, rotating and snapping.
 // Pure functions of the strips, in metres in the x-y plane (z kept). Counts stand: the project
-// refits them after the edit with every strip in view (refit_counts, engine/rig.h), so a strip
-// that filled its path keeps filling it, joints included.
+// fits them after the edit with every strip in view (fit_counts, engine/rig.h), so a strip that
+// fills its path keeps filling it, joints included.
 #pragma once
 
 #include "engine/rig.h"

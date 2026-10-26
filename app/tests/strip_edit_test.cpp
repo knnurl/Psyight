@@ -38,15 +38,17 @@ TEST_CASE("strip edit: nearest point, moving points, counts refitted after") {
     CHECK(hit.point.x == doctest::Approx(1.0));
     CHECK(hit.distance_m == doctest::Approx(0.2));
 
-    // The edit leaves the count; refitting fills a strip that was full, and keeps a shorter one.
+    // The edit leaves the count; fitting fills a strip that fills its path, and keeps one whose
+    // count was set by hand.
     std::vector<StripSpec> longer = {with_point_moved(line_strip(), 1, {2, 0, 0})};
     CHECK(longer[0].count == 60);
-    refit_counts(longer, {line_strip()});
+    fit_counts(longer);
     CHECK(longer[0].count == 120);
     StripSpec part = line_strip();
     part.count = 30;
+    part.fills = false;
     std::vector<StripSpec> stretched = {with_point_moved(part, 1, {2, 0, 0})};
-    refit_counts(stretched, {part});
+    fit_counts(stretched);
     CHECK(stretched[0].count == 30);
 
     // A ring's first and last points move together.

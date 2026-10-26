@@ -21,6 +21,7 @@ struct StripSpec {
     double pixels_per_m = 60.0;
     int count = 0;                   // Pixels; they start half a pitch in from the first point.
     std::vector<std::string> groups; // Tags for masks and routing, for example "left".
+    bool fills = true; // The count follows the path (fit_counts); false once set by hand.
 };
 
 struct Pixel {
@@ -58,15 +59,16 @@ struct Span {
     double from_m = 0.0;
     double to_m = 0.0;
 };
-std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips);
+std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips,
+                                            double clearance_m = kJointClearanceM);
 // The pixels that fit on the pieces at this density: each piece's own whole number.
 int pixels_fitting(const std::vector<Span> &pieces, double pixels_per_m);
-// Every strip's count set to what fits on its pieces.
+// Each strip that fills its path gets what fits on its pieces; a count set by hand stands.
 void fit_counts(std::vector<StripSpec> &strips);
-// After an edit: a strip that filled its path before (its count within a pixel of what fitted,
-// with joints or without) and whose count the edit left alone gets what fits now; other counts
-// stand. Strips are matched by name (a new one counts as filled when its count fills its path).
-void refit_counts(std::vector<StripSpec> &strips, const std::vector<StripSpec> &before);
+// For strips saved before `fills` existed: whether each filled its path, from its count: no more
+// than the whole path holds and at least three quarters of what its pieces hold (counts from
+// earlier joint layouts, which took a little more out, count; half a strip set by hand does not).
+void infer_fills(std::vector<StripSpec> &strips);
 
 // Places every strip's pixels along its pieces at the strip's own pitch, piece after piece: a
 // piece holding all it can has its pixels centred on it (the part of a pitch left over shared

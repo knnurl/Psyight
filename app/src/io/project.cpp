@@ -394,6 +394,7 @@ json strip_spec_json(const StripSpec &s) {
             {"polyline", polyline},
             {"pixels_per_m", finite(s.pixels_per_m, "pixels_per_m")},
             {"count", s.count},
+            {"fills", s.fills},
             {"groups", s.groups}};
 }
 
@@ -415,7 +416,22 @@ StripSpec parse_strip_spec(const json &item) {
     spec.pixels_per_m = number(item, "pixels_per_m", 60.0, 1.0, 1000.0);
     spec.count = integer(item, "count", 0, 0, 10000);
     spec.groups = optional<std::vector<std::string>>(item, "groups", {});
+    spec.fills = optional<bool>(item, "fills", true);
     return spec;
+}
+
+// Strips from files saved before "fills": whether each filled its path, from its count.
+void infer_missing_fills(std::vector<StripSpec *> strips, const std::vector<bool> &missing) {
+    std::vector<StripSpec> specs;
+    for (const StripSpec *s : strips) {
+        specs.push_back(*s);
+    }
+    infer_fills(specs);
+    for (size_t i = 0; i < strips.size(); ++i) {
+        if (missing[i]) {
+            strips[i]->fills = specs[i].fills;
+        }
+    }
 }
 
 } // namespace
@@ -431,12 +447,19 @@ Result<Project> parse_project_json(std::string_view json_text) {
         Project p = default_project();
         if (const auto rig = root.find("rig"); rig != root.end()) {
             p.strips.clear();
+            std::vector<bool> missing;
             for (const json &item : rig->at("strips").get_ref<const json::array_t &>()) {
                 ProjectStrip strip;
                 strip.spec = parse_strip_spec(item);
                 strip.order = parse_order(optional<std::string>(item, "colour_order", "grb"));
                 p.strips.push_back(std::move(strip));
+                missing.push_back(!item.contains("fills"));
             }
+            std::vector<StripSpec *> specs;
+            for (ProjectStrip &strip : p.strips) {
+                specs.push_back(&strip.spec);
+            }
+            infer_missing_fills(specs, missing);
             if (const auto source = rig->find("source"); source != rig->end()) {
                 p.rig_source.preset = optional<std::string>(*source, "preset", "");
                 p.rig_source.locked = optional<bool>(*source, "locked", false);
@@ -739,9 +762,16 @@ Result<RigPreset> parse_rig_preset(std::string_view text) {
         RigPreset preset;
         preset.name = root.at("name").get<std::string>();
         preset.description = optional<std::string>(root, "description", "");
+        std::vector<bool> missing;
         for (const json &item : root.at("strips").get_ref<const json::array_t &>()) {
             preset.strips.push_back(parse_strip_spec(item));
+            missing.push_back(!item.contains("fills"));
         }
+        std::vector<StripSpec *> specs;
+        for (StripSpec &strip : preset.strips) {
+            specs.push_back(&strip);
+        }
+        infer_missing_fills(specs, missing);
         if (preset.strips.empty()) {
             throw FieldError{"a rig preset needs at least one strip"};
         }

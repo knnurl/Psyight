@@ -147,8 +147,9 @@ std::vector<Stretch> stretches(const std::vector<Vec3> &p, const std::vector<dou
 
 } // namespace
 
-std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips) {
-    const double c = kJointClearanceM;
+std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips,
+                                            double clearance_m) {
+    const double c = clearance_m;
     const size_t n = strips.size();
     std::vector<std::vector<double>> arcs(n);
     std::vector<std::pair<Vec3, Vec3>> boxes(n);
@@ -306,41 +307,22 @@ int pixels_fitting(const std::vector<Span> &pieces, double pixels_per_m) {
 void fit_counts(std::vector<StripSpec> &strips) {
     const std::vector<std::vector<Span>> pieces = strip_pieces(strips);
     for (size_t i = 0; i < strips.size(); ++i) {
-        strips[i].count = pixels_fitting(pieces[i], strips[i].pixels_per_m);
+        if (strips[i].fills) {
+            strips[i].count = pixels_fitting(pieces[i], strips[i].pixels_per_m);
+        }
     }
 }
 
-void refit_counts(std::vector<StripSpec> &strips, const std::vector<StripSpec> &before) {
-    const std::vector<std::vector<Span>> now = strip_pieces(strips);
-    const std::vector<std::vector<Span>> was = strip_pieces(before);
-    const auto open_fill = [](const StripSpec &s) {
-        return pixels_fitting({{0.0, arc_lengths(s.polyline).back()}}, s.pixels_per_m);
-    };
+void infer_fills(std::vector<StripSpec> &strips) {
+    const std::vector<std::vector<Span>> pieces = strip_pieces(strips);
     for (size_t i = 0; i < strips.size(); ++i) {
         StripSpec &s = strips[i];
         if (s.polyline.size() < 2) {
             continue;
         }
-        size_t j = i < before.size() && before[i].name == s.name ? i : before.size();
-        for (size_t k = 0; j == before.size() && k < before.size(); ++k) {
-            if (before[k].name == s.name) {
-                j = k;
-            }
-        }
-        const int fits = pixels_fitting(now[i], s.pixels_per_m);
-        bool filled = false;
-        bool kept = true;
-        if (j < before.size() && before[j].polyline.size() >= 2) {
-            const StripSpec &b = before[j];
-            filled = std::abs(b.count - pixels_fitting(was[j], b.pixels_per_m)) <= 1 ||
-                     std::abs(b.count - open_fill(b)) <= 1;
-            kept = s.count == b.count;
-        } else {
-            filled = std::abs(s.count - fits) <= 1 || std::abs(s.count - open_fill(s)) <= 1;
-        }
-        if (filled && kept) {
-            s.count = fits;
-        }
+        const int whole = pixels_fitting({{0.0, arc_lengths(s.polyline).back()}}, s.pixels_per_m);
+        const int fits = pixels_fitting(pieces[i], s.pixels_per_m);
+        s.fills = s.count <= whole + 1 && s.count >= static_cast<int>(std::floor(0.75 * fits));
     }
 }
 
