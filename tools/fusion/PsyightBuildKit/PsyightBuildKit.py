@@ -213,6 +213,23 @@ def build(path, adsk):
         sketch.name = name
         return sketch
 
+    def lift(comp, body, z_mm):
+        """Moves the body up or down so its underside sits at z_mm, when it does not already."""
+        dz_cm = z_mm / 10 - body.boundingBox.minPoint.z
+        if abs(dz_cm) < 1e-4:
+            return
+        entities = adsk.core.ObjectCollection.create()
+        entities.add(body)
+        shift = adsk.core.Matrix3D.create()
+        shift.translation = adsk.core.Vector3D.create(0, 0, dz_cm)
+        moves = comp.features.moveFeatures
+        try:
+            move_input = moves.createInput2(entities)
+            move_input.defineAsFreeMove(shift)
+        except AttributeError:  # Older Fusion.
+            move_input = moves.createInput(entities, shift)
+        moves.add(move_input)
+
     for name in sorted(layers, key=lambda n: (parse_layer_name(n) or (99,))[0]):
         parsed = parse_layer_name(name)
         if parsed is None:
@@ -224,7 +241,9 @@ def build(path, adsk):
         sketch.isComputeDeferred = True
         draw(sketch, layers[name], adsk)
         sketch.isComputeDeferred = False
+        sketch_z = sketch.transform.translation.z * 10
         if kind != "cut" or z_high <= z_low:
+            made.append(f"{name}: sketch at {sketch_z:g} mm")
             continue
         profiles = material_profiles(sketch, adsk)
         if profiles.count == 0:
@@ -236,11 +255,16 @@ def build(path, adsk):
                                         adsk.core.ValueInput.createByReal((z_high - z_low) / 10))
         extrude = extrudes.add(extrude_input)
         look = plastic if part == "acrylic" else wood
-        for body in extrude.bodies:
+        bodies = [extrude.bodies.item(i) for i in range(extrude.bodies.count)]
+        for body in bodies:
             body.name = f"{index} {part}"
             if look is not None:
                 body.appearance = look
-        made.append(f"{part}: {z_low:g} to {z_high:g} mm, {profiles.count} regions")
+            lift(comp, body, z_low)
+        low = min(b.boundingBox.minPoint.z for b in bodies) * 10
+        high = max(b.boundingBox.maxPoint.z for b in bodies) * 10
+        made.append(f"{name}: sketch at {sketch_z:g} mm, {len(bodies)} bodies from "
+                    f"{low:.1f} to {high:.1f} mm (layer says {z_low:g} to {z_high:g})")
     return made
 
 
