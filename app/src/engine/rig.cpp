@@ -311,19 +311,29 @@ Rig build_rig(std::vector<StripSpec> strips) {
             continue;
         }
         const double pitch_m = 1.0 / strip.pixels_per_m;
-        const std::vector<Span> &spans = pieces[s];
+        // Pixels per piece, filling each in turn (the last takes any beyond), and where the first
+        // sits: a full piece is centred, its leftover shared between its two ends.
+        const std::vector<Span> spans =
+            pieces[s].empty() ? std::vector<Span>{{0.0, 0.0}} : pieces[s];
+        std::vector<int> on(spans.size(), 0);
+        std::vector<double> start_m(spans.size(), 0.0);
+        int left = strip.count;
+        for (size_t k = 0; k < spans.size(); ++k) {
+            const int room = pixels_fitting({spans[k]}, strip.pixels_per_m);
+            on[k] = k + 1 == spans.size() ? left : std::min(left, room);
+            left -= on[k];
+            const double spare_m = spans[k].to_m - spans[k].from_m - room * pitch_m;
+            start_m[k] = spans[k].from_m + (on[k] >= room ? 0.5 * spare_m : 0.0);
+        }
         size_t k = 0;
         int in_piece = 0;
         for (int i = 0; i < strip.count; ++i) {
-            // On to the next piece once this one is full; past the last, on along it.
-            while (k + 1 < spans.size() &&
-                   in_piece >= pixels_fitting({spans[k]}, strip.pixels_per_m)) {
+            while (in_piece >= on[k] && k + 1 < spans.size()) {
                 ++k;
                 in_piece = 0;
             }
-            const double from_m = spans.empty() ? 0.0 : spans[k].from_m;
             Pixel pixel;
-            pixel.position = along(strip.polyline, from_m + (in_piece + 0.5) * pitch_m);
+            pixel.position = along(strip.polyline, start_m[k] + (in_piece + 0.5) * pitch_m);
             ++in_piece;
             pixel.strip = static_cast<int>(s);
             pixel.index = i;
@@ -346,7 +356,10 @@ Rig default_rig() {
     constexpr double kOut = 1.0 / 60.0; // The sides a pitch outside: room for the corners' joints.
     return build_rig({
         {"bottom", {{0.0, 0.0, 0.0}, {kWidth, 0.0, 0.0}}, 60.0, 150, {"frame", "bottom"}},
-        {"right", {{kWidth + kOut, 0.0, 0.0}, {kWidth + kOut, kHeight, 0.0}}, 60.0, 72,
+        {"right",
+         {{kWidth + kOut, 0.0, 0.0}, {kWidth + kOut, kHeight, 0.0}},
+         60.0,
+         72,
          {"frame", "right"}},
         {"top", {{kWidth, kHeight, 0.0}, {0.0, kHeight, 0.0}}, 60.0, 150, {"frame", "top"}},
         {"left", {{-kOut, kHeight, 0.0}, {-kOut, 0.0, 0.0}}, 60.0, 72, {"frame", "left"}},

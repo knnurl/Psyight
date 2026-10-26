@@ -66,10 +66,11 @@ void fit_counts(std::vector<StripSpec> &strips);
 // stand. Strips are matched by name (a new one counts as filled when its count fills its path).
 void refit_counts(std::vector<StripSpec> &strips, const std::vector<StripSpec> &before);
 
-// Places every strip's pixels along its pieces, half a pitch in from each piece's start at the
-// strip's own pitch, piece after piece. Pixels beyond what the pieces hold continue along the
-// last piece and past the polyline's end in the last segment's direction. A strip with no joints
-// has one piece, its whole polyline.
+// Places every strip's pixels along its pieces at the strip's own pitch, piece after piece: a
+// piece holding all it can has its pixels centred on it (the part of a pitch left over shared
+// between its ends); one holding fewer starts half a pitch in from its start. Pixels beyond what
+// the pieces hold continue along the last piece and past the polyline's end in the last segment's
+// direction. A strip with no joints has one piece, its whole polyline.
 Rig build_rig(std::vector<StripSpec> strips);
 
 // A home-test rig: a 2.5 m wide, 1.2 m high frame of four strips at 60 pixels per metre (150
