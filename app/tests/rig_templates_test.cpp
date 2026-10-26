@@ -286,6 +286,26 @@ TEST_CASE("rig presets: settings rebuild the shape; defaults reproduce the prese
     CHECK(lotus.strips.size() == 17);
     CHECK(build_rig_preset(lotus, values(lotus, "petals", 6)).size() == 13);
     CHECK(build_rig_preset(lotus, values(lotus, "outer", 0)).size() == 9);
+    // Hexagon mandala's centre Y: three spokes from the middle to the inner hexagon's bottom,
+    // upper right and upper left corners, in centre_y only (layers on hex leave them dark).
+    const RigPreset hexagon = find("Hexagon mandala");
+    CHECK(hexagon.strips.size() == 9); // Off by default.
+    const std::vector<StripSpec> with_y = build_rig_preset(hexagon, values(hexagon, "centre_y", 1));
+    REQUIRE(with_y.size() == 12);
+    for (size_t i = 9; i < 12; ++i) {
+        const StripSpec &s = with_y[i];
+        CAPTURE(s.name);
+        CHECK(has(s, "centre_y"));
+        CHECK_FALSE(has(s, "hex"));
+        CHECK(s.polyline.front().x == doctest::Approx(0.0));
+        CHECK(s.polyline.front().y == doctest::Approx(1.7));
+        // Ends on the inner hexagon (radius 0.4 m), where spoke 1, 3 or 5 starts.
+        const Vec3 end = s.polyline.back();
+        CHECK(std::hypot(end.x, end.y - 1.7) == doctest::Approx(0.4));
+        const Vec3 spoke = with_y[3 + 2 * (i - 9)].polyline.front();
+        CHECK(end.x == doctest::Approx(spoke.x));
+        CHECK(end.y == doctest::Approx(spoke.y));
+    }
     // Scale doubles lengths (and pixel counts); Density doubles pixels per metre.
     const std::vector<StripSpec> big = build_rig_preset(lotus, values(lotus, "scale", 2.0));
     CHECK(big[0].count == doctest::Approx(2 * lotus.strips[0].count).epsilon(0.05));

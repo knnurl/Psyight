@@ -283,11 +283,13 @@ RigPreset hexagon_mandala() {
     // Concentric hexagons joined by six spokes running outwards.
     return make_preset(
         "Hexagon mandala",
-        "Concentric hexagons (3, the outer 1.2 m) joined by six spokes, centred 1.7 m up. "
-        "Groups: hex, outer, middle, inner, spokes.",
+        "Concentric hexagons (3, the outer 1.2 m) joined by six spokes, centred 1.7 m up. Centre "
+        "Y adds three spokes inside the inner hexagon, from the middle to alternate corners: lit, "
+        "the rings read as nested cubes seen corner-on. Groups: hex, outer, middle, inner, "
+        "spokes; the centre Y only centre_y (not hex), so layers on hex leave it dark.",
         {count_param("hexagons", "Hexagons", 3, 1, 6),
          metres_param("radius_m", "Outer radius", 1.2, 0.3, 4.0),
-         toggle_param("spokes", "Spokes", true)},
+         toggle_param("spokes", "Spokes", true), toggle_param("centre_y", "Centre Y", false)},
         [](const PresetValues &v) {
             Strips s;
             const Vec3 centre{0.0, 1.7, 0.0};
@@ -306,6 +308,16 @@ RigPreset hexagon_mandala() {
                     s.push_back(preset_strip("Spoke " + std::to_string(i + 1),
                                              {polar(centre, r / n, a), polar(centre, r, a)}, 60.0,
                                              {"hex", "spokes"}));
+                }
+            }
+            if (v.on("centre_y") && n > 1) {
+                // From the middle out to the inner hexagon's bottom, upper right and upper left
+                // corners, in line with spokes 1, 3 and 5.
+                for (int i = 0; i < 3; ++i) {
+                    const double a = -0.5 * kPi + 2.0 * kPi * i / 3.0;
+                    s.push_back(preset_strip("Centre spoke " + std::to_string(i + 1),
+                                             {centre, polar(centre, r / n, a)}, 60.0,
+                                             {"centre_y"}));
                 }
             }
             return s;

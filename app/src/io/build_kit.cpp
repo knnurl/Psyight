@@ -741,13 +741,22 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
     kit.bolts = static_cast<int>(bolts.size());
     const Grid front = minus(panel, windows);
 
+    // A wire hole at every strip end; ends that meet (spokes from one middle) share one.
     std::vector<Circle> wires;
+    const auto wire_at = [&](const P &p) {
+        for (const Circle &w : wires) {
+            if (std::hypot(w.centre.x - p.x, w.centre.y - p.y) < w.radius) {
+                return;
+            }
+        }
+        wires.push_back({p, 500.0 * options.wire_hole_m});
+    };
     for (const std::vector<P> &line : lines) {
-        wires.push_back({line.front(), 500.0 * options.wire_hole_m});
+        wire_at(line.front());
         const bool ring = line.size() > 2 && std::hypot(line.front().x - line.back().x,
                                                         line.front().y - line.back().y) < 1e-3;
         if (!ring) {
-            wires.push_back({line.back(), 500.0 * options.wire_hole_m});
+            wire_at(line.back());
         }
     }
     const std::vector<Loop> islands = outlines(spacer);
