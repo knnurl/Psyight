@@ -66,6 +66,7 @@ app/                  the application (CMake, vcpkg manifest)
   tests/              doctest suites and a synthetic test-signal generator
 firmware/node-f767/   STM32F767 Art-Net and sACN pixel node (8 strips, DMA driven)
 tools/python/         offline only: Demucs separation, model training and export
+tools/fusion/         a Fusion script that builds the build kit's one DXF as stacked parts
 prototypes/           browser prototypes from the design phase
 docs/                 specification, operator guide, results, plans
 assets/               fonts and the icon (tools/python/make_icon.py builds psyight.ico from the logo)

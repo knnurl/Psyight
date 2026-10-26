@@ -302,12 +302,24 @@ int RigView::rig_list(const char *id, const std::vector<RigPreset> &rigs, int ch
     return chosen;
 }
 
-// A preset's settings as controls (Overall width and Density shown in metres and pixels per
-// metre); true when one changed.
+// A preset's settings as controls; true when one changed. Overall width comes first: it is the
+// preset's Scale shown as the width it gives, and resizes the whole shape. The lengths below it
+// show their real size (the setting times the scale), so typing 0.15 m gives 0.15 m. Density is
+// shown in pixels per metre.
 bool RigView::draw_preset_params(const RigPreset &preset, std::vector<double> &values) {
     const std::vector<double> before = values;
     const float field = 7.0f * ImGui::GetFontSize();
+    std::vector<size_t> order;
+    double scale = 1.0;
     for (size_t k = 0; k < preset.params.size(); ++k) {
+        if (preset.params[k].id == "scale") {
+            order.insert(order.begin(), k);
+            scale = values[k];
+        } else {
+            order.push_back(k);
+        }
+    }
+    for (const size_t k : order) {
         const RigPresetParam &q = preset.params[k];
         ImGui::PushID(static_cast<int>(k));
         if (q.id == "scale") {
@@ -329,13 +341,16 @@ bool RigView::draw_preset_params(const RigPreset &preset, std::vector<double> &v
             const double height_m = std::max(0.0, max_y - min_y);
             double overall_m = width_m * values[k];
             ImGui::SetNextItemWidth(field);
-            if (drag_double("Overall width", &overall_m, 0.01f, q.min * width_m, q.max * width_m,
-                            "%.2f m")) {
+            if (drag_double("Overall width", &overall_m, 0.005f, q.min * width_m, q.max * width_m,
+                            "%.3f m")) {
                 values[k] = std::clamp(overall_m / width_m, q.min, q.max);
             }
+            ImGui::SetItemTooltip("Resizes the whole shape: every length below changes with it "
+                                  "(scale %.3f). A length below changes only itself, and so "
+                                  "the width.",
+                                  values[k]);
             ImGui::SameLine();
-            ImGui::TextDisabled("%.2f m tall", height_m * values[k]);
-            ImGui::SetItemTooltip("Scales the whole shape (%.2f x its own size).", values[k]);
+            ImGui::TextDisabled("%.3f m tall", height_m * values[k]);
         } else if (q.id == "density") {
             // Density shown in pixels per metre: the densest strip's at the multiplier (strips
             // at other densities scale with it); typing a density sets the multiplier.
@@ -370,6 +385,15 @@ bool RigView::draw_preset_params(const RigPreset &preset, std::vector<double> &v
             if (drag_int(q.label.c_str(), &v, 0.1f, static_cast<int>(q.min),
                          static_cast<int>(q.max))) {
                 values[k] = v;
+            }
+        } else if (q.unit == "m") {
+            // A length at its real size: the setting times the scale.
+            double real_m = values[k] * scale;
+            ImGui::SetNextItemWidth(field);
+            if (drag_double(q.label.c_str(), &real_m,
+                            static_cast<float>((q.max - q.min) * scale / 400.0), q.min * scale,
+                            q.max * scale, "%.3f m")) {
+                values[k] = std::clamp(real_m / scale, q.min, q.max);
             }
         } else {
             const std::string format = "%.2f" + (q.unit.empty() ? std::string() : " " + q.unit);

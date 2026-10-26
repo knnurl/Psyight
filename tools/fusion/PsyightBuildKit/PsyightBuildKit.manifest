@@ -1,0 +1,10 @@
+{
+    "autodeskProduct": "Fusion360",
+    "type": "script",
+    "author": "Psyight",
+    "description": {
+        "": "Builds Psyight's build kit assembly DXF as stacked, extruded parts from its layer names."
+    },
+    "supportedOS": "windows|mac",
+    "editEnabled": true
+}
