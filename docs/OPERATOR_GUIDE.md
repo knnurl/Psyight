@@ -66,7 +66,7 @@ Every check line should be green; read every amber line:
 
 ## Two ways to run
 
-**From files** (prepared tracks, best accuracy): drop a WAV, FLAC or MP3 onto the window and press Space to play. The whole track is analysed first, from its Demucs stems when they exist, so events are known ahead and nothing lags.
+**From files** (prepared tracks, best accuracy): drop a WAV, FLAC or MP3 onto the window and press Space to play. Started without a file, Psyight opens the last track you opened (the first in File > Open recent track that still exists), paused. The whole track is analysed first, from its Demucs stems when they exist, so events are known ahead and nothing lags.
 
 **Live** (a DJ set, unknown music): in the Show tab, open "Live input", choose a source and press Start. When the music stops (1.5 s of silence), the beat lets go and the lights fade out over 2 s; the next track's kicks lock the beat again.
 

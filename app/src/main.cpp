@@ -337,6 +337,14 @@ int main() {
             session.open_file(capture->audio);
         } else if (const auto paths = psyight::command_line_paths(); !paths.empty()) {
             session.open_file(paths.front());
+        } else {
+            // No file given: the last track opened, the first of the recent list still there.
+            for (const std::filesystem::path &track : recent.items()) {
+                if (std::filesystem::exists(track)) {
+                    session.open_file(track);
+                    break;
+                }
+            }
         }
         int capture_status = 0;
         bool reset_layout = false;
