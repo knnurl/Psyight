@@ -188,10 +188,18 @@ def build(path, adsk):
     made = []
 
     def component(index, part):
+        # A component per part in an Assembly document; a Part Design document holds only one,
+        # so there everything goes in the root, the bodies and sketches named by part.
         if (index, part) not in components:
-            occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
-            occurrence.component.name = f"{index} {part}" if index else "rig"
-            components[(index, part)] = occurrence.component
+            comp = root
+            if components.get("single") is None:
+                try:
+                    occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+                    comp = occurrence.component
+                    comp.name = f"{index} {part}" if index else "rig"
+                except RuntimeError:
+                    components["single"] = True
+            components[(index, part)] = comp
         return components[(index, part)]
 
     def sketch_at(comp, z_mm, name):
@@ -200,7 +208,7 @@ def build(path, adsk):
         plane_input.setByOffset(comp.xYConstructionPlane,
                                 adsk.core.ValueInput.createByReal(z_mm / 10))
         plane = planes.add(plane_input)
-        plane.name = f"z {z_mm:g} mm"
+        plane.name = name  # Unique even when every part shares the root.
         sketch = comp.sketches.add(plane)
         sketch.name = name
         return sketch
@@ -229,7 +237,7 @@ def build(path, adsk):
         extrude = extrudes.add(extrude_input)
         look = plastic if part == "acrylic" else wood
         for body in extrude.bodies:
-            body.name = part
+            body.name = f"{index} {part}"
             if look is not None:
                 body.appearance = look
         made.append(f"{part}: {z_low:g} to {z_high:g} mm, {profiles.count} regions")
