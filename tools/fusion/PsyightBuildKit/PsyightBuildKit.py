@@ -7,7 +7,9 @@ layer names, which carry their heights in mm (2_spacer_z6-15mm_cut; 4p5 means 4.
 - each part's engrave layer becomes a sketch on the part's top face;
 - the rig layers (0_centre_lines_z6mm, 0_pixels_z6mm and so on) become sketches at their height,
   wiring labels as sketch text.
-Bodies get a wood or a translucent plastic appearance when Fusion's library has one.
+Bodies get a wood or a translucent plastic appearance when Fusion's library has one. In a Part
+Design document (one component only) everything goes in the root and each part's pieces are
+joined into one body; in an Assembly document each part is its own component.
 
 Reads Psyight's own R12 output only (POLYLINE with VERTEX, CIRCLE, TEXT), not DXF in general.
 Install: Utilities > Add-Ins > Scripts and Add-Ins > + (My Scripts), pick this folder, then Run.
@@ -235,9 +237,26 @@ def build(path, adsk):
         extrude_input.setDistanceExtent(False,
                                         adsk.core.ValueInput.createByReal((z_high - z_low) / 10))
         extrude = extrudes.add(extrude_input)
+        bodies = [extrude.bodies.item(i) for i in range(extrude.bodies.count)]
+        if components.get("single") and len(bodies) > 1:
+            # Everything shares the root: join the part's pieces (spacer islands, front mask
+            # pieces) into one body of several lumps, so the browser lists one body per part.
+            # The API has no browser groups. [Verify] joining bodies that do not touch.
+            tools = adsk.core.ObjectCollection.create()
+            for body in bodies[1:]:
+                tools.add(body)
+            combines = comp.features.combineFeatures
+            combine_input = combines.createInput(bodies[0], tools)
+            combine_input.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
+            combine_input.isKeepToolBodies = False
+            try:
+                combines.add(combine_input)
+                bodies = bodies[:1]
+            except RuntimeError:
+                pass  # Left as separate bodies, numbered below.
         look = plastic if part == "acrylic" else wood
-        for body in extrude.bodies:
-            body.name = f"{index} {part}"
+        for n, body in enumerate(bodies):
+            body.name = f"{index} {part}" if len(bodies) == 1 else f"{index} {part} {n + 1}"
             if look is not None:
                 body.appearance = look
         made.append(f"{part}: {z_low:g} to {z_high:g} mm, {profiles.count} regions")
