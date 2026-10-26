@@ -41,15 +41,17 @@ struct Rig {
 // it is cut and joined by a wire. A strip's pieces are the stretches of its polyline (in metres
 // along it) left after taking out, within kJointClearanceM:
 // - each sharp corner (a turn over kJointTurnDeg, a closed strip's start included): both sides;
-// - where it comes near another strip: a strip whose end is there stops short (both, when two
-//   ends meet); where two strips cross or run together away from their ends, one runs through
-//   and the other is cut, with a gap each side: an open strip runs through a closed one (spokes
-//   through rings), then the longer through the shorter, then the earlier in the list.
-// The clearance is measured to the other strip's centre line (or the corner), so with 10 mm
-// strip the pieces' ends clear each other by about 3 mm for the solder and wire. A strip under
+// - where it comes near another strip (where that strip really is: its own corners already cut
+//   out, so a spoke ending on a ring's corner runs into the gap there, level with the ring's
+//   pieces): a strip whose end is there stops short (both, when two ends meet); where two strips
+//   cross or run together away from their ends, one runs through and the other is cut, with a
+//   gap each side: an open strip runs through a closed one (spokes through rings), then the
+//   longer through the shorter, then the earlier in the list.
+// The clearance is measured to the other strip's centre line (or the corner): with 10 mm strip,
+// the pieces' edges just meet (the owner's choice, 2026-10-26). A strip under
 // kJointMinPixelsPerM (a pitch over 50 mm, wider than any LED strip) is a string of single pixels
 // wired one to the next, placed on purpose: it has no joints and cuts no other strip.
-inline constexpr double kJointClearanceM = 0.008;
+inline constexpr double kJointClearanceM = 0.005;
 inline constexpr double kJointTurnDeg = 20.0;
 inline constexpr double kJointMinPixelsPerM = 20.0;
 struct Span {

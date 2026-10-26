@@ -126,8 +126,8 @@ TEST_CASE("joints: the owner's 30 cm hexagon with its centre Y keeps every pixel
         CHECK(pieces[1].size() == 6);
         for (size_t i = 3; i < 9; ++i) {
             CHECK(pieces[i].size() == 1);
-            // Centred on its piece (which stops 9.2 mm short of the outer ring's corner, where
-            // its edges come back at 60 degrees, and 8 mm from the inner one's).
+            // Centred on its piece, which reaches into the outer ring's corner gap: it stops the
+            // clearance short of the corner at both ends, as the ring's pieces do.
             std::vector<Pixel> on;
             for (const Pixel &px : rig.pixels) {
                 if (px.strip == static_cast<int>(i)) {
@@ -143,9 +143,14 @@ TEST_CASE("joints: the owner's 30 cm hexagon with its centre Y keeps every pixel
                 std::hypot(on.back().position.x - b.x, on.back().position.y - b.y);
             const double length = std::hypot(b.x - a.x, b.y - a.y);
             const Span piece = pieces[i][0];
-            CHECK(piece.from_m == doctest::Approx(kJointClearanceM));
-            CHECK(length - piece.to_m ==
-                  doctest::Approx(kJointClearanceM / std::sin(1.0471975512)));
+            // At the inner corner: short of a centre spoke's end (spokes 1, 3 and 5), or from the
+            // corner itself (the inner ring's edges lead away, its corner cut out).
+            const bool meets_centre = (i - 3) % 2 == 0;
+            CHECK(piece.from_m == doctest::Approx(meets_centre ? kJointClearanceM : 0.0));
+            CHECK(length - piece.to_m == doctest::Approx(kJointClearanceM).epsilon(1e-6));
+            if (i == 3) { // Spoke 1 meets the outer hexagon's first corner, its start.
+                CHECK(pieces[0].front().from_m == doctest::Approx(kJointClearanceM));
+            }
             CHECK(to_start - piece.from_m == doctest::Approx(piece.to_m - (length - to_end)));
             CHECK(to_start - piece.from_m >= 0.5 / strips[i].pixels_per_m - 1e-9);
         }

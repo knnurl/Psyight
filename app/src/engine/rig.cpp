@@ -108,6 +108,43 @@ bool touching(const Span &x, const Span &y) {
     return x.from_m <= y.to_m + 1e-6 && y.from_m <= x.to_m + 1e-6;
 }
 
+// A straight stretch of strip: its ends and where they lie along the polyline.
+struct Stretch {
+    Vec3 a;
+    Vec3 b;
+    double from_m = 0.0;
+    double to_m = 0.0;
+};
+
+// The polyline's segments less the cuts (sorted by start): where the strip really is.
+std::vector<Stretch> stretches(const std::vector<Vec3> &p, const std::vector<double> &arcs,
+                               const std::vector<Span> &cuts) {
+    std::vector<Stretch> out;
+    for (size_t i = 0; i + 1 < p.size(); ++i) {
+        const double s0 = arcs[i];
+        const double s1 = arcs[i + 1];
+        if (s1 <= s0) {
+            continue;
+        }
+        double at = s0;
+        const auto keep = [&](double from, double to) {
+            if (to > from) {
+                out.push_back({lerp(p[i], p[i + 1], (from - s0) / (s1 - s0)),
+                               lerp(p[i], p[i + 1], (to - s0) / (s1 - s0)), from, to});
+            }
+        };
+        for (const Span &cut : cuts) {
+            if (cut.to_m <= at || cut.from_m >= s1) {
+                continue;
+            }
+            keep(at, std::max(at, cut.from_m));
+            at = std::max(at, cut.to_m);
+        }
+        keep(at, s1);
+    }
+    return out;
+}
+
 } // namespace
 
 std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips) {
@@ -156,37 +193,45 @@ std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips
         }
         return a > b;
     };
+    // Contacts are with where each strip really is: its corners already cut out, so a spoke
+    // ending on a ring's corner runs into the gap there, level with the ring's pieces.
+    std::vector<std::vector<Stretch>> material(n);
+    for (size_t i = 0; i < n; ++i) {
+        std::vector<Span> corners = cuts[i];
+        std::sort(corners.begin(), corners.end(),
+                  [](const Span &x, const Span &y) { return x.from_m < y.from_m; });
+        material[i] = stretches(strips[i].polyline, arcs[i], corners);
+    }
     for (size_t a = 0; a < n; ++a) {
-        const std::vector<Vec3> &pa = strips[a].polyline;
         for (size_t b = a + 1; b < n; ++b) {
-            const std::vector<Vec3> &pb = strips[b].polyline;
-            if (pa.size() < 2 || pb.size() < 2 || strips[a].pixels_per_m < kJointMinPixelsPerM ||
+            if (strips[a].polyline.size() < 2 || strips[b].polyline.size() < 2 ||
+                strips[a].pixels_per_m < kJointMinPixelsPerM ||
                 strips[b].pixels_per_m < kJointMinPixelsPerM || !near_boxes(a, b)) {
                 continue;
             }
-            // Each pair of segments within the clearance, merged into stretches that run on
+            // Each pair of stretches within the clearance, merged into contacts that run on
             // together on both strips.
             std::vector<Contact> contacts;
-            for (size_t i = 0; i + 1 < pa.size(); ++i) {
-                for (size_t j = 0; j + 1 < pb.size(); ++j) {
+            for (const Stretch &sa : material[a]) {
+                for (const Stretch &sb : material[b]) {
                     const auto apart = [&](double a0, double a1, double b0, double b1) {
                         return std::min(a0, a1) > std::max(b0, b1) + c ||
                                std::min(b0, b1) > std::max(a0, a1) + c;
                     };
-                    if (apart(pa[i].x, pa[i + 1].x, pb[j].x, pb[j + 1].x) ||
-                        apart(pa[i].y, pa[i + 1].y, pb[j].y, pb[j + 1].y) ||
-                        apart(pa[i].z, pa[i + 1].z, pb[j].z, pb[j + 1].z)) {
+                    if (apart(sa.a.x, sa.b.x, sb.a.x, sb.b.x) ||
+                        apart(sa.a.y, sa.b.y, sb.a.y, sb.b.y) ||
+                        apart(sa.a.z, sa.b.z, sb.a.z, sb.b.z)) {
                         continue;
                     }
                     double t0 = 0.0, t1 = 0.0, u0 = 0.0, u1 = 0.0;
-                    if (!near_part(pa[i], pa[i + 1], pb[j], pb[j + 1], c, t0, t1) ||
-                        !near_part(pb[j], pb[j + 1], pa[i], pa[i + 1], c, u0, u1)) {
+                    if (!near_part(sa.a, sa.b, sb.a, sb.b, c, t0, t1) ||
+                        !near_part(sb.a, sb.b, sa.a, sa.b, c, u0, u1)) {
                         continue;
                     }
-                    const double la = arcs[a][i + 1] - arcs[a][i];
-                    const double lb = arcs[b][j + 1] - arcs[b][j];
-                    Contact found{{arcs[a][i] + t0 * la, arcs[a][i] + t1 * la},
-                                  {arcs[b][j] + u0 * lb, arcs[b][j] + u1 * lb}};
+                    const double la = sa.to_m - sa.from_m;
+                    const double lb = sb.to_m - sb.from_m;
+                    Contact found{{sa.from_m + t0 * la, sa.from_m + t1 * la},
+                                  {sb.from_m + u0 * lb, sb.from_m + u1 * lb}};
                     bool merged = false;
                     for (Contact &k : contacts) {
                         if (touching(k.on_a, found.on_a) && touching(k.on_b, found.on_b)) {
@@ -203,8 +248,10 @@ std::vector<std::vector<Span>> strip_pieces(const std::vector<StripSpec> &strips
                     }
                 }
             }
+            // At a strip's end: the contact reaches within the clearance of it.
             const auto at_end = [&](size_t s, const Span &x) {
-                return !is_ring(strips[s]) && (x.from_m <= 1e-9 || x.to_m >= arcs[s].back() - 1e-9);
+                return !is_ring(strips[s]) &&
+                       (x.from_m <= c + 1e-9 || x.to_m >= arcs[s].back() - c - 1e-9);
             };
             for (const Contact &k : contacts) {
                 const bool a_ends = at_end(a, k.on_a);

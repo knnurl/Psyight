@@ -152,8 +152,8 @@ TEST_CASE("rig presets: mirrored halves run from the centre outwards, closed sha
     const StripSpec &outer = hexagon.strips[0];
     CHECK(outer.polyline.front().x == doctest::Approx(outer.polyline.back().x));
     CHECK(outer.polyline.front().y == doctest::Approx(outer.polyline.back().y));
-    CHECK(outer.count == 426); // Six 1.2 m sides at 60 px/m, 16 mm out at each corner.
-    CHECK(build_rig(hexagon.strips).pixels.size() == 1116);
+    CHECK(outer.count == 426); // Six 1.2 m sides at 60 px/m, 10 mm out at each corner.
+    CHECK(build_rig(hexagon.strips).pixels.size() == 1128);
 
     const RigPreset &tunnel = find("Arch tunnel");
     REQUIRE(tunnel.strips.size() == 6);
