@@ -675,7 +675,7 @@ void RigView::draw_export() {
     ImGui::SameLine();
     ImGui::RadioButton("Open lattice", &style, 1);
     ImGui::SetItemTooltip("No board: every layer follows the channels, the wall shows through "
-                          "between them. Thin walls get round ears beside them for the bolts.");
+                          "between them. Walls too thin for a bolt get none: glue the layers.");
     k.style = static_cast<BuildKitStyle>(style);
     const auto mm_field = [](const char *label, double &metres, double lo, double hi,
                              const char *tip) {
@@ -695,7 +695,7 @@ void RigView::draw_export() {
     if (k.style == BuildKitStyle::lattice) {
         mm_field("Wall", k.wall_m, 2.0, 50.0,
                  "Wood each side of a channel. 5 mm suits MDF or good birch ply; under about "
-                 "9.5 mm a wall needs ears for its bolts.");
+                 "9.5 mm a wall holds no bolt and is glued.");
     } else {
         mm_field("Margin", k.margin_m, 2.0, 200.0, "The panel beyond the outermost channels.");
     }
@@ -791,10 +791,7 @@ void RigView::export_drawing(void *owner) {
         }
         export_status_ = ok ? "Build kit: " + std::to_string(made.parts.size()) + " files beside " +
                                   path_to_utf8(*chosen) + " (" + std::to_string(made.islands) +
-                                  " spacer islands, " + std::to_string(made.bolts) + " bolts" +
-                                  (made.ears > 0 ? ", " + std::to_string(made.ears) + " in ears"
-                                                 : std::string()) +
-                                  ")."
+                                  " spacer islands, " + std::to_string(made.bolts) + " bolts)."
                             : "Could not write the build kit beside " + path_to_utf8(*chosen) + ".";
         return;
     }

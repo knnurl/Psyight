@@ -167,36 +167,23 @@ TEST_CASE("build kit: the one DXF can hold the rig export on the LEDs' plane") {
     CHECK(build_kit({ring}, {}).assembly_dxf.find("0_pixels") == std::string::npos);
 }
 
-TEST_CASE("build kit: an open lattice, walls for a spacer, bolts in ears past the acrylic") {
+TEST_CASE("build kit: an open lattice, walls for a spacer, bolts only in walls wide enough") {
     BuildKitOptions o;
     o.style = BuildKitStyle::lattice;
     const StripSpec ring = square_ring();
     const BuildKit kit = build_kit({ring}, o);
     CHECK(kit.islands == 2); // The walls inside and outside the ring.
-    CHECK(kit.ears == 4);    // 5 mm walls hold no bolt: two ears each, both over 12 cm long.
-    CHECK(kit.bolts == 4);
+    CHECK(kit.bolts == 0);   // 5 mm walls hold no bolt: glued.
     // The back is the lattice itself, open in the middle: an outside and an inside edge.
     CHECK(count_of(kit.parts[0].dxf, "\nPOLYLINE\n8\nCut\n") == 2);
     CHECK(count_of(kit.parts[3].dxf, "\nPOLYLINE\n8\nCut\n") == 4); // Front: and the window.
-    // Each bolt 0.5 mm past the acrylic's edge: 6 + 4 + 0.5 + 1.7 mm from the centre line.
-    CHECK(nearest_bolt_mm(kit.parts[1].dxf, 1.7, {ring}) == doctest::Approx(12.2).epsilon(0.03));
     // The panel style keeps a solid back.
     CHECK(count_of(build_kit({ring}, {}).parts[0].dxf, "\nPOLYLINE\n8\nCut\n") == 1);
-}
-
-TEST_CASE("build kit: the hexagon mandala as an open lattice") {
-    for (const RigPreset &p : builtin_rig_presets()) {
-        if (p.name != "Hexagon mandala") {
-            continue;
-        }
-        BuildKitOptions o;
-        o.style = BuildKitStyle::lattice;
-        const BuildKit kit = build_kit(p.strips, o);
-        MESSAGE("walls " << kit.islands << ", bolts " << kit.bolts << ", ears " << kit.ears);
-        CHECK(kit.bolts >= kit.islands);
-        CHECK(kit.ears == kit.bolts);
-        CHECK(nearest_bolt_mm(kit.parts[1].dxf, 1.7, p.strips) >= 12.2 - 0.3);
-    }
+    // 15 mm walls hold bolts, clear of the acrylic: 6 + 4 + 0.5 + 1.7 mm from the centre line.
+    o.wall_m = 0.015;
+    const BuildKit wide = build_kit({ring}, o);
+    CHECK(wide.bolts == 4);
+    CHECK(nearest_bolt_mm(wide.parts[1].dxf, 1.7, {ring}) >= 12.2 - 0.3);
 }
 
 TEST_CASE("build kit: a fractional sheet height in a layer name") {

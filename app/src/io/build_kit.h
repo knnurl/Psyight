@@ -16,8 +16,7 @@
 // Open lattice (style lattice): no panel, the wall shows through. The back and front are each one
 // lattice, every channel widened by wall_m each side (the openings between the rings and spokes
 // left open); the spacer is the walls (the lattice less the channels), engraved on the back where
-// they glue. A wall too thin for a bolt gets an ear: a round tab beyond the acrylic's edge on the
-// back, spacer and front, holding the bolt with 3 mm of wood around it.
+// they glue. A wall too thin for a bolt (as the default 5 mm is) gets none: the layers are glued.
 #pragma once
 
 #include "engine/rig.h"
@@ -58,7 +57,6 @@ struct BuildKit {
     std::vector<BuildKitPart> parts; // In stacking order, back to front.
     int islands = 0;                 // Spacer pieces.
     int bolts = 0;
-    int ears = 0; // Lattice: bolt tabs beyond the walls.
     // All four parts in one DXF, stacked: each part on its own layers, named with the heights it
     // spans in mm (1_back_z0-6mm_cut, 1_back_z0-6mm_engrave, 2_spacer_z6-15mm_cut and so on; a
     // fraction as 4p5, since R12 names allow no dot), at its height from the back panel's
