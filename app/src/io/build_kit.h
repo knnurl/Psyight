@@ -59,16 +59,18 @@ struct BuildKit {
     int islands = 0;                 // Spacer pieces.
     int bolts = 0;
     int ears = 0; // Lattice: bolt tabs beyond the walls.
-    // All four parts in one DXF, stacked: each part on its own layers (1_back_cut,
-    // 1_back_engrave, 2_spacer_cut and so on), at its height from the back panel's underside
-    // (z 0) and extruded by its sheet's thickness (DXF entity thickness), engraving on its top.
+    // All four parts in one DXF, stacked: each part on its own layers, named with the heights it
+    // spans in mm (1_back_z0-6mm_cut, 1_back_z0-6mm_engrave, 2_spacer_z6-15mm_cut and so on; a
+    // fraction as 4p5, since R12 names allow no dot), at its height from the back panel's
+    // underside (z 0) and extruded by its sheet's thickness (DXF entity thickness), engraving on
+    // its top.
     std::string assembly_dxf;
     double height_m = 0.0; // The stack's total thickness.
 };
 
 // rig: when given, the assembly also holds the rig export (its centre lines, channels, pixels
 // and wiring, as Export drawing writes them, with `notes` in the wiring labels) on layers
-// 0_<layer>, at the LEDs' plane: the back panel's top face, where the strips sit.
+// 0_<layer>_z<height>mm, at the LEDs' plane: the back panel's top face, where the strips sit.
 BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &options,
                    const RigExportOptions *rig = nullptr,
                    const std::vector<std::string> &notes = {});

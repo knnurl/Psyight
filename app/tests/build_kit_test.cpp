@@ -123,17 +123,20 @@ TEST_CASE("build kit: one DXF with the parts stacked at their heights, as thick 
     const BuildKit kit = build_kit({ring}, {}); // Sheets 6, 9, 3 and 3 mm.
     CHECK(kit.height_m == doctest::Approx(0.021));
     const std::string &dxf = kit.assembly_dxf;
-    for (const char *layer : {"1_back_cut", "1_back_engrave", "2_spacer_cut", "2_spacer_engrave",
-                              "3_acrylic_cut", "4_front_cut"}) {
+    for (const char *layer :
+         {"1_back_z0-6mm_cut", "1_back_z0-6mm_engrave", "2_spacer_z6-15mm_cut",
+          "2_spacer_z6-15mm_engrave", "3_acrylic_z15-18mm_cut", "4_front_z18-21mm_cut"}) {
         CAPTURE(layer);
         CHECK(dxf.find(std::string("\n2\n") + layer + "\n") != std::string::npos); // Declared.
     }
     // The spacer's outlines start on the back panel (6 mm up) and are 9 mm thick; the
     // front's sit at 18 mm, 3 mm thick.
-    CHECK(dxf.find("POLYLINE\n8\n2_spacer_cut\n39\n9.000\n66\n1\n10\n0.0\n20\n0.0\n30\n6.000\n") !=
-          std::string::npos);
-    CHECK(dxf.find("POLYLINE\n8\n4_front_cut\n39\n3.000\n66\n1\n10\n0.0\n20\n0.0\n30\n18.000\n") !=
-          std::string::npos);
+    CHECK(
+        dxf.find(
+            "POLYLINE\n8\n2_spacer_z6-15mm_cut\n39\n9.000\n66\n1\n10\n0.0\n20\n0.0\n30\n6.000\n") !=
+        std::string::npos);
+    CHECK(dxf.find("POLYLINE\n8\n4_front_z18-21mm_cut\n39\n3.000\n66\n1\n10\n0.0\n20\n0.0\n30\n18."
+                   "000\n") != std::string::npos);
     CHECK(dxf.find("\nEOF\n") != std::string::npos);
 }
 
@@ -146,14 +149,15 @@ TEST_CASE("build kit: the one DXF can hold the rig export on the LEDs' plane") {
     const RigExportOptions rig;
     const BuildKit kit = build_kit({ring}, {}, &rig, {"line 1, PD0"});
     const std::string &dxf = kit.assembly_dxf;
-    for (const char *layer : {"0_centre_lines", "0_channels", "0_pixels", "0_wiring"}) {
+    for (const char *layer :
+         {"0_centre_lines_z6mm", "0_channels_z6mm", "0_pixels_z6mm", "0_wiring_z6mm"}) {
         CAPTURE(layer);
         CHECK(dxf.find(std::string("\n2\n") + layer + "\n") != std::string::npos);
     }
     // 48 pixel dots on the back panel's top face (6 mm up).
     size_t dots = 0;
-    for (size_t at = dxf.find("CIRCLE\n8\n0_pixels\n"); at != std::string::npos;
-         at = dxf.find("CIRCLE\n8\n0_pixels\n", at + 1)) {
+    for (size_t at = dxf.find("CIRCLE\n8\n0_pixels_z6mm\n"); at != std::string::npos;
+         at = dxf.find("CIRCLE\n8\n0_pixels_z6mm\n", at + 1)) {
         CHECK(dxf.substr(dxf.find("\n30\n", at) + 4, 5) == "6.000");
         ++dots;
     }
@@ -193,4 +197,12 @@ TEST_CASE("build kit: the hexagon mandala as an open lattice") {
         CHECK(kit.ears == kit.bolts);
         CHECK(nearest_bolt_mm(kit.parts[1].dxf, 1.7, p.strips) >= 12.2 - 0.3);
     }
+}
+
+TEST_CASE("build kit: a fractional sheet height in a layer name") {
+    BuildKitOptions o;
+    o.back_thickness_m = 0.0045;
+    const BuildKit kit = build_kit({square_ring()}, o);
+    CHECK(kit.assembly_dxf.find("\n2\n1_back_z0-4p5mm_cut\n") != std::string::npos);
+    CHECK(kit.assembly_dxf.find("\n2\n2_spacer_z4p5-13p5mm_cut\n") != std::string::npos);
 }

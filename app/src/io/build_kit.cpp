@@ -439,6 +439,13 @@ std::string num(double v) {
     return text;
 }
 
+// A height in mm for a DXF layer name, to 0.1 mm: R12 names allow no dot, so 4.5 is "4p5".
+std::string height_tag(double mm) {
+    const long tenths = std::lround(mm * 10.0);
+    return std::to_string(tenths / 10) +
+           (tenths % 10 != 0 ? "p" + std::to_string(tenths % 10) : "");
+}
+
 constexpr std::array<const char *, 7> kSvgColours = {"#000000", "#ff0000", "#00ff00", "#0000ff",
                                                      "#ffff00", "#00ffff", "#ff00ff"};
 constexpr std::array<int, 7> kDxfColours = {7, 1, 3, 5, 2, 4, 6};
@@ -496,11 +503,12 @@ class DxfWriter {
         }
     }
 
-    // The rig export's shapes (already centred, in mm) on layers 0_<layer id>, at z_mm.
-    void add_shapes(const std::vector<ExportShape> &shapes, double z_mm) {
+    // The rig export's shapes (already centred, in mm) on layers 0_<layer id><suffix>, at z_mm.
+    void add_shapes(const std::vector<ExportShape> &shapes, double z_mm,
+                    const std::string &suffix) {
         const P origin{0.0, 0.0};
         for (const ExportShape &s : shapes) {
-            const std::string layer = std::string("0_") + kExportLayerIds[s.layer];
+            const std::string layer = std::string("0_") + kExportLayerIds[s.layer] + suffix;
             if (s.kind == ExportShape::Kind::polyline) {
                 std::vector<P> line;
                 for (const Vec3 &v : s.points) {
@@ -885,30 +893,35 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
          {&spacer_drawing, options.spacer_thickness_m},
          {&acrylic_drawing, options.acrylic_thickness_m},
          {&front_drawing, options.front_thickness_m}}};
+    // Each part's layers named with the heights it spans (2_spacer_z6-15mm_cut).
+    std::array<std::string, 4> bases;
+    std::array<double, 5> heights{};
+    for (size_t i = 0; i < stack.size(); ++i) {
+        heights[i + 1] = heights[i] + 1000.0 * stack[i].second;
+        bases[i] = std::to_string(i + 1) + "_" + kit.parts[i].name + "_z" + height_tag(heights[i]) +
+                   "-" + height_tag(heights[i + 1]) + "mm";
+    }
+    const double leds_mm = heights[1]; // The back panel's top face, where the strips sit.
+    const std::string rig_suffix = "_z" + height_tag(leds_mm) + "mm";
     std::vector<std::pair<std::string, ExportColour>> layers;
     if (rig != nullptr) {
         for (int layer = 0; layer < 4; ++layer) {
-            layers.push_back(
-                {std::string("0_") + kExportLayerIds[layer], export_layer_colour(layer, *rig)});
+            layers.push_back({std::string("0_") + kExportLayerIds[layer] + rig_suffix,
+                              export_layer_colour(layer, *rig)});
         }
     }
-    for (size_t i = 0; i < kit.parts.size(); ++i) {
-        const std::string base = std::to_string(i + 1) + "_" + kit.parts[i].name;
+    for (const std::string &base : bases) {
         layers.push_back({base + "_cut", options.cut_colour});
         layers.push_back({base + "_engrave", options.engrave_colour});
     }
     DxfWriter assembly(layers);
-    double z = 0.0;
     for (size_t i = 0; i < stack.size(); ++i) {
-        const double thick = 1000.0 * stack[i].second;
-        const std::string base = std::to_string(i + 1) + "_" + kit.parts[i].name;
-        assembly.add(*stack[i].first, centre, base + "_cut", base + "_engrave", z, thick,
-                     z + thick);
-        z += thick;
+        assembly.add(*stack[i].first, centre, bases[i] + "_cut", bases[i] + "_engrave", heights[i],
+                     heights[i + 1] - heights[i], heights[i + 1]);
     }
-    if (rig != nullptr) { // On the back panel's top face, where the strips sit.
-        assembly.add_shapes(rig_export_shapes(strips, notes, *rig),
-                            1000.0 * options.back_thickness_m);
+    const double z = heights[4];
+    if (rig != nullptr) {
+        assembly.add_shapes(rig_export_shapes(strips, notes, *rig), leds_mm, rig_suffix);
     }
     kit.assembly_dxf = assembly.finish();
     kit.height_m = z / 1000.0;
