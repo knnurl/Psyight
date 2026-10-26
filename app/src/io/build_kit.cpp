@@ -364,6 +364,51 @@ struct Circle {
     double radius = 0.0;
 };
 
+// The grid with every cell whose centre lies within a circle set.
+Grid with_discs(Grid g, const std::vector<Circle> &discs) {
+    for (const Circle &d : discs) {
+        const int i0 = std::max(0, static_cast<int>((d.centre.x - d.radius - g.x0) / g.cell) - 1);
+        const int i1 =
+            std::min(g.nx - 1, static_cast<int>((d.centre.x + d.radius - g.x0) / g.cell) + 1);
+        const int j0 = std::max(0, static_cast<int>((d.centre.y - d.radius - g.y0) / g.cell) - 1);
+        const int j1 =
+            std::min(g.ny - 1, static_cast<int>((d.centre.y + d.radius - g.y0) / g.cell) + 1);
+        for (int j = j0; j <= j1; ++j) {
+            for (int i = i0; i <= i1; ++i) {
+                const P c = g.centre(i, j);
+                if (std::hypot(c.x - d.centre.x, c.y - d.centre.y) <= d.radius) {
+                    g.ref(i, j) = 1;
+                }
+            }
+        }
+    }
+    return g;
+}
+
+// The distance from p to the nearest of the lines, and that nearest point.
+double nearest_on_lines(const P &p, const std::vector<std::vector<P>> &lines, P &at) {
+    double best = std::numeric_limits<double>::infinity();
+    for (const std::vector<P> &line : lines) {
+        for (size_t k = 0; k + 1 < line.size(); ++k) {
+            const P a = line[k];
+            const P b = line[k + 1];
+            const double dx = b.x - a.x;
+            const double dy = b.y - a.y;
+            const double len2 = dx * dx + dy * dy;
+            const double t =
+                len2 > 0.0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0.0, 1.0)
+                           : 0.0;
+            const P q{a.x + t * dx, a.y + t * dy};
+            const double d = std::hypot(q.x - p.x, q.y - p.y);
+            if (d < best) {
+                best = d;
+                at = q;
+            }
+        }
+    }
+    return best;
+}
+
 struct Drawing {
     std::vector<Loop> cut;
     std::vector<Circle> holes;
@@ -618,10 +663,17 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
     if (lines.empty()) {
         return kit;
     }
+    const bool lattice = options.style == BuildKitStyle::lattice;
     const double channel_r = 500.0 * options.channel_width_m;
-    const double panel_r = channel_r + 1000.0 * options.margin_m;
+    const double acrylic_r = channel_r + 1000.0 * options.overlap_m;
+    const double bolt_r = 500.0 * options.bolt_hole_m;
+    const double need = bolt_r + kBoltWoodMm;
+    // An ear's bolt from its channel's centre line: clear of the acrylic by half a millimetre and
+    // of the channel by 3 mm of wood.
+    const double ear_at = std::max(acrylic_r + 0.5, channel_r + kBoltWoodMm) + bolt_r;
+    const double panel_r = channel_r + 1000.0 * (lattice ? options.wall_m : options.margin_m);
     const double reach =
-        std::max({panel_r, channel_r + 1000.0 * options.overlap_m}) + kMarginExtraMm;
+        std::max({panel_r, acrylic_r, lattice ? ear_at + need : 0.0}) + kMarginExtraMm;
     Grid g;
     const double span = std::max(hi_x - lo_x, hi_y - lo_y) + 2.0 * reach;
     g.cell = std::max(kFineCellMm, span / kMaxCells);
@@ -633,21 +685,28 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
     const P centre{0.5 * (lo_x + hi_x), 0.5 * (lo_y + hi_y)};
 
     const Grid channels = capsules(g, lines, channel_r);
-    const Grid panel = filled(capsules(g, lines, panel_r));
+    // The panel, or the lattice with its openings left open.
+    const Grid panel = lattice ? capsules(g, lines, panel_r) : filled(capsules(g, lines, panel_r));
     const Grid spacer = minus(panel, channels);
     const Grid windows = capsules(g, lines, 500.0 * options.window_width_m);
-    const Grid front = minus(panel, windows);
-    const Grid acrylic = capsules(g, lines, channel_r + 1000.0 * options.overlap_m);
+    const Grid acrylic = capsules(g, lines, acrylic_r);
 
-    // Islands: each spacer piece, with bolt holes at its deepest points and a number.
+    // Islands: each spacer piece, with bolt holes at its deepest points (or in ears) and a number.
     int count = 0;
     const std::vector<int> label = components(spacer, count);
     const std::vector<double> depth = distances(spacer);
-    const double bolt_r = 500.0 * options.bolt_hole_m;
-    const double need = bolt_r + kBoltWoodMm;
+    // Room for a bolt: 3 mm of wood around it, and its hole clear of the acrylic (which reaches
+    // past the channels) by half a millimetre.
+    const std::vector<double> clearance = distances(minus(panel, acrylic));
+    std::vector<double> room(depth.size());
+    for (size_t k = 0; k < room.size(); ++k) {
+        room[k] = std::min(depth[k] - need, clearance[k] - bolt_r - 0.5);
+    }
     std::vector<Circle> bolts;
+    std::vector<Circle> ears;
     std::vector<std::vector<P>> numbers;
     std::vector<int> deepest(static_cast<size_t>(count), -1);
+    std::vector<int> roomiest(static_cast<size_t>(count), -1);
     std::vector<std::array<double, 4>> box(static_cast<size_t>(count), {1e18, -1e18, 1e18, -1e18});
     for (int j = 0; j < g.ny; ++j) {
         for (int i = 0; i < g.nx; ++i) {
@@ -660,6 +719,10 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
             if (d < 0 || depth[k] > depth[static_cast<size_t>(d)]) {
                 d = static_cast<int>(k);
             }
+            int &r = roomiest[static_cast<size_t>(c)];
+            if (r < 0 || room[k] > room[static_cast<size_t>(r)]) {
+                r = static_cast<int>(k);
+            }
             const P p = g.centre(i, j);
             auto &b = box[static_cast<size_t>(c)];
             b = {std::min(b[0], p.x), std::max(b[1], p.x), std::min(b[2], p.y),
@@ -668,9 +731,10 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
     }
     for (int c = 0; c < count; ++c) {
         const int k0 = deepest[static_cast<size_t>(c)];
-        const P first = g.centre(k0 % g.nx, k0 / g.nx);
+        const int kb = roomiest[static_cast<size_t>(c)];
+        const P first = g.centre(kb % g.nx, kb / g.nx);
         std::vector<P> holes;
-        if (depth[static_cast<size_t>(k0)] >= need) {
+        if (room[static_cast<size_t>(kb)] >= 0.0) {
             holes.push_back(first);
             const auto &b = box[static_cast<size_t>(c)];
             if (std::hypot(b[1] - b[0], b[3] - b[2]) > kSecondBoltSpanMm) {
@@ -678,8 +742,8 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
                 double best = 0.0;
                 P second{};
                 for (size_t k = 0; k < label.size(); ++k) {
-                    if (label[k] != c ||
-                        depth[k] < std::max(need, 0.6 * depth[static_cast<size_t>(k0)])) {
+                    if (label[k] != c || room[k] < 0.0 ||
+                        depth[k] < 0.6 * depth[static_cast<size_t>(kb)]) {
                         continue;
                     }
                     const P p = g.centre(static_cast<int>(k % g.nx), static_cast<int>(k / g.nx));
@@ -691,6 +755,54 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
                 }
                 if (best > 0.4 * kSecondBoltSpanMm) {
                     holes.push_back(second);
+                }
+            }
+        } else if (lattice) {
+            // Ears: from the wall's middle (half its deepest depth or more: an inside corner is
+            // deeper than the rest), each spot pushed out from its nearest channel to ear_at,
+            // kept where no other channel comes nearer.
+            const double top = depth[static_cast<size_t>(k0)];
+            std::vector<P> spots;
+            for (size_t k = 0; k < label.size(); ++k) {
+                if (label[k] != c || depth[k] < 0.5 * top) {
+                    continue;
+                }
+                const P p = g.centre(static_cast<int>(k % g.nx), static_cast<int>(k / g.nx));
+                P q{};
+                const double d = nearest_on_lines(p, lines, q);
+                if (d < 1e-9) {
+                    continue;
+                }
+                const P spot{q.x + (p.x - q.x) * ear_at / d, q.y + (p.y - q.y) * ear_at / d};
+                P unused{};
+                if (nearest_on_lines(spot, lines, unused) >= ear_at - 0.5 * g.cell) {
+                    spots.push_back(spot);
+                }
+            }
+            if (!spots.empty()) {
+                // The spot nearest the island's middle; on a long island, a second as far from
+                // it as possible.
+                const auto &b = box[static_cast<size_t>(c)];
+                const P mid{0.5 * (b[0] + b[1]), 0.5 * (b[2] + b[3])};
+                const auto from = [](const P &a, const P &z) {
+                    return std::hypot(a.x - z.x, a.y - z.y);
+                };
+                const P one =
+                    *std::min_element(spots.begin(), spots.end(), [&](const P &u, const P &v) {
+                        return from(u, mid) < from(v, mid);
+                    });
+                holes.push_back(one);
+                if (std::hypot(b[1] - b[0], b[3] - b[2]) > kSecondBoltSpanMm) {
+                    const P two =
+                        *std::max_element(spots.begin(), spots.end(), [&](const P &u, const P &v) {
+                            return from(u, one) < from(v, one);
+                        });
+                    if (from(two, one) > 0.4 * kSecondBoltSpanMm) {
+                        holes.push_back(two);
+                    }
+                }
+                for (const P &h : holes) {
+                    ears.push_back({h, need});
                 }
             }
         }
@@ -723,6 +835,11 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
     }
     kit.islands = count;
     kit.bolts = static_cast<int>(bolts.size());
+    kit.ears = static_cast<int>(ears.size());
+    // The ears join the back, spacer and front.
+    const Grid body = with_discs(panel, ears);
+    const Grid walls = minus(with_discs(spacer, ears), channels);
+    const Grid front = minus(body, windows);
 
     std::vector<Circle> wires;
     for (const std::vector<P> &line : lines) {
@@ -733,10 +850,10 @@ BuildKit build_kit(const std::vector<StripSpec> &strips, const BuildKitOptions &
             wires.push_back({line.back(), 500.0 * options.wire_hole_m});
         }
     }
-    const std::vector<Loop> islands = outlines(spacer);
+    const std::vector<Loop> islands = outlines(walls);
 
     Drawing back;
-    back.cut = outlines(panel);
+    back.cut = outlines(body);
     back.holes = bolts;
     back.holes.insert(back.holes.end(), wires.begin(), wires.end());
     for (const Loop &l : islands) {

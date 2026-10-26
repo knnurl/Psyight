@@ -661,11 +661,22 @@ void RigView::draw_export() {
     }
     // The build kit: the panel's parts to cut, one file each.
     ImGui::SeparatorText("Build kit (a layered panel)");
-    ImGui::TextDisabled("Four files to cut: back panel, spacer islands (the channels' walls), one "
+    ImGui::TextDisabled("Four files to cut: back, spacer islands (the channels' walls), one "
                         "acrylic lattice, front mask. Bolt holes, wire holes and numbered "
                         "islands included; cut black, engrave red.");
     BuildKitOptions &k = kit_options_;
     k.channel_width_m = o.channel_width_m;
+    int style = static_cast<int>(k.style);
+    ImGui::TextUnformatted("Style");
+    ImGui::SameLine();
+    ImGui::RadioButton("Panel", &style, 0);
+    ImGui::SetItemTooltip("A solid back and front: the rig on a board, room on the back for the "
+                          "node and power supply.");
+    ImGui::SameLine();
+    ImGui::RadioButton("Open lattice", &style, 1);
+    ImGui::SetItemTooltip("No board: every layer follows the channels, the wall shows through "
+                          "between them. Thin walls get round ears beside them for the bolts.");
+    k.style = static_cast<BuildKitStyle>(style);
     const auto mm_field = [](const char *label, double &metres, double lo, double hi,
                              const char *tip) {
         ImGui::SetNextItemWidth(7.0f * ImGui::GetFontSize());
@@ -681,7 +692,13 @@ void RigView::draw_export() {
     ImGui::SameLine();
     mm_field("Acrylic overlap", k.overlap_m, 0.0, 30.0,
              "How far the acrylic reaches past each side of a channel.");
-    mm_field("Margin", k.margin_m, 2.0, 200.0, "The panel beyond the outermost channels.");
+    if (k.style == BuildKitStyle::lattice) {
+        mm_field("Wall", k.wall_m, 2.0, 50.0,
+                 "Wood each side of a channel. 5 mm suits MDF or good birch ply; under about "
+                 "9.5 mm a wall needs ears for its bolts.");
+    } else {
+        mm_field("Margin", k.margin_m, 2.0, 200.0, "The panel beyond the outermost channels.");
+    }
     ImGui::SameLine();
     mm_field("Bolt hole", k.bolt_hole_m, 1.0, 20.0, "3.4 mm clears M3; 4.5 mm clears M4.");
     mm_field("Wire hole", k.wire_hole_m, 1.0, 30.0, "At every strip end, through the back.");
@@ -774,7 +791,10 @@ void RigView::export_drawing(void *owner) {
         }
         export_status_ = ok ? "Build kit: " + std::to_string(made.parts.size()) + " files beside " +
                                   path_to_utf8(*chosen) + " (" + std::to_string(made.islands) +
-                                  " spacer islands, " + std::to_string(made.bolts) + " bolts)."
+                                  " spacer islands, " + std::to_string(made.bolts) + " bolts" +
+                                  (made.ears > 0 ? ", " + std::to_string(made.ears) + " in ears"
+                                                 : std::string()) +
+                                  ")."
                             : "Could not write the build kit beside " + path_to_utf8(*chosen) + ".";
         return;
     }
