@@ -112,7 +112,8 @@ template <> const std::vector<Field<DropBurstParams>> &fields<DropBurstParams>()
 template <typename P> Field<P> mapping_field() {
     return {{"mapping", "Mapping", "", 0.0, kMappingCount - 1.0, true,
              "How pixels map to the pattern: along each strip, across the rig, from its centre, "
-             "by strip or at random",
+             "by strip, at random, by hexagon ring (each hexagon about the centre at once) or "
+             "round the centre",
              kMappingOptions},
             nullptr,
             &P::mapping};
@@ -159,7 +160,8 @@ template <> const std::vector<Field<WaveParams>> &fields<WaveParams>() {
         mapping_field<P>(),
         wings_field<P>(),
         clock_field<P>(),
-        {{"rate", "Rate", "x", 0.0, 8.0, false, "Cycles per clock division (Hz when free)"},
+        {{"rate", "Rate", "x", -8.0, 8.0, false,
+          "Cycles per clock division (Hz when free); negative runs the other way"},
          &P::rate},
         {{"shape", "Shape", "", 0.0, 4.0, true, "Waveform", "Sine|Triangle|Ramp|Square|Bump"},
          nullptr,
@@ -319,6 +321,117 @@ template <> const std::vector<Field<BassBarsParams>> &fields<BassBarsParams>() {
     return f;
 }
 
+// Which way the rig's hexagon points, for the hexagon effects.
+template <typename P> Field<P> corners_field() {
+    return {{"corners", "Corners", "", 0.0, 2.0, true,
+             "Which way the hexagon's corners point: from the rig's shape (taller than wide: up "
+             "and down), up and down, or sideways",
+             kHexCornerOptions},
+            nullptr,
+            &P::corners};
+}
+
+template <> const std::vector<Field<HexPulseParams>> &fields<HexPulseParams>() {
+    using P = HexPulseParams;
+    static const std::vector<Field<P>> f = {
+        {{"trigger", "Trigger", "", 0.0, 4.0, true, "What sends a hexagon out",
+          "Kick|Beat|Bar|Bass note|Hat"},
+         nullptr,
+         &P::trigger},
+        {{"every", "Every", "", 1.0, 16.0, true, "Every nth trigger"}, nullptr, &P::every},
+        {{"direction", "Direction", "", 0.0, 1.0, true, "Out from the centre, or in from the edge",
+          "Out|In"},
+         nullptr,
+         &P::direction},
+        {{"travel_beats", "Travel", "beats", 0.125, 8.0, false,
+          "Beats a hexagon takes from the centre to the edge"},
+         &P::travel_beats},
+        {{"width", "Width", "", 0.02, 0.5, false, "Width, as a share of centre to edge"},
+         &P::width},
+        {{"decay_s", "Decay", "s", 0.05, 3.0, false, "Pulse time constant"}, &P::decay_s},
+        {{"keep", "Overlap", "", 1.0, 6.0, true, "Pulses alive at once (grid triggers and kicks)"},
+         nullptr,
+         &P::keep},
+        {{"level", "Level", "", 0.0, 1.0, false, "Pulse brightness"}, &P::level},
+        {{"colours", "Colours", "", 0.0, 1.0, true,
+          "A palette step per pulse, or the palette from centre to edge", "Per pulse|By ring"},
+         nullptr,
+         &P::colours},
+        corners_field<P>(),
+    };
+    return f;
+}
+
+template <> const std::vector<Field<CubeParams>> &fields<CubeParams>() {
+    using P = CubeParams;
+    static const std::vector<Field<P>> f = {
+        {{"flip", "Flip", "", 0.0, 4.0, true,
+          "When the cube flips between seen from above and from below",
+          "Beat|Bar|2 bars|Phrase|Kick"},
+         nullptr,
+         &P::flip},
+        {{"fade_s", "Fade", "s", 0.0, 1.0, false, "Crossfade at a flip"}, &P::fade_s},
+        {{"shade", "Shade", "", 0.0, 1.0, false,
+          "How much darker the side faces are (1: the darkest black)"},
+         &P::shade},
+        {{"edges", "Edges", "", 0.0, 1.0, false, "Brightness of the Y of edges"}, &P::edges},
+        {{"edge_width", "Edge width", "", 0.0, 0.2, false,
+          "Width of the edges, as a share of centre to edge"},
+         &P::edge_width},
+        {{"level", "Level", "", 0.0, 1.0, false, "Face brightness"}, &P::level},
+        {{"colour_spread", "Colours", "", 0.0, 1.0, false,
+          "Palette span over the faces (0: one colour, shaded)"},
+         &P::colour_spread},
+        corners_field<P>(),
+    };
+    return f;
+}
+
+template <> const std::vector<Field<SectorsParams>> &fields<SectorsParams>() {
+    using P = SectorsParams;
+    static const std::vector<Field<P>> f = {
+        {{"mode", "Mode", "", 0.0, 3.0, true,
+          "A chase round, alternating halves, a fill round, or a seeded slice each step",
+          "Chase|Alternate|Fill|Random"},
+         nullptr,
+         &P::mode},
+        {{"count", "Slices", "", 3.0, 12.0, true, "Slices round the centre"}, nullptr, &P::count},
+        {{"align", "Align", "", 0.0, 1.0, true,
+          "Slices centred on the corners, or on the flat sides", "Corners|Sides"},
+         nullptr,
+         &P::align},
+        clock_field<P>(),
+        {{"rate", "Rate", "x", 0.0, 4.0, false, "Steps per clock division (Hz when free)"},
+         &P::rate},
+        {{"tail", "Tail", "steps", 0.5, 12.0, false, "Steps a slice takes to fade"}, &P::tail},
+        {{"level", "Level", "", 0.0, 1.0, false, "Slice brightness"}, &P::level},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span round the slices"},
+         &P::colour_spread},
+        corners_field<P>(),
+    };
+    return f;
+}
+
+template <> const std::vector<Field<InterferenceParams>> &fields<InterferenceParams>() {
+    using P = InterferenceParams;
+    static const std::vector<Field<P>> f = {
+        {{"scale_m", "Scale", "m", 0.03, 3.0, false, "Spacing of the lattice"}, &P::scale_m},
+        clock_field<P>(),
+        {{"rate", "Rate", "x", -4.0, 4.0, false,
+          "Lattice spacings it slides per clock division (Hz when free)"},
+         &P::rate},
+        {{"contrast", "Contrast", "x", 0.5, 6.0, false, "Contrast of the lattice"}, &P::contrast},
+        {{"kick_pump", "Kick", "", 0.0, 2.0, false,
+          "Extra contrast on each kick, fading over half a beat"},
+         &P::kick_pump},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span over the lattice"},
+         &P::colour_spread},
+        corners_field<P>(),
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -376,6 +489,14 @@ EffectSpec default_spec(EffectType type) {
         return {SpiralParams{}};
     case EffectType::bass_bars:
         return {BassBarsParams{}};
+    case EffectType::hex_pulse:
+        return {HexPulseParams{}};
+    case EffectType::cube:
+        return {CubeParams{}};
+    case EffectType::sectors:
+        return {SectorsParams{}};
+    case EffectType::interference:
+        return {InterferenceParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -414,8 +535,16 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_bursts(p);
             } else if constexpr (std::is_same_v<P, SpiralParams>) {
                 return make_spiral(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, BassBarsParams>) {
                 return make_bass_bars(p);
+            } else if constexpr (std::is_same_v<P, HexPulseParams>) {
+                return make_hex_pulse(p);
+            } else if constexpr (std::is_same_v<P, CubeParams>) {
+                return make_cube(p);
+            } else if constexpr (std::is_same_v<P, SectorsParams>) {
+                return make_sectors(p);
+            } else {
+                return make_interference(p);
             }
         },
         spec.params);
@@ -459,6 +588,14 @@ const char *effect_type_id(EffectType type) {
         return "spiral";
     case EffectType::bass_bars:
         return "bass_bars";
+    case EffectType::hex_pulse:
+        return "hex_pulse";
+    case EffectType::cube:
+        return "cube";
+    case EffectType::sectors:
+        return "sectors";
+    case EffectType::interference:
+        return "interference";
     }
     return "plasma";
 }

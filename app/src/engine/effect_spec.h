@@ -15,11 +15,12 @@
 
 namespace psyight {
 
-inline constexpr std::array<EffectType, 16> kEffectTypes = {
-    EffectType::plasma,  EffectType::shockwave, EffectType::conveyor,   EffectType::sparkle,
-    EffectType::shimmer, EffectType::build,     EffectType::drop_burst, EffectType::chase,
-    EffectType::wave,    EffectType::strobe,    EffectType::stutter,    EffectType::noise,
-    EffectType::fire,    EffectType::bursts,    EffectType::spiral,     EffectType::bass_bars};
+inline constexpr std::array<EffectType, 20> kEffectTypes = {
+    EffectType::plasma,    EffectType::shockwave, EffectType::conveyor,   EffectType::sparkle,
+    EffectType::shimmer,   EffectType::build,     EffectType::drop_burst, EffectType::chase,
+    EffectType::wave,      EffectType::strobe,    EffectType::stutter,    EffectType::noise,
+    EffectType::fire,      EffectType::bursts,    EffectType::spiral,     EffectType::bass_bars,
+    EffectType::hex_pulse, EffectType::cube,      EffectType::sectors,    EffectType::interference};
 
 EffectSpec default_spec(EffectType type);
 std::shared_ptr<const Effect> make_effect(const EffectSpec &spec);

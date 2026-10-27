@@ -137,7 +137,7 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 
 **Presets** (Tune depth):
 
-- **Show packs:** a whole show style in one go: scenes, palettes, automation and macro names. Built-in: Psyight default, Dark minimal, Full colour, Live macros. Loading asks first; macro values, the rig, limiters and output stay. "Save this show as a pack" keeps yours.
+- **Show packs:** a whole show style in one go: scenes, palettes, automation and macro names. Built-in: Psyight default, Dark minimal, Full colour, Live macros, Psy club, Dark forest and Hexagon (for hexagonal rigs such as the Hexagon mandala: a honeycomb in breakdowns, hex tunnels and a radar sweep in grooves, the Necker cube at high energy, hexagons imploding through builds, the cube flipping every beat in drops). The hexagon effects (Hex pulse, Cube, Sectors, Interference) and the Hex rings and Around mappings work on any rig, seen as a hexagon about its centre; set Corners if the rig's shape guesses the hexagon's orientation wrong. Loading asks first; macro values, the rig, limiters and output stay. "Save this show as a pack" keeps yours.
 - **Scene presets** (the scene's Presets button): a look with its layers, modulation and palette. Replace the scene you are editing, or add it as a new one. "Save this scene as a preset" keeps yours.
 - **Palettes:** "Add from the library" for more palettes (none use white: it is kept for kicks and drops); "Save to the library" keeps one.
 

@@ -39,6 +39,17 @@
 //   spiral on a matrix);
 // - bass bars: a pitch meter, a marker or a bar at the sounding bass note's pitch along the
 //   mapping (low_midi to high_midi), brightness from its velocity and decay like the conveyor.
+// Hexagon effects (engine/hex_effects.cpp), on the rig seen as a hexagon (engine/space.h: hex
+// distance, so each hexagon ring about the centre is lit at once):
+// - hex pulse: hexagons travelling out from the centre (or in from the edge) on each kick, beat,
+//   bar, bass note or hat, crossing from centre to edge in travel_beats;
+// - cube: the hexagon as a cube seen corner-on: three faces in three shades of one colour and
+//   the Y of edges between them, flipping on the beat, bar, two bars, phrase or kick between the
+//   cube seen from above and from below (the Necker cube);
+// - sectors: six (or 3 to 12) slices round the centre, a chase, alternating halves, a fill or a
+//   seeded slice stepping on a clock (the 16ths of a rolling bassline);
+// - interference: three waves at 120 degrees summed into a hexagonal lattice of light drifting
+//   with a clock, its contrast pumped by each kick.
 #pragma once
 
 #include "engine/colour.h"
@@ -212,6 +223,53 @@ struct BassBarsParams {
     int colours = 0; // Pitch hue (as the conveyor), palette.
 };
 
+struct HexPulseParams {
+    int trigger = 0; // Kick, beat, bar, bass note, hat.
+    int every = 1;
+    int direction = 0;         // Out from the centre, in from the edge.
+    double travel_beats = 1.0; // From centre to edge.
+    double width = 0.12;       // Of the centre-to-edge distance.
+    double decay_s = 0.5;
+    int keep = 3; // Pulses alive at once (grid triggers and kicks; the others keep one).
+    double level = 1.0;
+    int colours = 0; // A palette step per pulse, or the palette from centre to edge.
+    int corners = 0; // Auto, up and down, sideways (engine/space.h hex_frame).
+};
+
+struct CubeParams {
+    int flip = 1;               // Beat, bar, two bars, phrase, kick.
+    double fade_s = 0.08;       // The crossfade at a flip.
+    double shade = 0.85;        // The darkest face: 0 all alike, 1 black.
+    double edges = 1.0;         // The Y's brightness (on its own, not times the faces' level).
+    double edge_width = 0.04;   // Of the centre-to-edge distance.
+    double level = 0.55;        // The faces' brightness: below the edges, so the Y stands out.
+    double colour_spread = 0.0; // Palette span over the faces; 0: one colour, shaded.
+    int corners = 0;
+};
+
+struct SectorsParams {
+    int mode = 0;  // Chase, alternate, fill, random.
+    int count = 6; // Slices.
+    int align = 0; // Centred on the corners, or on the flat sides.
+    int clock = 1; // 16th.
+    double rate = 1.0;
+    double tail = 2.0; // Steps a slice takes to fade.
+    double level = 0.9;
+    double colour_spread = 1.0; // Palette span round the slices.
+    int corners = 0;
+};
+
+struct InterferenceParams {
+    double scale_m = 0.25; // The lattice's spacing.
+    int clock = 0;         // Free.
+    double rate = 0.15;    // Drift: lattice spacings per clock division.
+    double contrast = 2.0;
+    double kick_pump = 0.5; // Extra contrast on each kick, fading over half a beat.
+    double level = 0.6;
+    double colour_spread = 0.6;
+    int corners = 0;
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -230,12 +288,17 @@ enum class EffectType {
     fire,
     bursts,
     spiral,
-    bass_bars
+    bass_bars,
+    hex_pulse,
+    cube,
+    sectors,
+    interference
 };
 using EffectParams =
     std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
                  BuildParams, DropBurstParams, ChaseParams, WaveParams, StrobeParams, StutterParams,
-                 NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams>;
+                 NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams,
+                 HexPulseParams, CubeParams, SectorsParams, InterferenceParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -257,6 +320,10 @@ std::unique_ptr<Effect> make_fire(const FireParams &params = {});
 std::unique_ptr<Effect> make_bursts(const BurstsParams &params = {});
 std::unique_ptr<Effect> make_spiral(const SpiralParams &params = {});
 std::unique_ptr<Effect> make_bass_bars(const BassBarsParams &params = {});
+std::unique_ptr<Effect> make_hex_pulse(const HexPulseParams &params = {});
+std::unique_ptr<Effect> make_cube(const CubeParams &params = {});
+std::unique_ptr<Effect> make_sectors(const SectorsParams &params = {});
+std::unique_ptr<Effect> make_interference(const InterferenceParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

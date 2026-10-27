@@ -22,7 +22,46 @@ double steps(long long so_far, double since_s) {
     return static_cast<double>(so_far - 1) + glide;
 }
 
+constexpr double kPi = 3.14159265358979323846;
+
+// Distance to the hexagon's flat sides' direction: the largest of the three flat normals.
+double hex_raw(const HexFrame &f, double x, double y) {
+    const double dx = x - f.cx;
+    const double dy = y - f.cy;
+    double most = 0.0;
+    for (int k = 0; k < 3; ++k) {
+        const double a = (f.corner_deg - 90.0 + 60.0 * k) * kPi / 180.0;
+        most = std::max(most, std::fabs(dx * std::cos(a) + dy * std::sin(a)));
+    }
+    return most;
+}
+
 } // namespace
+
+HexFrame hex_frame(const Rig &rig, int corners) {
+    HexFrame f;
+    f.cx = 0.5 * (rig.min.x + rig.max.x);
+    f.cy = 0.5 * (rig.min.y + rig.max.y);
+    const bool up =
+        corners == 1 || (corners != 2 && rig.max.y - rig.min.y >= rig.max.x - rig.min.x);
+    f.corner_deg = up ? 90.0 : 0.0;
+    double reach = 0.0;
+    for (const Pixel &p : rig.pixels) {
+        reach = std::max(reach, hex_raw(f, p.position.x, p.position.y));
+    }
+    f.reach_m = reach > 1e-9 ? reach : 1.0;
+    return f;
+}
+
+double hex_radius(const HexFrame &frame, double x, double y) {
+    return hex_raw(frame, x, y) / frame.reach_m;
+}
+
+double hex_turn(const HexFrame &frame, double x, double y) {
+    const double deg = std::atan2(y - frame.cy, x - frame.cx) * 180.0 / kPi;
+    const double t = (90.0 - deg) / 360.0;
+    return t - std::floor(t);
+}
 
 double hash_unit(std::uint64_t a, std::uint64_t b, std::uint64_t c) {
     std::uint64_t z = a * 0x9E3779B97F4A7C15ull ^
@@ -41,6 +80,8 @@ std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t se
     const double reach = std::hypot(0.5 * (rig.max.x - rig.min.x), 0.5 * (rig.max.y - rig.min.y),
                                     0.5 * (rig.max.z - rig.min.z));
     const auto strips = static_cast<double>(std::max<size_t>(1, rig.strips.size()));
+    const HexFrame hex =
+        mapping == Mapping::hex_rings || mapping == Mapping::around ? hex_frame(rig) : HexFrame{};
     for (size_t i = 0; i < rig.pixels.size(); ++i) {
         const Pixel &p = rig.pixels[i];
         switch (mapping) {
@@ -69,6 +110,12 @@ std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t se
             break;
         case Mapping::random:
             u[i] = hash_unit(seed, i, 31);
+            break;
+        case Mapping::hex_rings:
+            u[i] = std::clamp(hex_radius(hex, p.position.x, p.position.y), 0.0, 1.0);
+            break;
+        case Mapping::around:
+            u[i] = hex_turn(hex, p.position.x, p.position.y);
             break;
         }
     }
