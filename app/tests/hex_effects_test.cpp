@@ -175,7 +175,7 @@ TEST_CASE("hexagon pack: ids, settings and every scene renders on the mandala") 
     const auto hexagon = std::find_if(packs.begin(), packs.end(),
                                       [](const ShowPack &p) { return p.name == "Hexagon"; });
     REQUIRE(hexagon != packs.end());
-    CHECK(hexagon->scenes.size() == 6);
+    CHECK(hexagon->scenes.size() == 7);
     const Rig rig = mandala();
     EngineInputs in = grid_at(13, 0.3);
     in.kicks_so_far = 14;

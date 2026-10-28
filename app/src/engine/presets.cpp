@@ -490,21 +490,6 @@ std::vector<ScenePreset> builtin_scene_presets() {
         p.scene.layers.push_back(make_layer({HexPulseParams{}}, BlendMode::screen));
         looks.push_back(std::move(p));
     }
-    { // Grooves at full energy: the Necker cube, flipping every bar.
-        ScenePreset p{"Necker cube",
-                      "The hexagon as a cube seen corner-on, three shaded faces and a Y of edges, "
-                      "turning inside out every bar; a hexagon out on each kick.",
-                      {},
-                      palette_named("Ice")};
-        p.scene.sections = {"groove", "drop"};
-        HexPulseParams kick;
-        kick.width = 0.08;
-        kick.level = 0.6;
-        p.scene.layers.push_back(make_layer({CubeParams{}}, BlendMode::add));
-        p.scene.layers.push_back(make_layer({kick}, BlendMode::screen));
-        p.scene.routes.push_back(route(ModSource::kick, ModTarget::opacity, 0, -0.3));
-        looks.push_back(std::move(p));
-    }
     { // Grooves: a radar sweep stepping with the bassline, a ring closing in each bar.
         ScenePreset p{"Hex radar",
                       "A slice sweeping round one step per bass note with a long tail, a hexagon "
@@ -533,30 +518,6 @@ std::vector<ScenePreset> builtin_scene_presets() {
         p.scene.layers.push_back(make_layer({duck}, BlendMode::multiply));
         looks.push_back(std::move(p));
     }
-    { // Intros, breakdowns and outros: a honeycomb of light drifting.
-        ScenePreset p{"Honeycomb drift",
-                      "Three waves at 120 degrees making a drifting honeycomb of light, one "
-                      "comet circling the hexagon each phrase.",
-                      {},
-                      palette_named("Ocean UV")};
-        p.scene.sections = {"intro", "breakdown", "outro"};
-        InterferenceParams comb;
-        comb.rate = 0.08;
-        comb.kick_pump = 0.2;
-        comb.level = 0.45;
-        ChaseParams comet;
-        comet.mapping = 7; // Around.
-        comet.clock = 4;   // Phrase.
-        comet.rate = 1.0;
-        comet.count = 1;
-        comet.tail = 0.3;
-        comet.level = 0.6;
-        p.scene.layers.push_back(make_layer({comb}, BlendMode::alpha));
-        p.scene.layers.push_back(make_layer({comet}, BlendMode::add));
-        p.scene.routes.push_back(
-            route(ModSource::lfo_phrase, ModTarget::hue_shift, 0, 40.0, ModCurve::s_curve));
-        looks.push_back(std::move(p));
-    }
     { // Builds: hexagons collapsing to the centre, faster with the riser; dark before the drop.
         ScenePreset p{"Hex implosion",
                       "Hexagons collapsing into the centre on every beat while the slices fill "
@@ -581,25 +542,6 @@ std::vector<ScenePreset> builtin_scene_presets() {
         p.scene.routes.push_back(
             route(ModSource::riser, ModTarget::opacity, 0, 0.5, ModCurve::exponential));
         p.scene.routes.push_back(route(ModSource::riser, ModTarget::brightness, 0, 0.4));
-        looks.push_back(std::move(p));
-    }
-    { // Drops: the burst, then the cube flipping every beat.
-        ScenePreset p{"Cube drop",
-                      "Two white flashes and the burst as the drop lands, then the cube turning "
-                      "inside out on every beat in shifting colours, hexagons out on the kicks.",
-                      {},
-                      palette_named("Magenta storm")};
-        p.scene.sections = {"drop"};
-        CubeParams cube;
-        cube.flip = 0; // Beat.
-        cube.colour_spread = 0.5;
-        cube.level = 0.9;
-        p.scene.layers.push_back(make_layer({cube}, BlendMode::add));
-        p.scene.layers.push_back(make_layer({HexPulseParams{}}, BlendMode::screen));
-        p.scene.layers.push_back(make_layer({DropBurstParams{}}, BlendMode::screen));
-        p.scene.layers.push_back(make_layer({StrobeParams{}}, BlendMode::screen));
-        p.scene.routes.push_back(route(ModSource::random_bar, ModTarget::hue_shift, 0, 90.0,
-                                       ModCurve::linear, "", ModQuantise::bar));
         looks.push_back(std::move(p));
     }
     for (ScenePreset &p : looks) {
@@ -673,11 +615,12 @@ std::vector<ShowPack> builtin_show_packs() {
 
     ShowPack hexagon = pack_of(
         "Hexagon",
-        "For hexagonal rigs: a honeycomb drifting in breakdowns, hex tunnels and a radar sweep in "
-        "grooves, the Necker cube at high energy, hexagons imploding through builds and the cube "
-        "flipping every beat in drops.",
-        {find(looks, "Honeycomb drift"), find(looks, "Hex tunnel"), find(looks, "Hex radar"),
-         find(looks, "Necker cube"), find(looks, "Hex implosion"), find(looks, "Cube drop")});
+        "For hexagonal rigs: hex tunnels and a radar sweep in grooves, comet rain at high energy, "
+        "hexagons imploding through builds, a blooming drop, a nebula in breakdowns and deep "
+        "space at the ends.",
+        {find(looks, "Hex tunnel"), find(looks, "Hex radar"), find(looks, "Comet rain"),
+         find(looks, "Nebula"), find(looks, "Hex implosion"), find(looks, "Drop bloom"),
+         find(looks, "Deep space")});
     hexagon.automation.palette_every_phrases = 2;
     packs.push_back(std::move(hexagon));
     return packs;
