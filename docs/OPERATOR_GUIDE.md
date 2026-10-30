@@ -13,6 +13,7 @@ The top bar has three parts:
 - **The state ladder:** Preflight, Preview, Ambient, React, Show. Only Ambient, React and Show send to the lights.
 - **The depth:** Operate, Tune or Engineer. It sets how many controls you see. Operate is enough during a show.
 - **The safety controls**, always at the right:
+  - Brightness: the brightness cap as a percentage (the same as Show > Limiters > Brightness): drag up or down (Shift: fine), double-click to type, right-click to reset or MIDI-learn it.
   - Blackout (B): black at once, and the way back up still counts against the flash limit.
   - Hold (H): freezes the current look.
 

@@ -230,16 +230,32 @@ void PreviewView::draw_top_bar() {
         ImGui::SameLine();
         ImGui::TextColored(theme().danger, "FLASH LIMITER OFF");
     }
-    // Blackout and Hold: fixed at the right, with hotkeys, no confirmation (SPEC 9.1).
+    // Brightness, Blackout and Hold: fixed at the right, with hotkeys, no confirmation (SPEC 9.1).
     const ImGuiStyle &style = ImGui::GetStyle();
     const bool folded = !preview_open_ && !stage_;
     const float unfold = !folded ? 0.0f
                                  : ImGui::CalcTextSize(kIconUnfold).x +
                                        2.0f * style.FramePadding.x + style.ItemSpacing.x;
+    ImFont *mono = theme_font(ThemeFont::mono);
+    const float percent_width = mono != nullptr
+                                    ? mono->CalcTextSizeA(mono->FontSize, FLT_MAX, 0.0f, "100 %").x
+                                    : ImGui::CalcTextSize("100 %").x;
+    const float brightness_width =
+        ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + percent_width + style.ItemSpacing.x;
     const float buttons = ImGui::CalcTextSize("Blackout (B)").x +
                           ImGui::CalcTextSize("Hold (H)").x + 4.0f * style.FramePadding.x +
-                          style.ItemSpacing.x + unfold;
+                          style.ItemSpacing.x + unfold + brightness_width;
     ImGui::SameLine(ImGui::GetWindowWidth() - buttons - style.WindowPadding.x);
+    { // The brightness cap (Show > Limiters), as a percentage.
+        double percent = 100.0 * project_.project().limiter.brightness_cap;
+        set_knob_menu([&] { midi_menu("brightness"); });
+        if (inline_knob("Brightness", &percent, 0.0, 100.0, "%.0f %%",
+                        100.0 * LimiterParams{}.brightness_cap)) {
+            project_.edit().limiter.brightness_cap = std::clamp(percent / 100.0, 0.0, 1.0);
+            project_.changed();
+        }
+        ImGui::SameLine();
+    }
     if (folded) {
         if (ImGui::Button((std::string(kIconUnfold) + "###unfold preview").c_str())) {
             preview_open_ = true;

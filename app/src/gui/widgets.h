@@ -63,6 +63,11 @@ bool knob(const char *label, double *value, double min, double max, const char *
           double default_value, const double *modulated = nullptr);
 bool knob_int(const char *label, int *value, int min, int max, const char *format,
               int default_value, const double *modulated = nullptr);
+// A knob one line tall, for bars: a small dial with its value to the right, no label (the label
+// names it in the tooltip). Behaves as knob: drag up or down, double-click to type, right-click
+// to reset (and set_knob_menu's items).
+bool inline_knob(const char *label, double *value, double min, double max, const char *format,
+                 double default_value);
 // Items the next knob's right-click menu shows after Reset (drawn inside the menu, while the knob
 // is drawn). Applies to the next knob only.
 void set_knob_menu(std::function<void()> items);

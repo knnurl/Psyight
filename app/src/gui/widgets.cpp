@@ -43,18 +43,32 @@ void arc(ImDrawList *draw, ImVec2 centre, float radius, float from, float to, Im
     draw->PathStroke(colour, ImDrawFlags_None, thickness);
 }
 
+// The value as the knob shows it.
+std::string knob_text(const char *format, double value) {
+    char text[64];
+    std::snprintf(text, sizeof(text), format, value);
+    return text;
+}
+
+// compact: one line tall, a small dial with the value to its right and no label (inline_knob).
 bool knob_impl(const char *label, double *value, double min, double max, const char *format,
-               double default_value, const double *modulated, bool integer) {
+               double default_value, const double *modulated, bool integer, bool compact = false) {
     const float em = ImGui::GetFontSize() * g_knob_scale;
     const ImGuiStyle &style = ImGui::GetStyle();
     ImFont *label_font = theme_font(ThemeFont::plot);
     ImFont *mono = theme_font(ThemeFont::mono);
     const float small_px = label_font != nullptr ? label_font->FontSize : em;
     const float mono_px = mono != nullptr ? mono->FontSize : em;
-    const float width = knob_width();
-    const float radius = kKnobRadiusEm * em;
+    const float line = ImGui::GetFrameHeight();
+    // Compact: room for the widest value the knob can show.
+    const std::string widest = knob_text(format, std::abs(max) > std::abs(min) ? max : min);
+    const float text_width = mono != nullptr
+                                 ? mono->CalcTextSizeA(mono_px, FLT_MAX, 0.0f, widest.c_str()).x
+                                 : ImGui::CalcTextSize(widest.c_str()).x;
+    const float width = compact ? line + style.ItemInnerSpacing.x + text_width : knob_width();
+    const float radius = compact ? 0.38f * line : kKnobRadiusEm * em;
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    const ImVec2 size(width, knob_height());
+    const ImVec2 size(width, compact ? line : knob_height());
     const char *label_end = label;
     while (*label_end != '\0' && !(label_end[0] == '#' && label_end[1] == '#')) {
         ++label_end;
@@ -71,9 +85,11 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
     bool changed = false;
 
     // Typing: double-click opens a text field over the value line.
-    const ImRect value_rect(
-        ImVec2(origin.x, origin.y + size.y - mono_px - 2.0f * style.FramePadding.y),
-        ImVec2(origin.x + width, origin.y + size.y));
+    const ImRect value_rect =
+        compact
+            ? ImRect(ImVec2(origin.x + line, origin.y), ImVec2(origin.x + width, origin.y + line))
+            : ImRect(ImVec2(origin.x, origin.y + size.y - mono_px - 2.0f * style.FramePadding.y),
+                     ImVec2(origin.x + width, origin.y + size.y));
     bool typing = ImGui::TempInputIsActive(id);
     if (!typing && hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         typing = true;
@@ -131,11 +147,15 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
         label_font != nullptr ? label_font->CalcTextSizeA(small_px, width, 0.0f, label, label_end)
                               : ImGui::CalcTextSize(label, label_end);
     draw->PushClipRect(origin, ImVec2(origin.x + width, origin.y + size.y), true);
-    draw->AddText(label_font, small_px,
-                  ImVec2(origin.x + 0.5f * (width - std::min(label_size.x, width)), origin.y),
-                  to_u32(hovered || active ? t.text : t.text_dim), label, label_end);
-    const ImVec2 centre(origin.x + 0.5f * width, origin.y + small_px + style.ItemInnerSpacing.y +
-                                                     kKnobRingMarginEm * em + radius);
+    if (!compact) {
+        draw->AddText(label_font, small_px,
+                      ImVec2(origin.x + 0.5f * (width - std::min(label_size.x, width)), origin.y),
+                      to_u32(hovered || active ? t.text : t.text_dim), label, label_end);
+    }
+    const ImVec2 centre =
+        compact ? ImVec2(origin.x + 0.5f * line, origin.y + 0.5f * line)
+                : ImVec2(origin.x + 0.5f * width, origin.y + small_px + style.ItemInnerSpacing.y +
+                                                      kKnobRingMarginEm * em + radius);
     const float thickness = std::max(2.0f, 0.2f * radius);
     const float zero = knob_fraction(min < 0.0 && max > 0.0 ? 0.0 : min, min, max);
     const float at = knob_fraction(*value, min, max);
@@ -158,10 +178,11 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
         std::snprintf(text, sizeof(text), format, integer ? std::round(*value) : *value);
         const ImVec2 text_size = mono != nullptr ? mono->CalcTextSizeA(mono_px, FLT_MAX, 0.0f, text)
                                                  : ImGui::CalcTextSize(text);
-        draw->AddText(mono, mono_px,
-                      ImVec2(origin.x + 0.5f * (width - text_size.x),
-                             origin.y + size.y - mono_px - style.FramePadding.y),
-                      to_u32(t.text), text);
+        const ImVec2 at_text =
+            compact ? ImVec2(origin.x + width - text_size.x, origin.y + 0.5f * (line - mono_px))
+                    : ImVec2(origin.x + 0.5f * (width - text_size.x),
+                             origin.y + size.y - mono_px - style.FramePadding.y);
+        draw->AddText(mono, mono_px, at_text, to_u32(t.text), text);
     }
     draw->PopClipRect();
     if (hovered && !active && !typing) {
@@ -246,6 +267,11 @@ bool knob_int(const char *label, int *value, int min, int max, const char *forma
     }
     *value = static_cast<int>(std::lround(v));
     return true;
+}
+
+bool inline_knob(const char *label, double *value, double min, double max, const char *format,
+                 double default_value) {
+    return knob_impl(label, value, min, max, format, default_value, nullptr, false, true);
 }
 
 void set_knob_menu(std::function<void()> items) { g_knob_menu = std::move(items); }
