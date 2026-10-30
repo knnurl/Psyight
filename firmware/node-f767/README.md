@@ -25,6 +25,10 @@ cmake --build build/f1
 
 Use `-DNODE_STAGE=2` or `3` for the other stages. The toolchain file must be given as an absolute path. Each build writes `psyight_node_f<stage>.elf`, `.bin` and `.hex`. At commit time the sizes were: F1 12.8 KB flash and 99 KB RAM, F2 49 KB and 70 KB, F3 56 KB and 176 KB, against 1792 KB of flash (the last 256 KB hold the config) and 512 KB of RAM.
 
+### Strip test
+
+`cmake --build build/<any stage> --target strip_test` writes `psyight_strip_test.elf`: a bare WS2812 driver with nothing else (no DMA engine, network or stored config), to check strips and wiring apart from the node. Every lane (PD0 to PD7) gets the same 1,000 pixels at about 31 frames a second: all dim, the colour stepping red, green, blue, white each second, and one bright pixel running along the line at 40 pixels a second. If the runner reaches the last pixel, the strip and the level shifter are fine and any shortfall under the node is its lane length (Preflight > Node setup > Apply). Flash it like the node; flash the node back afterwards.
+
 ## Flash
 
 With STM32CubeProgrammer, which ships inside STM32CubeIDE, over the Nucleo's ST-LINK:

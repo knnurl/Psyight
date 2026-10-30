@@ -60,6 +60,32 @@ target_link_options(node PRIVATE
     -Wl,--no-warn-rwx-segments) # No MMU: RAM being executable means nothing here.
 target_link_libraries(node PRIVATE m)
 
+# The strip test (src/test/strip_test.c): a bare bit-banged WS2812 driver on PD0 to PD7, to check
+# strips and wiring apart from the node.
+add_executable(strip_test
+    src/test/strip_test.c src/board/board.c src/board/syscalls.c
+    ${TP}/cmsis_device_f7/Source/Templates/system_stm32f7xx.c
+    ${TP}/cmsis_device_f7/Source/Templates/gcc/startup_stm32f767xx.s
+    ${HAL_SOURCES})
+set_target_properties(strip_test PROPERTIES SUFFIX .elf OUTPUT_NAME psyight_strip_test)
+target_compile_definitions(strip_test PRIVATE STM32F767xx USE_HAL_DRIVER)
+target_include_directories(strip_test PRIVATE
+    src/board
+    ${TP}/cmsis_core/CMSIS/Core/Include
+    ${TP}/cmsis_device_f7/Include
+    ${TP}/stm32f7xx_hal_driver/Inc)
+set_source_files_properties(src/test/strip_test.c
+    PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror;-Wno-unused-parameter")
+target_link_options(strip_test PRIVATE
+    -T${CMAKE_CURRENT_SOURCE_DIR}/STM32F767ZITX_FLASH.ld
+    -Wl,--print-memory-usage
+    -Wl,--no-warn-rwx-segments)
+target_link_libraries(strip_test PRIVATE m)
+add_custom_command(TARGET strip_test POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:strip_test> $<TARGET_FILE_DIR:strip_test>/psyight_strip_test.bin
+    COMMAND ${CMAKE_SIZE} $<TARGET_FILE:strip_test>
+    VERBATIM)
+
 add_custom_command(TARGET node POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:node> $<TARGET_FILE_DIR:node>/psyight_node_f${NODE_STAGE}.bin
     COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:node> $<TARGET_FILE_DIR:node>/psyight_node_f${NODE_STAGE}.hex
