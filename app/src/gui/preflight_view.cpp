@@ -239,7 +239,7 @@ void PreflightView::draw_test_patterns() {
     bool first = true;
     for (const TestPatternKind kind :
          {TestPatternKind::chase, TestPatternKind::colour_order, TestPatternKind::identify_universe,
-          TestPatternKind::all_on}) {
+          TestPatternKind::all_on, TestPatternKind::eye_candy}) {
         if (!first) {
             ImGui::SameLine();
         }
@@ -262,7 +262,7 @@ void PreflightView::draw_test_patterns() {
     case TestPatternKind::off:
         help("Chase: each strip's direction and order. Colour order: catches a wrong RGB order. "
              "Identify universe: which pixels a universe reaches. All on: what full white draws "
-             "through the limiters.");
+             "through the limiters. Eye candy: something pleasant to watch.");
         break;
     case TestPatternKind::chase: {
         ImGui::SetNextItemWidth(12.0f * em);
@@ -330,6 +330,11 @@ void PreflightView::draw_test_patterns() {
         }
         help("White at full, through the brightness cap and the power budget: what the rig "
              "really draws. Mind the supply.");
+        break;
+    case TestPatternKind::eye_candy:
+        help("A colour wheel turning slowly about the rig's centre, twisted into a spiral, with "
+             "soft rings breathing out from the middle. No check: for showing the lights off, or "
+             "between sets.");
         break;
     }
     if (t.kind != TestPatternKind::off && t.kind != TestPatternKind::all_on) {

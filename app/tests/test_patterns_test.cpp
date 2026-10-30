@@ -86,6 +86,28 @@ TEST_CASE("test patterns: identify lights one universe's pixels only") {
     }
 }
 
+TEST_CASE("test patterns: eye candy lights every pixel in many colours, and moves") {
+    const Rig rig = two_strips();
+    const Patch patch = build_patch(rig);
+    TestPattern t;
+    t.kind = TestPatternKind::eye_candy;
+    const Frame f = render_test_pattern(t, rig, patch, 3.0);
+    float darkest = 1.0f;
+    float reddest = 0.0f;
+    float bluest = 0.0f;
+    for (const Rgb &c : f) {
+        darkest = std::min(darkest, std::max({c.r, c.g, c.b}));
+        CHECK(std::max({c.r, c.g, c.b}) <= t.level + 1e-6f);
+        reddest = std::max(reddest, c.r - std::max(c.g, c.b));
+        bluest = std::max(bluest, c.b - std::max(c.r, c.g));
+    }
+    CHECK(darkest > 0.1f); // Every pixel lit (the rings dim it to a quarter at least).
+    CHECK(reddest > 0.1f);
+    CHECK(bluest > 0.1f);
+    CHECK(f != render_test_pattern(t, rig, patch, 3.5));
+    CHECK(f == render_test_pattern(t, rig, patch, 3.0));
+}
+
 TEST_CASE("show renderer: a test pattern replaces the scenes, through the limiters") {
     ShowConfig config;
     config.rig = two_strips();

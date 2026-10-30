@@ -7,6 +7,8 @@
 //   colour than the panel names has the wrong colour order.
 // - identify universe: only the pixels patched to that universe light, in cyan.
 // - all on: white at full, so the limiters show what full white really draws.
+// - eye candy: no check, just something pleasant to watch: a colour wheel turning slowly about
+//   the rig's centre, twisted into a spiral, with soft rings breathing out from the middle.
 // Pure: a function of the pattern, the rig, the patch and the pattern's own clock (seconds since
 // it started, counted in show frames so it runs while the transport is stopped).
 #pragma once
@@ -17,7 +19,7 @@
 
 namespace psyight {
 
-enum class TestPatternKind { off, chase, colour_order, identify_universe, all_on };
+enum class TestPatternKind { off, chase, colour_order, identify_universe, all_on, eye_candy };
 
 struct TestPattern {
     TestPatternKind kind = TestPatternKind::off;
@@ -25,7 +27,7 @@ struct TestPattern {
     int universe = 1;                 // Identify: the universe number.
     double chase_pixels_per_s = 30.0; // Chase speed.
     int chase_length = 6;             // Lit pixels, fading towards the tail.
-    double level = 0.6;               // Chase, colour order and identify (all on is 1).
+    double level = 0.6;               // Every pattern but all on (which is 1).
     bool send = true;                 // To the lights, even in Preflight and Preview.
 
     bool operator==(const TestPattern &) const = default;
