@@ -12,9 +12,13 @@
 #define DATA_PORT GPIOD
 #define DMA_FLAGS 0x3Du /* FE, DME, TE, HT and TC of one stream (bit 1 is reserved). */
 
-static uint32_t s_words[NODE_MAX_PIXELS_PER_LANE * 24u]; /* 65 KB: reset masks per bit. */
-static uint32_t s_set_mask;                              /* BSRR: active lanes high. */
-static uint32_t s_reset_mask;                            /* BSRR: active lanes low. */
+/* What the DMA reads on every bit, in SRAM (STM32F767ZITX_FLASH.ld: LEDRAM), not DTCM: there it
+ * shared the core's AHBS port with the Ethernet DMA's receive pool, and a packet arriving could
+ * hold a word back past a bit's 0.40 us edge, turning 0s into 1s (pixels flickering). */
+#define LED_DMA __attribute__((section(".led_dma")))
+static LED_DMA uint32_t s_words[NODE_MAX_PIXELS_PER_LANE * 24u]; /* 65 KB: reset masks per bit. */
+static LED_DMA uint32_t s_set_mask;                              /* BSRR: active lanes high. */
+static LED_DMA uint32_t s_reset_mask;                            /* BSRR: active lanes low. */
 static volatile bool s_busy;
 static volatile uint32_t s_done_cycles;
 static volatile uint32_t s_frames;

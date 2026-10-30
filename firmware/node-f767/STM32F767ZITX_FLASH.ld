@@ -1,6 +1,10 @@
 /* STM32F767ZI: 2 MB flash, 512 KB RAM (DTCM 128 KB + SRAM1 368 KB + SRAM2 16 KB, contiguous).
  * The last 256 KB of flash hold the node's configuration (board/config_store.c), so code stops
- * short of it. The D-cache stays off, so DMA buffers may live anywhere in RAM.
+ * short of it. The D-cache stays off, so DMA buffers need no cache maintenance; but the first
+ * 128 KB is the core's DTCM, which DMA reaches only through its one AHBS port, shared with the
+ * Ethernet DMA (whose receive pool lands there) and below the CPU's own accesses. The LED
+ * output's DMA reads a word on every bit and cannot wait, so its buffers live in LEDRAM, the
+ * top of SRAM1 and SRAM2, away from DTCM (ws2812.c: section .led_dma).
  * Symbols follow ST's startup file (cmsis_device_f7 startup_stm32f767xx.s). */
 
 ENTRY(Reset_Handler)
@@ -11,8 +15,9 @@ _Min_Stack_Size = 0x2000;
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 1792K
-    RAM   (xrw) : ORIGIN = 0x20000000, LENGTH = 512K
+    FLASH  (rx)  : ORIGIN = 0x08000000, LENGTH = 1792K
+    RAM    (xrw) : ORIGIN = 0x20000000, LENGTH = 448K
+    LEDRAM (rw)  : ORIGIN = 0x20070000, LENGTH = 64K
 }
 
 SECTIONS
@@ -99,6 +104,15 @@ SECTIONS
         _ebss = .;
         __bss_end__ = _ebss;
     } >RAM
+
+    /* The LED output's DMA buffers, out of DTCM. Not zeroed at start: written before use. */
+    .led_dma (NOLOAD) :
+    {
+        . = ALIGN(4);
+        *(.led_dma)
+        *(.led_dma*)
+        . = ALIGN(4);
+    } >LEDRAM
 
     ._user_heap_stack :
     {
