@@ -1,0 +1,6 @@
+.pio/
+sdkconfig
+sdkconfig.*
+!sdkconfig.defaults
+# This machine's WiFi network, compiled in as the default (never commit: the repo is public).
+src/wifi_secrets.h
