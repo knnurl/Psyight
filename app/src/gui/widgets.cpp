@@ -107,7 +107,9 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
         if (ImGui::IsItemActivated()) {
             storage->SetFloat(drag_key, static_cast<float>(*value));
         }
-        const float dy = -ImGui::GetIO().MouseDelta.y;
+        // Up turns it up; the one-line knob also turns right when dragged to the right.
+        const ImVec2 mouse = ImGui::GetIO().MouseDelta;
+        const float dy = -mouse.y + (compact ? mouse.x : 0.0f);
         if (dy != 0.0f) {
             const float step = static_cast<float>(max - min) / kKnobDragPixels *
                                (ImGui::GetIO().KeyShift ? kKnobFine : 1.0f);
