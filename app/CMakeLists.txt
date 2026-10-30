@@ -70,7 +70,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/engine/scene.cpp src/engine/rig_templates.cpp src/engine/strip_edit.cpp src/engine/presets.cpp src/engine/limiters.cpp
                                src/engine/automation.cpp src/engine/modulation.cpp
                                src/engine/effect_spec.cpp src/engine/space.cpp
-                               src/engine/pattern_effects.cpp src/engine/hex_effects.cpp
+                               src/engine/pattern_effects.cpp src/engine/hex_effects.cpp src/engine/aurora.cpp
                                src/io/text_file.cpp src/io/session_record.cpp
                                src/output/recorder.cpp src/analysis/student_data.cpp
                                src/io/project.cpp
@@ -198,7 +198,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/midi_test.cpp tests/png_test.cpp
                              tests/recent_files_test.cpp tests/user_settings_test.cpp
                              tests/rig_templates_test.cpp tests/presets_test.cpp
-                             tests/test_patterns_test.cpp tests/scene_launch_test.cpp
+                             tests/test_patterns_test.cpp tests/aurora_test.cpp tests/scene_launch_test.cpp
                              tests/undo_history_test.cpp tests/sections_edit_test.cpp
                              tests/pattern_effects_test.cpp tests/labelling_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp

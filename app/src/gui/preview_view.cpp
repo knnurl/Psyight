@@ -19,10 +19,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <iterator>
+#include <optional>
 
 namespace psyight {
 
@@ -75,26 +78,12 @@ void PreviewView::set_ladder(Ladder step) {
         config_.test.kind = TestPatternKind::off; // The show, not a test, goes to the lights.
     }
     config_.send_to_network = step >= Ladder::ambient;
-    if (step == Ladder::ambient) {
-        config_.manual_scene = ambient_scene();
-    } else if (step == Ladder::react && config_.manual_scene < 0) {
+    if (step == Ladder::react && config_.manual_scene < 0) {
         config_.manual_scene = playing_scene_;
     } else if (step == Ladder::show) {
         config_.manual_scene = -1;
     }
     dirty_ = true;
-}
-
-int PreviewView::ambient_scene() const {
-    for (const char *label : {"breakdown", "intro"}) {
-        for (size_t i = 0; i < config_.scenes.size(); ++i) {
-            const std::vector<std::string> &s = config_.scenes[i].sections;
-            if (std::find(s.begin(), s.end(), label) != s.end()) {
-                return static_cast<int>(i);
-            }
-        }
-    }
-    return 0;
 }
 
 void PreviewView::start_recording() {
@@ -168,7 +157,7 @@ void PreviewView::draw_top_bar() {
         {Ladder::preflight, "Preflight", "Checks; nothing is sent to the network."},
         {Ladder::preview, "Preview", "The engine runs for the preview (virtual node) only."},
         {Ladder::ambient, "Ambient",
-         "Sends to the network: the ambient scene only, at half brightness."},
+         "Sends to the network: a slow aurora at half brightness, whatever the music (or none)."},
         {Ladder::react, "React", "Sends to the network: scenes chosen by hand."},
         {Ladder::show, "Show", "Sends to the network: scenes follow the sections."},
     };
@@ -343,7 +332,8 @@ void PreviewView::sync_config() {
     config_.patch = project_.patch();
     config_.output = p.output;
     config_.limiter = p.limiter;
-    if (ladder_ == Ladder::ambient) { // Half brightness: the ambient step is a gentle one.
+    config_.ambient = ladder_ == Ladder::ambient; // The aurora, at half brightness.
+    if (config_.ambient) {
         config_.limiter.brightness_cap *= 0.5;
     }
     config_.pixel_caps = group_caps_per_pixel(config_.rig, p.group_caps);
@@ -767,6 +757,7 @@ void PreviewView::draw_midi() {
 void PreviewView::draw_controls(const ShowFrame &frame) {
     const float em = ImGui::GetFontSize();
     draw_scene_cards(frame);
+    draw_scene_picker();
     ImGui::SetNextItemWidth(7.0f * em);
     float latency_ms = static_cast<float>(project_.project().latency_offset_ms);
     if (mono_field("Latency offset", [&](const char *id) {
@@ -1786,7 +1777,7 @@ void PreviewView::draw_scene_cards(const ShowFrame &frame) {
     const ImGuiStyle &style = ImGui::GetStyle();
     const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
     const bool manual = config_.manual_scene >= 0;
-    ImGui::BeginDisabled(ladder_ == Ladder::ambient); // Ambient plays the ambient scene only.
+    ImGui::BeginDisabled(ladder_ == Ladder::ambient); // Ambient plays the aurora.
     for (int i = 0; i < static_cast<int>(config_.scenes.size()); ++i) {
         const std::string &name = config_.scenes[static_cast<size_t>(i)].name;
         const float width = ImGui::CalcTextSize(name.c_str()).x + 2.0f * style.FramePadding.x;
@@ -1967,12 +1958,146 @@ void PreviewView::draw_rig(const ShowFrame &frame, bool tools) {
     hovered_strip_ = canvas_.hovered_strip();
 }
 
+void PreviewView::draw_scene_picker() {
+    struct Column {
+        const char *title;
+        std::vector<std::string> sections;
+    };
+    static const Column kColumns[] = {{"Intro, outro", {"intro", "outro"}},
+                                      {"Groove", {"groove"}},
+                                      {"Breakdown", {"breakdown"}},
+                                      {"Build", {"build"}},
+                                      {"Drop", {"drop"}}};
+    static const std::vector<ScenePreset> builtins = builtin_scene_presets();
+    static const std::string kNone;
+    const float em = ImGui::GetFontSize();
+    ImGui::BeginDisabled(ladder_ == Ladder::ambient);
+    ImGui::SetNextItemWidth(12.0f * em);
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(static_cast<float>(std::size(kColumns)) * 10.0f * em, 0.0f),
+        ImVec2(FLT_MAX, 30.0f * em));
+    const bool open =
+        ImGui::BeginCombo("##all scenes", "Every scene...", ImGuiComboFlags_HeightLargest);
+    ImGui::SetItemTooltip("Every scene, by the section it is made for: this show's in the accent, "
+                          "then the presets. A preset not in the show is added to it.");
+    if (open) {
+        if (ImGui::IsWindowAppearing()) {
+            user_presets_ = load_user_presets(presets_dir_);
+        }
+        struct Entry {
+            const std::string *name;
+            const std::vector<std::string> *sections;
+            const std::string *description;
+            int scene = -1;                      // In the show.
+            const ScenePreset *preset = nullptr; // Else this preset, added on a pick.
+        };
+        const std::vector<Scene> &scenes = project_.project().scenes;
+        std::vector<Entry> entries;
+        for (int i = 0; i < static_cast<int>(scenes.size()); ++i) {
+            const Scene &s = scenes[static_cast<size_t>(i)];
+            entries.push_back({&s.name, &s.sections, &kNone, i, nullptr});
+        }
+        for (const std::vector<ScenePreset> *list :
+             std::initializer_list<const std::vector<ScenePreset> *>{&builtins,
+                                                                     &user_presets_.scenes}) {
+            for (const ScenePreset &p : *list) {
+                const auto seen = std::find_if(entries.begin(), entries.end(),
+                                               [&](const Entry &e) { return *e.name == p.name; });
+                if (seen == entries.end()) {
+                    entries.push_back({&p.name, &p.scene.sections, &p.description, -1, &p});
+                } else if (seen->description->empty()) {
+                    seen->description = &p.description; // A show scene from this preset.
+                }
+            }
+        }
+        std::optional<Entry> chosen;
+        if (ImGui::BeginTable("##scenes by section", static_cast<int>(std::size(kColumns)),
+                              ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
+            for (const Column &column : kColumns) {
+                ImGui::TableSetupColumn(column.title);
+            }
+            ImGui::TableHeadersRow();
+            ImGui::TableNextRow();
+            for (const Column &column : kColumns) {
+                ImGui::TableNextColumn();
+                ImGui::PushID(column.title);
+                for (size_t k = 0; k < entries.size(); ++k) {
+                    const Entry &e = entries[k];
+                    const bool fits = std::any_of(
+                        column.sections.begin(), column.sections.end(), [&](const std::string &s) {
+                            return std::find(e.sections->begin(), e.sections->end(), s) !=
+                                   e.sections->end();
+                        });
+                    if (!fits) {
+                        continue;
+                    }
+                    ImGui::PushID(static_cast<int>(k));
+                    if (e.scene >= 0) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, theme().accent);
+                    }
+                    if (ImGui::Selectable(e.name->c_str(),
+                                          e.scene >= 0 && e.scene == config_.manual_scene)) {
+                        chosen = e;
+                    }
+                    if (e.scene >= 0) {
+                        ImGui::PopStyleColor();
+                    }
+                    ImGui::SetItemTooltip("%s%s%s", e.description->c_str(),
+                                          e.description->empty() ? "" : "\n",
+                                          e.scene >= 0 ? "In this show." : "Adds it to this show.");
+                    ImGui::PopID();
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        ImGui::EndCombo();
+        if (chosen) {
+            int scene = chosen->scene;
+            if (scene < 0) {
+                scene = apply_scene_preset(project_.edit(), *chosen->preset, -1);
+                project_.changed();
+                preset_status_ = "Added " + *chosen->name + ".";
+            }
+            pick_scene(scene);
+        }
+    }
+    ImGui::EndDisabled();
+}
+
+const std::string &PreviewView::current_pack() {
+    if (pack_version_ == project_.version()) {
+        return pack_name_;
+    }
+    pack_version_ = project_.version();
+    static const std::vector<ShowPack> builtins = builtin_show_packs();
+    const std::vector<Scene> &scenes = project_.project().scenes;
+    const auto same = [&](const ShowPack &pack) {
+        return std::equal(scenes.begin(), scenes.end(), pack.scenes.begin(), pack.scenes.end(),
+                          [](const Scene &a, const Scene &b) { return a.name == b.name; });
+    };
+    pack_name_ = "custom";
+    for (const std::vector<ShowPack> *list :
+         std::initializer_list<const std::vector<ShowPack> *>{&builtins, &user_presets_.shows}) {
+        for (const ShowPack &pack : *list) {
+            if (pack_name_ == "custom" && same(pack)) {
+                pack_name_ = pack.name;
+            }
+        }
+    }
+    return pack_name_;
+}
+
 void PreviewView::draw_library() {
     if (ImGui::Button("Show packs")) {
         user_presets_ = load_user_presets(presets_dir_);
+        pack_version_ = ~0ull; // The user's packs may have changed.
         ImGui::OpenPopup("##show packs");
     }
     ImGui::SetItemTooltip("Whole show styles: scenes, palettes, automation and macro names.");
+    ImGui::SameLine();
+    ImGui::TextUnformatted(current_pack().c_str());
+    ImGui::SetItemTooltip("The pack this show's scenes come from (custom: none matches).");
     if (!preset_status_.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("%s", preset_status_.c_str());

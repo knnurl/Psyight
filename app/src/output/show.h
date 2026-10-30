@@ -60,6 +60,9 @@ struct ShowConfig {
     // counts as a flash); hold keeps sending the last frame shown. Blackout wins over hold.
     bool blackout = false;
     bool hold = false;
+    // The Ambient step: the aurora (engine/aurora.h) in place of the scenes, on its own clock, so
+    // it needs no track and moves while the transport is stopped. A test pattern wins over it.
+    bool ambient = false;
     std::uint64_t seed = 1;
     std::array<double, kMacroCount> macros{}; // The macro knobs, 0 to 1 (modulation sources).
     // A test pattern (preflight) replaces the scenes while on; with test.send it goes to the
@@ -108,6 +111,7 @@ class ShowRenderer {
     // The test pattern's clock: frames since it started (it runs while the transport is stopped).
     TestPatternKind test_kind_ = TestPatternKind::off;
     std::int64_t test_frames_ = 0;
+    std::int64_t ambient_frames_ = 0; // The aurora's clock: frames since Ambient began.
     OutputSender sender_;
     VirtualNode node_;
     std::unique_ptr<UdpSocket> socket_;

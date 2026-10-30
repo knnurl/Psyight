@@ -13,7 +13,7 @@ The top bar has three parts:
 - **The state ladder:** Preflight, Preview, Ambient, React, Show. Only Ambient, React and Show send to the lights.
 - **The depth:** Operate, Tune or Engineer. It sets how many controls you see. Operate is enough during a show.
 - **The safety controls**, always at the right:
-  - Brightness: the brightness cap as a percentage (the same as Show > Limiters > Brightness): drag up or down (Shift: fine), double-click to type, right-click to reset or MIDI-learn it.
+  - Brightness: the brightness cap as a percentage (the same as Show > Limiters > Brightness): drag up or down, or right and left (Shift: fine), double-click to type, right-click to reset or MIDI-learn it.
   - Blackout (B): black at once, and the way back up still counts against the flash limit.
   - Hold (H): freezes the current look.
 
@@ -49,6 +49,7 @@ Open the Preflight tab. **Test patterns** check the wiring before anything else 
 - **Colour order:** the whole rig shows red, green, blue in turn, and the panel names the colour. A strip showing another colour needs its Order changed in the Rig tab.
 - **Identify universe:** only one universe's pixels light.
 - **All on:** full white through the limiters, with the current it draws. Mind the supply.
+- **Eye candy:** no check, just something pleasant to watch: a colour wheel turning slowly about the rig's centre, twisted into a spiral, with soft rings breathing out from the middle. For showing the lights off.
 
 Every check line should be green; read every amber line:
 
@@ -112,8 +113,8 @@ The lights should flash when the audience hears the kick, not when the computer 
 
 
 - **Show:** the scenes follow the music's sections (groove, breakdown, build, drop) on their own.
-- **React:** the scene stays as you choose it from the scene buttons (or keys 1 to 9, on the number row or the keypad; 0 goes back to the sections); the effects still follow the music. A scene you pick waits for the next bar (or phrase, or none: the menu beside Auto), and its button pulses until it takes over.
-- **Ambient:** the calm ambient scene only, at half the brightness cap. Use it between sets, during talks, or whenever the analysis looks wrong.
+- **React:** the scene stays as you choose it from the scene buttons (or keys 1 to 9, on the number row or the keypad; 0 goes back to the sections); the effects still follow the music. A scene you pick waits for the next bar (or phrase, or none: the menu beside Auto), and its button pulses until it takes over. **Every scene...** (under Auto) lists every scene in columns by section (intro and outro, groove, breakdown, build, drop): this show's in the accent, then the built-in and your presets. Picking one plays it; a preset not in the show is added to it first.
+- **Ambient:** a slow aurora (after WLED's Aurora): soft waves of green, teal, blue and violet drifting along each strip and fading in and out, at half the brightness cap. It ignores the music, needs no track and keeps moving while the transport is stopped. Use it between sets, during talks, or whenever the analysis looks wrong.
 - **Blackout and Hold** work in every state.
 
 Watch the live status: if "Locked" turns to "Acquiring" (a new track at another tempo), the beat keeps running and settles within a few kicks. Long breakdowns are fine: the beat keeps time until the kick returns. If the lights clearly fight the music for more than a few bars, go to React or Ambient.
@@ -138,7 +139,7 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 
 **Presets** (Tune depth):
 
-- **Show packs:** a whole show style in one go: scenes, palettes, automation and macro names. Built-in: Psyight default, Dark minimal, Full colour, Live macros, Psy club, Dark forest and Hexagon (for hexagonal rigs such as the Hexagon mandala: hex tunnels and a radar sweep in grooves, comet rain at high energy, pressure building through builds (Hex pressure: hexagons falling inwards ever faster, each kick pushing one back out, brighter with the riser), a blooming drop, a nebula in breakdowns and deep space at the ends). The hexagon effects (Hex pulse, Cube, Sectors, Interference) and the Hex rings and Around mappings work on any rig, seen as a hexagon about its centre; set Corners if the rig's shape guesses the hexagon's orientation wrong. Loading asks first; macro values, the rig, limiters and output stay. "Save this show as a pack" keeps yours.
+- **Show packs:** a whole show style in one go: scenes, palettes, automation and macro names. The name beside the button is the pack the show's scenes come from (custom when none matches). Built-in: Psyight default, Dark minimal, Full colour, Live macros, Psy club, Dark forest and Hexagon (for hexagonal rigs such as the Hexagon mandala: hex tunnels and a radar sweep in grooves, comet rain at high energy, pressure building through builds (Hex pressure: hexagons falling inwards ever faster, each kick pushing one back out, brighter with the riser), a blooming drop, a nebula in breakdowns and deep space at the ends). The hexagon effects (Hex pulse, Cube, Sectors, Interference) and the Hex rings and Around mappings work on any rig, seen as a hexagon about its centre; set Corners if the rig's shape guesses the hexagon's orientation wrong. Loading asks first; macro values, the rig, limiters and output stay. "Save this show as a pack" keeps yours.
 - **Scene presets** (the scene's Presets button): a look with its layers, modulation and palette. Replace the scene you are editing, or add it as a new one. "Save this scene as a preset" keeps yours.
 - **Palettes:** "Add from the library" for more palettes (none use white: it is kept for kicks and drops); "Save to the library" keeps one.
 

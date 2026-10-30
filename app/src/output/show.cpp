@@ -1,5 +1,6 @@
 #include "output/show.h"
 
+#include "engine/aurora.h"
 #include "engine/inputs.h"
 #include "output/precise_sleep.h"
 
@@ -11,7 +12,8 @@ namespace psyight {
 namespace {
 
 constexpr double kSeekResetS = 0.5; // A jump this large restarts the limiters' history.
-constexpr double kTestPatternFrameRateHz = 60.0; // The show thread's rate: the pattern's clock.
+constexpr double kTestPatternFrameRateHz =
+    60.0; // The show thread's rate: pattern and aurora clock.
 
 } // namespace
 
@@ -56,6 +58,9 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     }
     last_t_s_ = t_s;
     const bool testing = config.test.kind != TestPatternKind::off;
+    if (!config.ambient) {
+        ambient_frames_ = 0;
+    }
     if (config.test.kind != test_kind_) {
         test_kind_ = config.test.kind;
         test_frames_ = 0;
@@ -86,6 +91,11 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
                                                           out.test_clock_s);
     } else if (config.hold && !config.blackout && held_.frame.size() == config.rig.pixels.size()) {
         out = held_; // The look, frozen; the limiters and automation are skipped.
+    } else if (config.ambient) {
+        out.section = "ambient";
+        const double clock_s = static_cast<double>(ambient_frames_++) / kTestPatternFrameRateHz;
+        out.frame = config.blackout ? Frame(config.rig.pixels.size())
+                                    : render_aurora(config.rig, clock_s, config.seed);
     } else if (config.analysis != nullptr || config.live != nullptr) {
         EngineInputs inputs;
         double silence_fade = 1.0;
