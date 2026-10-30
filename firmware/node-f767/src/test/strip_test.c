@@ -23,10 +23,25 @@
 
 static inline uint32_t cycles(void) { return DWT->CYCCNT; }
 
+#ifdef STRIP_TEST_DMA
+/* The same pattern through the node's output engine (ws2812.c: timer and DMA), with no network:
+ * set apart from the bit-banged test, it shows whether that engine alone makes pixels flicker.
+ * NODE_MAX_PIXELS_PER_LANE (680) pixels a frame; interrupts come from the node's
+ * stm32f7xx_it.c. */
+#include "ws2812.h"
+
+#include <string.h>
+
+#undef STRIP_TEST_PIXELS
+#define STRIP_TEST_PIXELS NODE_MAX_PIXELS_PER_LANE
+static uint8_t s_lanes[NODE_LANES][NODE_LANE_BYTES];
+#else
 /* The only interrupt the test needs (the node's stm32f7xx_it.c would bring in its DMA engine). */
 void SysTick_Handler(void);
 void SysTick_Handler(void) { HAL_IncTick(); }
+#endif
 
+#ifndef STRIP_TEST_DMA
 static void lanes_init(void) {
     __HAL_RCC_GPIOD_CLK_ENABLE();
     GPIOD->BSRR = LANES_MASK << 16; /* Low before they become outputs. */
@@ -51,13 +66,20 @@ static void send_byte(uint8_t v) {
         }
     }
 }
+#endif
 
 int main(void) {
     board_init();
+#ifdef STRIP_TEST_DMA
+    ws2812_init(0xFFu);
+    printf("\r\nPsyight strip test through the node's DMA engine: %u pixels on PD0 to PD7\r\n",
+           (unsigned)STRIP_TEST_PIXELS);
+#else
     lanes_init();
     printf("\r\nPsyight strip test: %u pixels on PD0 to PD7, dim colour each second, a bright "
            "runner\r\n",
            (unsigned)STRIP_TEST_PIXELS);
+#endif
     uint32_t frames = 0;
     uint32_t last_print = 0;
     uint32_t last_blink = 0;
@@ -72,6 +94,21 @@ int main(void) {
         const uint32_t now = (uint32_t)(elapsed / 216000u); /* Milliseconds. */
         const uint32_t colour = (now / 1000u) % 4u; /* Red, green, blue, white. */
         const uint32_t runner = (now / 25u) % STRIP_TEST_PIXELS;
+#ifdef STRIP_TEST_DMA
+        if (!ws2812_ready()) {
+            continue;
+        }
+        for (uint32_t i = 0; i < STRIP_TEST_PIXELS; ++i) {
+            const uint8_t v = i == runner ? BRIGHT : DIM;
+            const uint8_t px[3] = {colour == 1 || colour == 3 ? v : 0, /* Green, red, blue. */
+                                   colour == 0 || colour == 3 ? v : 0,
+                                   colour == 2 || colour == 3 ? v : 0};
+            for (int l = 0; l < NODE_LANES; ++l) {
+                memcpy(&s_lanes[l][i * 3u], px, 3);
+            }
+        }
+        ws2812_send(s_lanes, STRIP_TEST_PIXELS);
+#else
         __disable_irq();
         for (uint32_t i = 0; i < STRIP_TEST_PIXELS; ++i) {
             const uint8_t v = i == runner ? BRIGHT : DIM;
@@ -86,6 +123,7 @@ int main(void) {
         const uint32_t latch = cycles();
         while (cycles() - latch < LATCH_US * 216u) {
         }
+#endif
         ++frames;
         if (now - last_blink >= 500u) {
             last_blink = now;

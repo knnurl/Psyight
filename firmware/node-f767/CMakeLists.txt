@@ -86,6 +86,26 @@ add_custom_command(TARGET strip_test POST_BUILD
     COMMAND ${CMAKE_SIZE} $<TARGET_FILE:strip_test>
     VERBATIM)
 
+# The same test through the node's output engine (timer and DMA), with no network.
+add_executable(strip_test_dma
+    src/test/strip_test.c src/board/board.c src/board/syscalls.c src/board/stm32f7xx_it.c
+    src/ws2812/ws2812.c src/core/node_core.c
+    ${TP}/cmsis_device_f7/Source/Templates/system_stm32f7xx.c
+    ${TP}/cmsis_device_f7/Source/Templates/gcc/startup_stm32f767xx.s
+    ${HAL_SOURCES})
+set_target_properties(strip_test_dma PROPERTIES SUFFIX .elf OUTPUT_NAME psyight_strip_test_dma)
+target_compile_definitions(strip_test_dma PRIVATE STM32F767xx USE_HAL_DRIVER STRIP_TEST_DMA)
+target_include_directories(strip_test_dma PRIVATE
+    src/board src/core src/ws2812
+    ${TP}/cmsis_core/CMSIS/Core/Include
+    ${TP}/cmsis_device_f7/Include
+    ${TP}/stm32f7xx_hal_driver/Inc)
+target_link_options(strip_test_dma PRIVATE
+    -T${CMAKE_CURRENT_SOURCE_DIR}/STM32F767ZITX_FLASH.ld
+    -Wl,--print-memory-usage
+    -Wl,--no-warn-rwx-segments)
+target_link_libraries(strip_test_dma PRIVATE m)
+
 add_custom_command(TARGET node POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:node> $<TARGET_FILE_DIR:node>/psyight_node_f${NODE_STAGE}.bin
     COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:node> $<TARGET_FILE_DIR:node>/psyight_node_f${NODE_STAGE}.hex
