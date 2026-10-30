@@ -373,13 +373,35 @@ Rig build_rig(std::vector<StripSpec> strips) {
         }
         const double pitch_m = 1.0 / strip.pixels_per_m;
         // Pixels per piece, filling each in turn (the last takes any beyond), and where the first
-        // sits: a full piece is centred, its leftover shared between its two ends.
+        // sits: a full piece is centred, its leftover shared between its two ends. Fewer than
+        // the pieces hold (a count set by hand) are shared out over them in proportion to their
+        // room, each piece's centred: a ring built with a pixel less on every side matches.
         const std::vector<Span> spans =
             pieces[s].empty() ? std::vector<Span>{{0.0, 0.0}} : pieces[s];
         std::vector<int> on(spans.size(), 0);
         std::vector<double> start_m(spans.size(), 0.0);
-        int left = strip.count;
-        for (size_t k = 0; k < spans.size(); ++k) {
+        const int all_room = pixels_fitting(spans, strip.pixels_per_m);
+        if (spans.size() > 1 && strip.count > 0 && strip.count < all_room) {
+            std::vector<double> remainder(spans.size(), 0.0);
+            int given = 0;
+            for (size_t k = 0; k < spans.size(); ++k) {
+                const double exact = static_cast<double>(strip.count) *
+                                     pixels_fitting({spans[k]}, strip.pixels_per_m) / all_room;
+                on[k] = static_cast<int>(std::floor(exact + 1e-9));
+                remainder[k] = exact - on[k];
+                given += on[k];
+            }
+            for (; given < strip.count; ++given) { // The rest to the largest remainders.
+                const auto most = std::max_element(remainder.begin(), remainder.end());
+                ++on[static_cast<size_t>(most - remainder.begin())];
+                *most = -1.0;
+            }
+            for (size_t k = 0; k < spans.size(); ++k) {
+                start_m[k] = 0.5 * (spans[k].from_m + spans[k].to_m - on[k] * pitch_m);
+            }
+        }
+        int left = all_room > strip.count && spans.size() > 1 ? 0 : strip.count;
+        for (size_t k = 0; left > 0 && k < spans.size(); ++k) {
             const int room = pixels_fitting({spans[k]}, strip.pixels_per_m);
             on[k] = k + 1 == spans.size() ? left : std::min(left, room);
             left -= on[k];

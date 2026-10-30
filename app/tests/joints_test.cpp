@@ -188,3 +188,29 @@ TEST_CASE("joints: counts follow the path unless set by hand; old files infer wh
     CHECK(old[2].fills);
     CHECK_FALSE(old[3].fills);
 }
+
+TEST_CASE("joints: a count set below what fits is shared over the pieces, each centred") {
+    // A square ring, 1 m sides: four pieces of 0.99 m, 59 pixels each at 60 px/m. Set to 58 a
+    // side (232), as a ring built with a pixel less on every side.
+    std::vector<StripSpec> ring = {
+        strip("r", {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}, {0, 0, 0}}, 60.0, 232)};
+    ring[0].fills = false;
+    const Rig rig = build_rig(ring);
+    REQUIRE(rig.pixels.size() == 232);
+    CHECK(rig.fits[0] == 236);
+    // 58 on each side: the bottom side's (y = 0) first and last as far from its corners.
+    std::vector<double> bottom;
+    for (const Pixel &px : rig.pixels) {
+        if (std::fabs(px.position.y) < 1e-9) {
+            bottom.push_back(px.position.x);
+        }
+    }
+    REQUIRE(bottom.size() == 58);
+    CHECK(bottom.front() == doctest::Approx(1.0 - bottom.back()));
+    // Each side has 58: count pixels on the right side (x = 1) too.
+    int right = 0;
+    for (const Pixel &px : rig.pixels) {
+        right += std::fabs(px.position.x - 1.0) < 1e-9 ? 1 : 0;
+    }
+    CHECK(right == 58);
+}

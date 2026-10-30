@@ -77,7 +77,9 @@ void infer_fills(std::vector<StripSpec> &strips);
 
 // Places every strip's pixels along its pieces at the strip's own pitch, piece after piece: a
 // piece holding all it can has its pixels centred on it (the part of a pitch left over shared
-// between its ends); one holding fewer starts half a pitch in from its start. Pixels beyond what
+// between its ends); one holding fewer starts half a pitch in from its start. A strip of several
+// pieces with fewer pixels than they hold (a count set by hand) shares them out over its pieces
+// in proportion to their room, each piece's centred on it. Pixels beyond what
 // the pieces hold continue along the last piece and past the polyline's end in the last segment's
 // direction. A strip with no joints has one piece, its whole polyline.
 Rig build_rig(std::vector<StripSpec> strips);
