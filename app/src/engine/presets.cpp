@@ -544,6 +544,42 @@ std::vector<ScenePreset> builtin_scene_presets() {
         p.scene.routes.push_back(route(ModSource::riser, ModTarget::brightness, 0, 0.4));
         looks.push_back(std::move(p));
     }
+    { // Builds: Tension rise's closing rings and growing light, the Build scene's hats and kicks,
+      // in hexagons. Pressure: everything falls inwards, faster, while each kick pushes back out.
+        ScenePreset p{"Hex pressure",
+                      "Rings closing on the centre ever faster and hexagons collapsing into it, "
+                      "each kick pushing a hexagon back out, hats sparking; brighter and denser as "
+                      "the riser rises, then dark for the last beat.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        HexPulseParams collapse;
+        collapse.trigger = 1;   // Beat.
+        collapse.direction = 1; // In.
+        collapse.travel_beats = 1.0;
+        collapse.colours = 1; // By ring.
+        HexPulseParams push;
+        push.travel_beats = 0.5; // Out on each kick, against the fall.
+        push.width = 0.08;
+        push.decay_s = 0.25;
+        StutterParams gap;
+        gap.mode = 3; // Pre-drop gap.
+        p.scene.layers.push_back(make_layer({PlasmaParams{}}, BlendMode::alpha, 0.4f));
+        p.scene.layers.push_back(
+            make_layer({BuildParams{0.4, 0.6, 4.0, 0.1, 0.8}}, BlendMode::add, 0.6f));
+        p.scene.layers.push_back(make_layer({collapse}, BlendMode::screen, 0.3f));
+        p.scene.layers.push_back(make_layer({push}, BlendMode::screen));
+        p.scene.layers.push_back(make_layer({SparkleParams{}}, BlendMode::add, 0.4f));
+        p.scene.layers.push_back(make_layer({gap}, BlendMode::multiply));
+        p.scene.routes.push_back(route(ModSource::riser, ModTarget::brightness, 0, 0.5));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::opacity, 2, 0.7, ModCurve::exponential));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::opacity, 4, 0.6, ModCurve::exponential));
+        p.scene.routes.push_back(
+            route(ModSource::riser, ModTarget::setting, 4, 0.4, ModCurve::exponential, "density"));
+        looks.push_back(std::move(p));
+    }
     for (ScenePreset &p : looks) {
         p.scene.name = p.name;
         p.scene.palette = 0;
@@ -616,10 +652,10 @@ std::vector<ShowPack> builtin_show_packs() {
     ShowPack hexagon = pack_of(
         "Hexagon",
         "For hexagonal rigs: hex tunnels and a radar sweep in grooves, comet rain at high energy, "
-        "hexagons imploding through builds, a blooming drop, a nebula in breakdowns and deep "
-        "space at the ends.",
+        "pressure building through builds as hexagons fall inwards and kicks push back, a "
+        "blooming drop, a nebula in breakdowns and deep space at the ends.",
         {find(looks, "Hex tunnel"), find(looks, "Hex radar"), find(looks, "Comet rain"),
-         find(looks, "Nebula"), find(looks, "Hex implosion"), find(looks, "Drop bloom"),
+         find(looks, "Nebula"), find(looks, "Hex pressure"), find(looks, "Drop bloom"),
          find(looks, "Deep space")});
     hexagon.automation.palette_every_phrases = 2;
     packs.push_back(std::move(hexagon));

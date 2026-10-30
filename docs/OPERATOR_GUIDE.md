@@ -113,7 +113,7 @@ The lights should flash when the audience hears the kick, not when the computer 
 
 - **Show:** the scenes follow the music's sections (groove, breakdown, build, drop) on their own.
 - **React:** the scene stays as you choose it from the scene buttons (or keys 1 to 9, on the number row or the keypad; 0 goes back to the sections); the effects still follow the music. A scene you pick waits for the next bar (or phrase, or none: the menu beside Auto), and its button pulses until it takes over.
-- **Ambient:** the calm ambient scene only. Use it between sets, during talks, or whenever the analysis looks wrong.
+- **Ambient:** the calm ambient scene only, at half the brightness cap. Use it between sets, during talks, or whenever the analysis looks wrong.
 - **Blackout and Hold** work in every state.
 
 Watch the live status: if "Locked" turns to "Acquiring" (a new track at another tempo), the beat keeps running and settles within a few kicks. Long breakdowns are fine: the beat keeps time until the kick returns. If the lights clearly fight the music for more than a few bars, go to React or Ambient.
@@ -138,7 +138,7 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 
 **Presets** (Tune depth):
 
-- **Show packs:** a whole show style in one go: scenes, palettes, automation and macro names. Built-in: Psyight default, Dark minimal, Full colour, Live macros, Psy club, Dark forest and Hexagon (for hexagonal rigs such as the Hexagon mandala: hex tunnels and a radar sweep in grooves, comet rain at high energy, hexagons imploding through builds, a blooming drop, a nebula in breakdowns and deep space at the ends). The hexagon effects (Hex pulse, Cube, Sectors, Interference) and the Hex rings and Around mappings work on any rig, seen as a hexagon about its centre; set Corners if the rig's shape guesses the hexagon's orientation wrong. Loading asks first; macro values, the rig, limiters and output stay. "Save this show as a pack" keeps yours.
+- **Show packs:** a whole show style in one go: scenes, palettes, automation and macro names. Built-in: Psyight default, Dark minimal, Full colour, Live macros, Psy club, Dark forest and Hexagon (for hexagonal rigs such as the Hexagon mandala: hex tunnels and a radar sweep in grooves, comet rain at high energy, pressure building through builds (Hex pressure: hexagons falling inwards ever faster, each kick pushing one back out, brighter with the riser), a blooming drop, a nebula in breakdowns and deep space at the ends). The hexagon effects (Hex pulse, Cube, Sectors, Interference) and the Hex rings and Around mappings work on any rig, seen as a hexagon about its centre; set Corners if the rig's shape guesses the hexagon's orientation wrong. Loading asks first; macro values, the rig, limiters and output stay. "Save this show as a pack" keeps yours.
 - **Scene presets** (the scene's Presets button): a look with its layers, modulation and palette. Replace the scene you are editing, or add it as a new one. "Save this scene as a preset" keeps yours.
 - **Palettes:** "Add from the library" for more palettes (none use white: it is kept for kicks and drops); "Save to the library" keeps one.
 

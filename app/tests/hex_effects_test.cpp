@@ -196,3 +196,49 @@ TEST_CASE("hexagon pack: ids, settings and every scene renders on the mandala") 
         CHECK(most > 0.05f); // Something lit.
     }
 }
+
+TEST_CASE("hex pressure: brighter as the riser rises, a kick pushes out, dark for the last beat") {
+    const auto packs = builtin_show_packs();
+    const auto hexagon = std::find_if(packs.begin(), packs.end(),
+                                      [](const ShowPack &p) { return p.name == "Hexagon"; });
+    REQUIRE(hexagon != packs.end());
+    const auto scene = std::find_if(hexagon->scenes.begin(), hexagon->scenes.end(),
+                                    [](const Scene &s) { return s.name == "Hex pressure"; });
+    REQUIRE(scene != hexagon->scenes.end());
+    CHECK(scene->sections == std::vector<std::string>{"build"});
+    const Rig rig = mandala();
+    // A 64-beat build at 150 BPM.
+    const auto at = [](double progress, double riser) {
+        EngineInputs in = grid_at(static_cast<long long>(64 * progress), 0.5);
+        in.section = "build";
+        in.section_length_s = 64 * 0.4;
+        in.section_progress = progress;
+        in.since_section_s = progress * in.section_length_s;
+        in.riser = riser;
+        return in;
+    };
+    const auto total = [&](const EngineInputs &in) {
+        double sum = 0.0;
+        for (const Rgb &c : render_scene(*scene, rig, in, hexagon->palettes, 3)) {
+            sum += level(c);
+        }
+        return sum;
+    };
+    const double early = total(at(0.1, 0.0));
+    const double late = total(at(0.9, 1.0));
+    CAPTURE(early);
+    CAPTURE(late);
+    CHECK(late > 2.0 * early); // The rise.
+
+    EngineInputs kick = at(0.5, 0.5);
+    kick.kicks_so_far = 32;
+    kick.since_kick_s = 0.1;
+    CHECK(total(kick) > total(at(0.5, 0.5)) + 1.0); // A hexagon pushed out.
+
+    EngineInputs last = at(0.5, 1.0);
+    last.since_section_s = last.section_length_s - 0.2; // Halfway through the last beat.
+    last.since_kick_s = 0.1;
+    for (const Rgb &c : render_scene(*scene, rig, last, hexagon->palettes, 3)) {
+        CHECK(level(c) < 0.01f); // The held breath before the drop.
+    }
+}

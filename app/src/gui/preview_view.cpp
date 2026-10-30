@@ -167,7 +167,8 @@ void PreviewView::draw_top_bar() {
     static constexpr Step kSteps[] = {
         {Ladder::preflight, "Preflight", "Checks; nothing is sent to the network."},
         {Ladder::preview, "Preview", "The engine runs for the preview (virtual node) only."},
-        {Ladder::ambient, "Ambient", "Sends to the network: the ambient scene only."},
+        {Ladder::ambient, "Ambient",
+         "Sends to the network: the ambient scene only, at half brightness."},
         {Ladder::react, "React", "Sends to the network: scenes chosen by hand."},
         {Ladder::show, "Show", "Sends to the network: scenes follow the sections."},
     };
@@ -342,6 +343,9 @@ void PreviewView::sync_config() {
     config_.patch = project_.patch();
     config_.output = p.output;
     config_.limiter = p.limiter;
+    if (ladder_ == Ladder::ambient) { // Half brightness: the ambient step is a gentle one.
+        config_.limiter.brightness_cap *= 0.5;
+    }
     config_.pixel_caps = group_caps_per_pixel(config_.rig, p.group_caps);
     config_.latency_offset_s = 1e-3 * p.latency_offset_ms;
     config_.automation = p.automation;
