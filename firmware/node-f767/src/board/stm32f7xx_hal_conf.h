@@ -37,9 +37,12 @@ extern "C" {
 #define USE_HAL_ETH_REGISTER_CALLBACKS 0U
 #define USE_HAL_UART_REGISTER_CALLBACKS 0U
 
-/* Ethernet: four receive and four transmit DMA descriptors (HAL defaults), 1536-byte buffers. */
+/* Ethernet: 16 receive and four transmit DMA descriptors, 1536-byte buffers. Receive was the
+ * HAL's four, one frame's worth (three universes and sync): a controller sending a little
+ * unevenly, or the main loop busy with an LED frame or a status line, overflowed them and lost
+ * universes (sequence gaps; parts of the rig showing a stale frame, seen as flicker). */
 #define ETH_TX_DESC_CNT 4U
-#define ETH_RX_DESC_CNT 4U
+#define ETH_RX_DESC_CNT 16U
 #define ETH_RX_BUF_SIZE 1536U
 #define PHY_READ_TO 0x0000FFFFU /* MDIO read and write timeouts the ETH driver expects. */
 #define PHY_WRITE_TO 0x0000FFFFU

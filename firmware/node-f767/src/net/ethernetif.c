@@ -10,7 +10,7 @@
 
 #include <string.h>
 
-#define RX_BUFFER_COUNT 12u /* Pool for in-flight receive pbufs (descriptors plus the stack's). */
+#define RX_BUFFER_COUNT 24u /* Pool for in-flight receive pbufs (descriptors plus the stack's). */
 #define TX_TIMEOUT_MS 20u
 
 /* A receive buffer: lwIP's custom pbuf header followed by the frame the DMA writes. */
