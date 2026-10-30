@@ -5,6 +5,16 @@
 
 #define PI_F 3.14159265f
 
+/* Milliseconds from `then` to `now`, 0 when `then` is later. The main loop reads the time once
+ * and then polls the network, whose packets are stamped as they arrive, so a stamp can be a
+ * millisecond past the loop's `now`; plain unsigned subtraction wrapped that round to 49 days,
+ * calling the signal lost for a frame (the fallback flashed) and latching universes before their
+ * sync. Wraps of the tick itself (49.7 days) still work: the difference is taken mod 2^32. */
+static uint32_t elapsed_ms(uint32_t now, uint32_t then) {
+    const uint32_t d = now - then;
+    return d > 0x80000000u ? 0u : d;
+}
+
 node_settings node_default_settings(void) {
     node_settings s;
     memset(&s, 0, sizeof(s));
@@ -136,7 +146,7 @@ void node_on_packet(node_state *n, const psy_packet *p, bool art_net, uint32_t n
 
 bool node_signal_lost(const node_state *n, uint32_t now_ms) {
     const uint32_t since = n->have_data ? n->last_data_ms : 0u;
-    return now_ms - since > n->s.loss_timeout_ms;
+    return elapsed_ms(now_ms, since) > n->s.loss_timeout_ms;
 }
 
 static void fill_from_latched(const node_state *n, float scale,
@@ -194,12 +204,12 @@ static void fill_fallback(const node_state *n, uint32_t now_ms,
 }
 
 bool node_frame(node_state *n, uint32_t now_ms, uint8_t lanes[NODE_LANES][NODE_LANE_BYTES]) {
-    if (n->art_sync_mode && now_ms - n->art_sync_ms > NODE_ART_SYNC_TIMEOUT_MS) {
+    if (n->art_sync_mode && elapsed_ms(now_ms, n->art_sync_ms) > NODE_ART_SYNC_TIMEOUT_MS) {
         n->art_sync_mode = false; /* Art-Net 4: back to latching on data. */
         latch_all(n);
     }
     for (int u = 0; u < n->s.universe_count; ++u) {
-        if (n->pending[u] && now_ms - n->pending_since_ms[u] > NODE_SACN_SYNC_WAIT_MS &&
+        if (n->pending[u] && elapsed_ms(now_ms, n->pending_since_ms[u]) > NODE_SACN_SYNC_WAIT_MS &&
             !n->art_sync_mode) {
             latch(n, u); /* Its sync never came. */
             ++n->latches;
@@ -208,6 +218,7 @@ bool node_frame(node_state *n, uint32_t now_ms, uint8_t lanes[NODE_LANES][NODE_L
     if (node_signal_lost(n, now_ms)) {
         if (!n->lost) {
             n->lost = true;
+            ++n->losses;
             n->lost_since_ms = now_ms;
             n->loss_shown = false;
         }
@@ -227,8 +238,9 @@ bool node_frame(node_state *n, uint32_t now_ms, uint8_t lanes[NODE_LANES][NODE_L
             n->loss_shown = true;
             return true;
         case NODE_LOSS_FADE: {
-            const float gone =
-                n->s.fade_ms == 0 ? 1.0f : (float)(now_ms - n->lost_since_ms) / (float)n->s.fade_ms;
+            const float gone = n->s.fade_ms == 0 ? 1.0f
+                                                 : (float)elapsed_ms(now_ms, n->lost_since_ms) /
+                                                       (float)n->s.fade_ms;
             if (gone >= 1.0f) {
                 if (n->loss_shown) {
                     return false;

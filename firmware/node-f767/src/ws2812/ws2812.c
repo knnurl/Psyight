@@ -3,11 +3,8 @@
 #include "board.h"
 
 #define TICKS_PER_BIT 270u /* 1.25 us at 216 MHz. */
-/* High times inside every variant's window (WS2812 0.20 to 0.50 and 0.55 to 0.95 us, WS2812B V5
- * 0.22 to 0.38 and 0.58 to 1.00, SK6812 0.15 to 0.45 and 0.45 to 0.75): a 0 well short of where
- * the pixel samples (about 0.6 us), so an edge a little late still reads as a 0. */
-#define TICK_T0H 69u  /* 319 ns. */
-#define TICK_T1H 162u /* 750 ns. */
+#define TICK_T0H 86u       /* 398 ns. */
+#define TICK_T1H 173u      /* 801 ns. */
 #define LATCH_US 300u
 #define CYCLES_PER_US 216u
 /* The data lines: pins 0 to 7 of port D (PD8 and PD9, the console's USART3, are never touched:
@@ -52,8 +49,8 @@ static void stream_setup(DMA_Stream_TypeDef *s, uint32_t stream, const volatile 
      * memory read, which the CPU and the Ethernet DMA could hold up past a bit's edge (pixels
      * flickered while packets arrived). */
     s->FCR = DMA_SxFCR_DMDIS | DMA_SxFCR_FTH_0 | DMA_SxFCR_FTH_1; /* Threshold: full (4 words). */
-    s->CR = DMA_CHANNEL_6 | priority | DMA_SxCR_DIR_0 /* Memory to peripheral. */
-            | DMA_SxCR_MSIZE_1 | DMA_SxCR_PSIZE_1     /* 32-bit both sides. */
+    s->CR = DMA_CHANNEL_6 | priority | DMA_SxCR_DIR_0             /* Memory to peripheral. */
+            | DMA_SxCR_MSIZE_1 | DMA_SxCR_PSIZE_1                 /* 32-bit both sides. */
             | (increment ? DMA_SxCR_MINC : 0u) | (interrupt ? DMA_SxCR_TCIE : 0u);
 }
 

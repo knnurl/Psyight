@@ -235,6 +235,44 @@ TEST_CASE("node firmware: sync holds data until the sync packet, with timeouts")
     CHECK(lanes[0][0] == 77);
 }
 
+TEST_CASE("node firmware: packets stamped after the frame's time are not a lost signal") {
+    // The main loop reads the time once, then polls the network, whose packets are stamped as
+    // they arrive: a millisecond later when the tick moves on mid-poll. That time must not wrap
+    // round to "4 294 967 s since the last packet" (one frame of the fallback: the owner's
+    // hexagon pulsed purple at random) nor latch a universe before its sync.
+    const node_settings settings = node_default_settings(); // Fallback on loss.
+    auto node = std::make_unique<node_state>();
+    node_init(node.get(), &settings);
+    auto lane_buffer = std::make_unique<LaneBuffer>();
+    auto &lanes = lane_buffer->lanes;
+    std::vector<std::uint8_t> slots(510, 0); // Black: a fallback frame would show.
+    SacnSource source;
+    source.sync_universe = 1000;
+    std::vector<std::uint8_t> p;
+    psy_packet in{};
+    build_sacn_data(source, 1, 0, slots, p);
+    REQUIRE(psy_parse_sacn(p.data(), p.size(), &in));
+    node_on_packet(node.get(), &in, false, 5000);
+    build_sacn_sync(source.cid, 1000, 0, p);
+    REQUIRE(psy_parse_sacn(p.data(), p.size(), &in));
+    node_on_packet(node.get(), &in, false, 5000);
+    REQUIRE(node_frame(node.get(), 5000, lanes));
+
+    // The next frame's data, stamped 5017 while the loop still says 5016.
+    build_sacn_data(source, 1, 1, slots, p);
+    REQUIRE(psy_parse_sacn(p.data(), p.size(), &in));
+    node_on_packet(node.get(), &in, false, 5017);
+    CHECK_FALSE(node_signal_lost(node.get(), 5016));
+    CHECK_FALSE(node_frame(node.get(), 5016, lanes)); // Held for its sync, not latched early.
+    build_sacn_sync(source.cid, 1000, 1, p);
+    REQUIRE(psy_parse_sacn(p.data(), p.size(), &in));
+    node_on_packet(node.get(), &in, false, 5017);
+    REQUIRE(node_frame(node.get(), 5016, lanes));
+    CHECK(lanes[0][0] == 0); // The data (black), not the fallback's violet.
+    CHECK(lanes[0][1] == 0);
+    CHECK(lanes[0][2] == 0);
+}
+
 TEST_CASE("node firmware: signal loss runs the chosen policy") {
     for (const node_loss_policy policy :
          {NODE_LOSS_HOLD, NODE_LOSS_BLACKOUT, NODE_LOSS_FADE, NODE_LOSS_FALLBACK}) {

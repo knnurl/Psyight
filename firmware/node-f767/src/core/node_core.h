@@ -92,6 +92,7 @@ typedef struct {
     uint32_t packets;
     uint32_t latches;
     uint32_t sequence_gaps;
+    uint32_t losses;  /* Times the signal was taken as lost (the policy ran). */
     uint32_t ignored; /* Universes outside the node's range. */
 } node_state;
 
