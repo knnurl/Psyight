@@ -281,13 +281,16 @@ void PreviewView::draw_top_bar() {
             config_.hold = !config_.hold;
             dirty_ = true;
         }
-        // 1 to 9 pick scenes, 0 returns to the sections (not in Ambient: one scene only).
+        // 1 to 9 pick scenes, 0 returns to the sections (not in Ambient: one scene only); the
+        // number row or the keypad.
         if (ladder_ != Ladder::ambient) {
-            if (ImGui::IsKeyPressed(ImGuiKey_0, false)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_0, false) ||
+                ImGui::IsKeyPressed(ImGuiKey_Keypad0, false)) {
                 pick_scene(-1);
             }
             for (int k = 0; k < 9; ++k) {
-                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + k), false) &&
+                if ((ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + k), false) ||
+                     ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_Keypad1 + k), false)) &&
                     k < static_cast<int>(config_.scenes.size())) {
                     pick_scene(k);
                 }
