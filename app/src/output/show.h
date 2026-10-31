@@ -107,6 +107,7 @@ class ShowRenderer {
     std::uint64_t config_version_ = ~std::uint64_t{0};
     Limiters limiters_;
     ModMemory modulation_;   // The routes' memory (holding, smoothing); cleared on a seek.
+    SceneVariants variants_; // The scenes' variations, built when the configuration changes.
     SceneLauncher launcher_; // When a scene chosen by hand takes over.
     // The test pattern's clock: frames since it started (it runs while the transport is stopped).
     TestPatternKind test_kind_ = TestPatternKind::off;

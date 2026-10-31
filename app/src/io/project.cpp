@@ -185,6 +185,15 @@ AutomationParams parse_automation(const json &aut) {
     a.fill = from_id_or_throw(phrase_fill_from_id(fill), "fill", fill);
     a.fill_every_phrases = integer(aut, "fill_every_phrases", a.fill_every_phrases, 0, 64);
     a.fill_beats = number(aut, "fill_beats", a.fill_beats, 0.0, 16.0);
+    a.vary_every_phrases = integer(aut, "vary_every_phrases", a.vary_every_phrases, 0, 64);
+    if (aut.contains("vary") && aut["vary"].is_object()) {
+        const json &v = aut["vary"];
+        a.vary.reverse = optional<bool>(v, "reverse", a.vary.reverse);
+        a.vary.remap = optional<bool>(v, "remap", a.vary.remap);
+        a.vary.retime = optional<bool>(v, "retime", a.vary.retime);
+        a.vary.mirror = optional<bool>(v, "mirror", a.vary.mirror);
+        a.vary.mute = optional<bool>(v, "mute", a.vary.mute);
+    }
     return a;
 }
 
@@ -197,7 +206,14 @@ json automation_json(const AutomationParams &a) {
             {"rotate_fade_beats", finite(a.rotate_fade_beats, "rotate_fade_beats")},
             {"fill", phrase_fill_id(a.fill)},
             {"fill_every_phrases", a.fill_every_phrases},
-            {"fill_beats", finite(a.fill_beats, "fill_beats")}};
+            {"fill_beats", finite(a.fill_beats, "fill_beats")},
+            {"vary_every_phrases", a.vary_every_phrases},
+            {"vary",
+             {{"reverse", a.vary.reverse},
+              {"remap", a.vary.remap},
+              {"retime", a.vary.retime},
+              {"mirror", a.vary.mirror},
+              {"mute", a.vary.mute}}}};
 }
 
 json scene_json(const Scene &s) {

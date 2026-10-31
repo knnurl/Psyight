@@ -117,13 +117,16 @@ int check(const std::filesystem::path &audio_path, const Project &project,
             }
         }
     }
+    const SceneVariants variants =
+        all_variations(config.scenes, config.automation.vary, config.seed);
     const auto frames = static_cast<long long>(analysis->duration_s * fps);
     for (long long f = 0; f < frames; ++f) {
         const double t_s = static_cast<double>(f) / fps;
         const EngineInputs inputs = inputs_at(*analysis, config.grid, t_s);
         const SceneMix mix = automate(config.scenes, *analysis, config.grid, inputs,
                                       config.automation, config.manual_scene);
-        before.add(render_mix(config.scenes, mix, config.rig, inputs, config.palettes, config.seed),
+        before.add(render_mix(config.scenes, mix, config.rig, inputs, config.palettes, config.seed,
+                              nullptr, &variants),
                    t_s);
         for (size_t i = 0; i < solo.size(); ++i) {
             solo_meters[i].add(

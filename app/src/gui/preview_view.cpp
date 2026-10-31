@@ -2138,6 +2138,21 @@ void PreviewView::draw_automation() {
     field(drag_double("Fill length (beats)", &a.fill_beats, 0.05f, 0.0, 16.0, "%.1f"),
           "Up to the phrase's end.");
     ImGui::EndDisabled();
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_int("Vary every (phrases)", &a.vary_every_phrases, 0.05f, 0, 64, "%d"),
+          "The playing scene changes a little this often (its first phrases as made): 0 never.");
+    ImGui::BeginDisabled(a.vary_every_phrases == 0);
+    field(ImGui::Checkbox("Reverse", &a.vary.reverse), "Motion the other way; out becomes in.");
+    ImGui::SameLine();
+    field(ImGui::Checkbox("Remap", &a.vary.remap),
+          "A pattern moves to another mapping: along the strips, across, radial, hex rings...");
+    ImGui::SameLine();
+    field(ImGui::Checkbox("Retime", &a.vary.retime), "Twice as fast, or half.");
+    field(ImGui::Checkbox("Mirror", &a.vary.mirror), "More or fewer mirrored copies.");
+    ImGui::SameLine();
+    field(ImGui::Checkbox("Mute a layer", &a.vary.mute),
+          "One layer other than the first goes quiet (scenes of three layers or more).");
+    ImGui::EndDisabled();
     if (changed) {
         project_.edit().automation = a;
         project_.changed();

@@ -50,6 +50,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         limiters_.set_params(config.limiter);
         limiters_.set_pixel_caps(config.pixel_caps);
         node_.set_patch(config.patch);
+        variants_ = all_variations(config.scenes, config.automation.vary, config.seed);
         config_version_ = config.version;
     }
     if (std::abs(t_s - last_t_s_) > kSeekResetS) {
@@ -134,7 +135,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
             out.frame.assign(config.rig.pixels.size(), Rgb{});
         } else {
             out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
-                                   config.seed, &modulation_);
+                                   config.seed, &modulation_, &variants_);
             if (silence_fade < 1.0) { // Live, the music stopped: fade out.
                 for (Rgb &c : out.frame) {
                     c = scaled(c, silence_fade);

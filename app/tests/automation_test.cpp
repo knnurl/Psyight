@@ -1,6 +1,7 @@
 // Scene automation, the scene library and the build and drop effects.
 
 #include "engine/automation.h"
+#include "engine/effect_spec.h"
 #include "engine/inputs.h"
 #include "engine/rig.h"
 #include "engine/scene.h"
@@ -388,4 +389,98 @@ TEST_CASE("automation: phrase-end fills in long grooves, before rotations, not a
                               [](const Rgb &c) { return c.r + c.g + c.b == 0.0f; }));
         }
     }
+}
+
+namespace {
+
+bool same_look(const Scene &a, const Scene &b) {
+    if (a.layers.size() != b.layers.size()) {
+        return false;
+    }
+    for (size_t l = 0; l < a.layers.size(); ++l) {
+        const Layer &x = a.layers[l];
+        const Layer &y = b.layers[l];
+        if (x.opacity != y.opacity || x.spec.type() != y.spec.type()) {
+            return false;
+        }
+        for (size_t i = 0; i < effect_param_infos(x.spec.type()).size(); ++i) {
+            if (effect_param(x.spec, i) != effect_param(y.spec, i)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("variations: the scene first, then seeded changes of the kinds allowed") {
+    Scene scene;
+    WaveParams wave;
+    wave.rate = 1.0;
+    scene.layers.push_back(make_layer({PlasmaParams{}}, BlendMode::alpha));
+    scene.layers.push_back(make_layer({wave}, BlendMode::add));
+    scene.layers.push_back(make_layer({ShockwaveParams{}}, BlendMode::screen));
+    const std::vector<Scene> v = scene_variations(scene, VariationKinds{}, 7);
+    REQUIRE(v.size() == kSceneVariants);
+    CHECK(same_look(v[0], scene));
+    for (int k = 1; k < kSceneVariants; ++k) {
+        CAPTURE(k);
+        CHECK_FALSE(same_look(v[static_cast<size_t>(k)], scene));
+    }
+    CHECK(same_look(scene_variations(scene, VariationKinds{}, 7)[2], v[2])); // Deterministic.
+    // Only reversal allowed: the wave runs backwards, nothing else changes.
+    VariationKinds reverse_only{true, false, false, false, false};
+    const Scene back = scene_variations(scene, reverse_only, 7)[1];
+    CHECK(std::get<WaveParams>(back.layers[1].spec.params).rate == -1.0);
+    CHECK(back.layers[2].opacity == 1.0f);
+    // Nothing allowed: every variant is the scene.
+    for (const Scene &s :
+         scene_variations(scene, VariationKinds{false, false, false, false, false}, 7)) {
+        CHECK(same_look(s, scene));
+    }
+}
+
+TEST_CASE("automation: variations each phrase within a rotation, the scene itself first") {
+    const TrackAnalysis a = long_groove();
+    AutomationParams p; // Next scene every 2 phrases, a variation every phrase.
+    const auto at = [&](int phrase) { return rotated_at(a, phrase * kPhraseS + 1.0, p); };
+    CHECK(at(0).to == kGroove);
+    CHECK(at(0).variant == 0);
+    CHECK(at(1).to == kGroove);
+    CHECK(at(1).variant != 0);
+    CHECK(at(2).to == kStaccato);
+    CHECK(at(2).variant == 0);
+    CHECK(at(3).variant != 0);
+    // No rotation: a new variation every phrase, never the same twice running.
+    p.rotate_every_phrases = 0;
+    for (int phrase = 1; phrase < 5; ++phrase) {
+        CAPTURE(phrase);
+        CHECK(at(phrase).variant != 0);
+        CHECK(at(phrase + 1).variant != at(phrase).variant);
+        CHECK(at(phrase).variant == at(phrase).variant); // Deterministic.
+    }
+    p.vary_every_phrases = 0;
+    CHECK(at(3).variant == 0);
+    // Builds keep theirs.
+    TrackAnalysis build = a;
+    build.sections = {{0.0, 76.8, "build", 1.0}};
+    p.vary_every_phrases = 1;
+    CHECK(rotated_at(build, 3 * kPhraseS + 1.0, p).variant == 0);
+    // render_mix draws the variant.
+    const std::vector<Scene> scenes = default_scenes();
+    const SceneVariants variants = all_variations(scenes, VariationKinds{}, 1);
+    const Rig rig = default_rig();
+    const EngineInputs in = inputs_at(a, a.grid, 20.0);
+    SceneMix m;
+    m.to = kGroove;
+    const Frame plain = render_mix(scenes, m, rig, in, default_palettes(), 1, nullptr, &variants);
+    float most = 0.0f;
+    for (int k = 1; k < kSceneVariants; ++k) {
+        m.variant = k;
+        most =
+            std::max(most, max_difference(plain, render_mix(scenes, m, rig, in, default_palettes(),
+                                                            1, nullptr, &variants)));
+    }
+    CHECK(most > 0.05f);
 }

@@ -70,7 +70,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/engine/scene.cpp src/engine/rig_templates.cpp src/engine/strip_edit.cpp src/engine/presets.cpp src/engine/limiters.cpp
                                src/engine/automation.cpp src/engine/modulation.cpp
                                src/engine/effect_spec.cpp src/engine/space.cpp
-                               src/engine/pattern_effects.cpp src/engine/hex_effects.cpp src/engine/aurora.cpp
+                               src/engine/pattern_effects.cpp src/engine/hex_effects.cpp src/engine/aurora.cpp src/engine/variations.cpp
                                src/io/text_file.cpp src/io/session_record.cpp
                                src/output/recorder.cpp src/analysis/student_data.cpp
                                src/io/project.cpp

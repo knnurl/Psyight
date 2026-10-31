@@ -21,6 +21,9 @@
 //   implosion (a ring closing on the centre) or a pulse (pumping on the beats); mix picks one
 //   per phrase. Not at a section's last phrase in file mode (the section change is its own
 //   transition; live mode cannot know it), nor while a scene is held by hand.
+// - Variations (engine/variations.h): every vary_every_phrases phrases within a rotation the
+//   scene plays one of its variants (the first period the scene itself, then seeded, never the
+//   same twice running); not in builds. A change cuts on the downbeat or fades as a rotation does.
 // - Entering a groove or drop cuts (sections start on downbeats, so the cut lands on one);
 //   entering anything else crossfades over crossfade_beats, at most half the section.
 // - The palette shifts by one every palette_every_phrases phrases (counted over the track),
@@ -34,6 +37,7 @@
 #include "core/timebase.h"
 #include "engine/inputs.h"
 #include "engine/scene.h"
+#include "engine/variations.h"
 
 #include <array>
 #include <cstdint>
@@ -70,6 +74,8 @@ struct AutomationParams {
     PhraseFill fill = PhraseFill::mix;
     int fill_every_phrases = 2; // And before every rotation; 0: only before rotations.
     double fill_beats = 2.0;    // The fill's length, up to the phrase's end.
+    int vary_every_phrases = 1; // A new variation of the scene this often; 0: none.
+    VariationKinds vary;        // What variations may change.
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
@@ -103,6 +109,8 @@ struct SceneMix {
     int palette_shift = 0;  // Added to each scene's palette index.
     int palette_shift_from = 0;
     double palette_weight = 1.0;       // 1: palette_shift alone.
+    int variant = 0;                   // Of `to` (SceneVariants); 0: the scene itself.
+    int variant_from = 0;              // Of `from`.
     PhraseFill fill = PhraseFill::off; // A phrase-end fill playing (never mix: the one picked).
     double fill_s = 0.0;               // Its length...
     double fill_progress = 0.0;        // ...and how far through, 0 to 1.
@@ -138,9 +146,11 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
 // The routes' memory per scene, for render_mix (holding and smoothing; engine/modulation.h).
 using ModMemory = std::vector<std::vector<ModRouteState>>;
 
-// memory: null renders instantaneous route values; otherwise resized to the scenes.
+// memory: null renders instantaneous route values; otherwise resized to the scenes. variants: the
+// scenes' variations (all_variations) for SceneMix::variant; null draws the scenes themselves.
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
-                 std::uint64_t seed, ModMemory *memory = nullptr);
+                 std::uint64_t seed, ModMemory *memory = nullptr,
+                 const SceneVariants *variants = nullptr);
 
 } // namespace psyight

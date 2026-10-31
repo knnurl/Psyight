@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace psyight {
 
@@ -97,12 +98,61 @@ void place_fill(SceneMix &mix, const AutomationParams &params, const std::string
     mix.fill_progress = (t_s - (end_s - fill_s)) / fill_s;
 }
 
-// A rotation that began `since_s` ago (at a phrase start) crossfades from the scene before it.
-void fade_rotation(SceneMix &mix, int before, double since_s, double beat_s,
-                   const AutomationParams &params) {
+// Phrases into the current rotation step.
+long long phrases_into_step(const AutomationParams &params, const std::string &label,
+                            long long phrases) {
+    return params.rotate_every_phrases > 0 && label != "build"
+               ? phrases % params.rotate_every_phrases
+               : phrases;
+}
+
+// The variation `phrases` phrases into a rotation step: the scene itself for the first period,
+// then seeded by key, never the same twice running.
+int variant_at(const AutomationParams &params, const std::string &label, long long phrases,
+               std::uint64_t key) {
+    if (params.vary_every_phrases <= 0 || label == "build") {
+        return 0;
+    }
+    const long long periods = phrases / params.vary_every_phrases;
+    int previous = 0;
+    for (long long m = 1; m <= periods; ++m) {
+        std::uint64_t h = key * 0x9e3779b97f4a7c15ull + static_cast<std::uint64_t>(m);
+        h ^= h >> 31;
+        h *= 0xbf58476d1ce4e5b9ull;
+        h ^= h >> 29;
+        int v = 1 + static_cast<int>(h % (kSceneVariants - 1));
+        if (v == previous) {
+            v = v % (kSceneVariants - 1) + 1;
+        }
+        previous = v;
+    }
+    return previous;
+}
+
+struct Look {
+    int scene = 0;
+    int variant = 0;
+    bool operator==(const Look &) const = default;
+};
+
+// The look `phrases` phrases into a section (by label, occurrence and energy; key seeds its
+// variations).
+Look look_in_section(const std::vector<Scene> &scenes, const AutomationParams &params,
+                     const std::string &label, size_t occurrence, int energy, long long phrases,
+                     std::uint64_t key) {
+    const size_t step = rotation_step(params, label, phrases);
+    return {scene_for_label(scenes, label, occurrence, energy, step),
+            variant_at(params, label, phrases_into_step(params, label, phrases), key + step)};
+}
+
+// The look changed at the start of the current phrase (phrases > 0), `since_s` ago: a fade from
+// the one before, as a rotation fades.
+void fade_change(SceneMix &mix, const Look &before, double since_s, double beat_s,
+                 const AutomationParams &params) {
     const double fade_s = params.rotate_fade_beats * beat_s;
-    if (before != mix.to && fade_s > 0.0 && since_s >= 0.0 && since_s < fade_s) {
-        mix.from = before;
+    if (before != Look{mix.to, mix.variant} && fade_s > 0.0 && since_s >= 0.0 && since_s < fade_s) {
+        mix.from = before.scene;
+        mix.variant_from = before.variant;
         mix.to_weight = since_s / fade_s;
     }
 }
@@ -257,46 +307,44 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
                        static_cast<std::uint64_t>(std::llround(own.start_s * 1000.0)));
         }
     }
-    // The scene of section i at time t_s: its own (or the one before a blip), rotated by the
-    // phrases it has run.
-    const auto scene_at = [&](size_t i, double t_s, size_t *step_out) {
+    // The look of section i at time t_s: its own section's (or the one before a blip), rotated
+    // and varied by the phrases it has run.
+    const auto look_at = [&](size_t i, double t_s, long long *phrases_out) {
         const size_t own = own_section(sections, i, phrase_s);
         const DetectedSection &s = sections[own];
-        const size_t step =
-            rotation_step(params, s.label, phrases_run(phrase_starts, s.start_s, t_s));
-        if (step_out != nullptr) {
-            *step_out = step;
+        const long long phrases = phrases_run(phrase_starts, s.start_s, t_s);
+        if (phrases_out != nullptr) {
+            *phrases_out = phrases;
         }
-        return scene_for_label(scenes, s.label, occurrence_of(sections, own, phrase_s), s.energy,
-                               step);
+        const auto key = static_cast<std::uint64_t>(std::llround(s.start_s * 1000.0));
+        const size_t occurrence = occurrence_of(sections, own, phrase_s);
+        return std::pair{
+            look_in_section(scenes, params, s.label, occurrence, s.energy, phrases, key),
+            phrases > 0
+                ? look_in_section(scenes, params, s.label, occurrence, s.energy, phrases - 1, key)
+                : Look{-1, 0}};
     };
-    size_t step = 0;
-    mix.to = scene_at(index, inputs.t_s, &step);
-    if (step > 0 && inputs.phrase_index >= 0 &&
+    long long phrases = 0;
+    const auto [now, before] = look_at(index, inputs.t_s, &phrases);
+    mix.to = now.scene;
+    mix.variant = now.variant;
+    if (phrases > 0 && before != now && inputs.phrase_index >= 0 &&
         static_cast<size_t>(inputs.phrase_index) < phrase_starts.size()) {
-        const DetectedSection &own = sections[own_section(sections, index, phrase_s)];
-        const double phrase_start_s = phrase_starts[static_cast<size_t>(inputs.phrase_index)];
-        if (rotation_step(params, own.label,
-                          phrases_run(phrase_starts, own.start_s, phrase_start_s - 1e-3)) !=
-            step) { // This phrase began the rotation.
-            fade_rotation(
-                mix,
-                scene_for_label(
-                    scenes, own.label,
-                    occurrence_of(sections, own_section(sections, index, phrase_s), phrase_s),
-                    own.energy, step - 1),
-                inputs.t_s - phrase_start_s, beat_s, params);
-            return mix;
-        }
+        // This phrase began a rotation or a new variation.
+        fade_change(mix, before,
+                    inputs.t_s - phrase_starts[static_cast<size_t>(inputs.phrase_index)], beat_s,
+                    params);
+        return mix;
     }
     if (index == 0 || cuts_into(inputs.section)) {
         return mix;
     }
-    // The scene the section before ended on.
-    const int previous = scene_at(index - 1, sections[index].start_s - 1e-3, nullptr);
+    // The look the section before ended on.
+    const Look previous = look_at(index - 1, sections[index].start_s - 1e-3, nullptr).first;
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
-    if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
-        mix.from = previous;
+    if (previous != now && fade_s > 0.0 && inputs.since_section_s < fade_s) {
+        mix.from = previous.scene;
+        mix.variant_from = previous.variant;
         mix.to_weight = inputs.since_section_s / fade_s;
     }
     return mix;
@@ -337,18 +385,23 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
     const double phrase_s = 4.0 * state.phrase_bars * beat_s;
     const double into_s = std::max(0.0, inputs.t_s - state.section_start_s);
     const auto phrases = static_cast<long long>(std::floor(into_s / phrase_s + 1e-9));
-    const size_t step = rotation_step(params, inputs.section, phrases);
     place_fill(mix, params, inputs.section, phrases,
                state.section_start_s + static_cast<double>(phrases + 1) * phrase_s, false,
                inputs.t_s, beat_s, static_cast<std::uint64_t>(state.section_count));
-    mix.to = scene_for_label(scenes, inputs.section, occurrence(state.section),
-                             state.section_energy, step);
-    if (step > 0 && rotation_step(params, inputs.section, phrases - 1) != step) {
-        fade_rotation(mix,
-                      scene_for_label(scenes, inputs.section, occurrence(state.section),
-                                      state.section_energy, step - 1),
-                      into_s - static_cast<double>(phrases) * phrase_s, beat_s, params);
-        return mix;
+    const auto key = static_cast<std::uint64_t>(state.section_count);
+    const Look now = look_in_section(scenes, params, inputs.section, occurrence(state.section),
+                                     state.section_energy, phrases, key);
+    mix.to = now.scene;
+    mix.variant = now.variant;
+    if (phrases > 0) {
+        const Look before =
+            look_in_section(scenes, params, inputs.section, occurrence(state.section),
+                            state.section_energy, phrases - 1, key);
+        if (before != now) { // This phrase began a rotation or a new variation.
+            fade_change(mix, before, into_s - static_cast<double>(phrases) * phrase_s, beat_s,
+                        params);
+            return mix;
+        }
     }
     if (!state.has_previous || cuts_into(inputs.section)) {
         return mix;
@@ -356,12 +409,15 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
     const std::string previous_label = live_section_name(state.previous_section);
     const auto previous_phrases = static_cast<long long>(
         std::floor(std::max(0.0, state.previous_length_s / phrase_s - 1e-6)));
-    const int previous = scene_for_label(
-        scenes, previous_label, static_cast<size_t>(state.previous_occurrence),
-        state.previous_energy, rotation_step(params, previous_label, previous_phrases));
+    // The look the section before ended on.
+    const Look previous =
+        look_in_section(scenes, params, previous_label,
+                        static_cast<size_t>(state.previous_occurrence), state.previous_energy,
+                        previous_phrases, static_cast<std::uint64_t>(state.section_count - 1));
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
-    if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
-        mix.from = previous;
+    if (previous != now && fade_s > 0.0 && inputs.since_section_s < fade_s) {
+        mix.from = previous.scene;
+        mix.variant_from = previous.variant;
         mix.to_weight = inputs.since_section_s / fade_s;
     }
     return mix;
@@ -481,7 +537,7 @@ int SceneLauncher::update(int requested, const EngineInputs &inputs, SceneLaunch
 
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
-                 std::uint64_t seed, ModMemory *memory) {
+                 std::uint64_t seed, ModMemory *memory, const SceneVariants *variants) {
     if (scenes.empty() || palettes.empty() || mix.to < 0 ||
         mix.to >= static_cast<int>(scenes.size())) {
         return Frame(rig.pixels.size());
@@ -489,8 +545,14 @@ Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Ri
     if (memory != nullptr) {
         memory->resize(scenes.size());
     }
-    const auto render = [&](int scene, int shift) {
-        const Scene &s = scenes[static_cast<size_t>(scene)];
+    const auto render = [&](int scene, int variant, int shift) {
+        const auto i = static_cast<size_t>(scene);
+        const auto v = static_cast<size_t>(variant);
+        // A variation shares its scene's route memory: the same routes, the same render time.
+        const Scene &s =
+            variants != nullptr && i < variants->size() && v > 0 && v < (*variants)[i].size()
+                ? (*variants)[i][v]
+                : scenes[i];
         // A scene rendered twice in a frame (a palette slew) steps its routes at the same render
         // time twice, which returns the same values.
         return render_scene(
@@ -499,11 +561,11 @@ Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Ri
     };
     // The scene crossfade at one palette shift.
     const auto render_scenes = [&](int shift) {
-        Frame incoming = render(mix.to, shift);
+        Frame incoming = render(mix.to, mix.variant, shift);
         if (mix.from < 0 || mix.to_weight >= 1.0) {
             return incoming;
         }
-        Frame frame = render(mix.from, shift);
+        Frame frame = render(mix.from, mix.variant_from, shift);
         mix_into(frame, incoming, mix.to_weight);
         return frame;
     };
