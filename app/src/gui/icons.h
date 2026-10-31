@@ -22,5 +22,6 @@ inline constexpr const char *kIconPrevious = "\xee\x85\xa3";  // skip-back, U+E1
 inline constexpr const char *kIconNext = "\xee\x85\xa4";      // skip-forward, U+E164.
 inline constexpr const char *kIconShuffle = "\xee\x85\xa2";   // shuffle, U+E162.
 inline constexpr const char *kIconFolderAdd = "\xee\x83\x9e"; // folder-plus, U+E0DE.
+inline constexpr const char *kIconQueue = "\xee\x8b\xa0";     // list-music, U+E2E0.
 
 } // namespace psyight

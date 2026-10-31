@@ -612,10 +612,15 @@ void Player::draw_table() {
 }
 
 void Player::draw_queue() {
-    if (!ImGui::Begin("Queue")) {
-        ImGui::End();
-        return;
+    if (ImGui::Begin("Queue")) {
+        draw_queue_contents();
     }
+    ImGui::End();
+}
+
+int Player::queue_size() const { return static_cast<int>(queue_.size()); }
+
+void Player::draw_queue_contents() {
     ImGui::BeginDisabled(!has_previous());
     if (ImGui::Button(icon_only(kIconPrevious, "previous").c_str())) {
         previous();
@@ -735,7 +740,6 @@ void Player::draw_queue() {
         const auto it = std::find(queue_.begin(), queue_.end(), playing_path);
         current_ = it == queue_.end() ? -1 : static_cast<int>(it - queue_.begin());
     }
-    ImGui::End();
 }
 
 } // namespace psyight

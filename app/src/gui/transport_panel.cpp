@@ -22,7 +22,7 @@ constexpr float kMaxVolumeDb = 6.0f;
 constexpr double kDefaultLoopLengthS = 6.0; // Four bars at 160 BPM.
 constexpr float kHandleGrabPixels = 6.0f;
 constexpr float kAuditionSpeed = 0.5f;    // Labelling audition: 16ths at 160 BPM become 188 ms.
-constexpr float kControlsWidthEm = 22.0f; // The controls beside the overview.
+constexpr float kControlsWidthEm = 26.0f; // The controls beside the overview.
 constexpr float kVolumeWidthEm = 6.0f;
 
 // An icon button's label with a stable ID (the icon may change).
@@ -94,6 +94,19 @@ void TransportPanel::draw() {
         }
         ImGui::SetItemTooltip("The next track in the queue.");
         ImGui::EndDisabled();
+        ImGui::SameLine();
+        char queue_label[48];
+        std::snprintf(queue_label, sizeof(queue_label), "%s %d###queue", kIconQueue,
+                      player_->queue_size());
+        if (ImGui::Button(queue_label)) {
+            ImGui::OpenPopup("##queue popup");
+        }
+        ImGui::SetItemTooltip("The queue: double-click to jump, drag to reorder.");
+        ImGui::SetNextWindowSize(ImVec2(30.0f * em, 22.0f * em));
+        if (ImGui::BeginPopup("##queue popup")) {
+            player_->draw_queue_contents();
+            ImGui::EndPopup();
+        }
         ImGui::SameLine();
     }
     const double position_s = samples_to_seconds(transport.position(), track.sample_rate_hz);

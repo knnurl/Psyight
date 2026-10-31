@@ -38,6 +38,9 @@ class Player {
     void update(); // Once a frame, before the panels: scans, the queue's advance, preloading.
     void draw_library();
     void draw_queue();
+    // The queue's buttons and list, for the Queue panel and the transport's dropdown.
+    void draw_queue_contents();
+    int queue_size() const;
     void after_frame(void *owner); // Its file dialogs, outside the frame (owner: the window).
 
     // The transport's previous and next.
