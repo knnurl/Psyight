@@ -4,6 +4,7 @@
 #include "gui/theme.h"
 #include "gui/widgets.h"
 #include "output/discovery.h"
+#include "output/eye_candy.h"
 #include "output/node_setup.h"
 #include "output/preflight.h"
 
@@ -263,7 +264,8 @@ void PreflightView::draw_test_patterns() {
     case TestPatternKind::off:
         help("Chase: each strip's direction and order. Colour order: catches a wrong RGB order. "
              "Identify universe: which pixels a universe reaches. All on: what full white draws "
-             "through the limiters. Eye candy: something pleasant to watch.");
+             "through the limiters. Eye candy: shows to watch (a hunting game, fireworks and "
+             "more).");
         break;
     case TestPatternKind::chase: {
         ImGui::SetNextItemWidth(12.0f * em);
@@ -333,9 +335,17 @@ void PreflightView::draw_test_patterns() {
              "really draws. Mind the supply.");
         break;
     case TestPatternKind::eye_candy:
-        help("A colour wheel turning slowly about the rig's centre, twisted into a spiral, with "
-             "soft rings breathing out from the middle. No check: for showing the lights off, or "
-             "between sets.");
+        ImGui::SetNextItemWidth(12.0f * em);
+        if (ImGui::BeginCombo("##candy", eye_candy_name(t.candy))) {
+            for (int k = 0; k < kEyeCandyCount; ++k) {
+                if (ImGui::Selectable(eye_candy_name(k), k == t.candy)) {
+                    t.candy = k;
+                }
+                ImGui::SetItemTooltip("%s", eye_candy_description(k));
+            }
+            ImGui::EndCombo();
+        }
+        help(eye_candy_description(t.candy));
         break;
     }
     if (t.kind != TestPatternKind::off && t.kind != TestPatternKind::all_on) {

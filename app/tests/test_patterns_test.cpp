@@ -1,11 +1,15 @@
 // Test patterns (output/test_patterns.h) and the show renderer drawing them.
 
 #include "engine/rig_templates.h"
+#include "output/eye_candy.h"
 #include "output/show.h"
 #include "output/test_patterns.h"
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cmath>
+#include <string>
 #include <vector>
 
 using namespace psyight;
@@ -86,11 +90,13 @@ TEST_CASE("test patterns: identify lights one universe's pixels only") {
     }
 }
 
-TEST_CASE("test patterns: eye candy lights every pixel in many colours, and moves") {
+TEST_CASE("test patterns: eye candy's spiral lights every pixel in many colours, and moves") {
     const Rig rig = two_strips();
     const Patch patch = build_patch(rig);
     TestPattern t;
     t.kind = TestPatternKind::eye_candy;
+    t.candy = 7;
+    REQUIRE(std::string(eye_candy_name(t.candy)) == "Spiral");
     const Frame f = render_test_pattern(t, rig, patch, 3.0);
     float darkest = 1.0f;
     float reddest = 0.0f;
@@ -106,6 +112,40 @@ TEST_CASE("test patterns: eye candy lights every pixel in many colours, and move
     CHECK(bluest > 0.1f);
     CHECK(f != render_test_pattern(t, rig, patch, 3.5));
     CHECK(f == render_test_pattern(t, rig, patch, 3.0));
+}
+
+TEST_CASE("test patterns: every eye candy show lights the hexagon, moves, and keeps the level") {
+    Rig rig;
+    for (const RigPreset &p : builtin_rig_presets()) {
+        if (p.name == "Hexagon mandala") {
+            rig = build_rig(p.strips);
+        }
+    }
+    REQUIRE(!rig.pixels.empty());
+    const Patch patch = build_patch(rig);
+    TestPattern t;
+    t.kind = TestPatternKind::eye_candy;
+    t.level = 0.6;
+    for (int show = 0; show < kEyeCandyCount; ++show) {
+        t.candy = show;
+        const std::string name = eye_candy_name(show);
+        CAPTURE(name);
+        int lit_frames = 0;
+        for (const double s : {1.0, 2.5, 4.0, 7.0, 9.5}) {
+            const Frame f = render_test_pattern(t, rig, patch, s);
+            CHECK(f == render_test_pattern(t, rig, patch, s)); // Deterministic.
+            CAPTURE(s);
+            CHECK(f != render_test_pattern(t, rig, patch, s + 0.25)); // Moving.
+            float most = 0.0f;
+            for (const Rgb &c : f) {
+                CHECK(std::isfinite(c.r));
+                most = std::max({most, c.r, c.g, c.b});
+            }
+            CHECK(most <= 0.6f + 1e-5f);
+            lit_frames += most > 0.1f ? 1 : 0;
+        }
+        CHECK(lit_frames >= 4);
+    }
 }
 
 TEST_CASE("show renderer: a test pattern replaces the scenes, through the limiters") {

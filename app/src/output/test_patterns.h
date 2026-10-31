@@ -7,8 +7,9 @@
 //   colour than the panel names has the wrong colour order.
 // - identify universe: only the pixels patched to that universe light, in cyan.
 // - all on: white at full, so the limiters show what full white really draws.
-// - eye candy: no check, just something pleasant to watch: a colour wheel turning slowly about
-//   the rig's centre, twisted into a spiral, with soft rings breathing out from the middle.
+// - eye candy: no check, just something to watch: one of the shows in output/eye_candy.h (a
+//   hunting game, billiards, bouncing balls, meteors, fireworks, ocean, lava lamp, spiral,
+//   aurora).
 // Pure: a function of the pattern, the rig, the patch and the pattern's own clock (seconds since
 // it started, counted in show frames so it runs while the transport is stopped).
 #pragma once
@@ -25,6 +26,7 @@ struct TestPattern {
     TestPatternKind kind = TestPatternKind::off;
     int strip = -1;                   // Chase: one strip by index, or -1 for every strip.
     int universe = 1;                 // Identify: the universe number.
+    int candy = 0;                    // Eye candy: which show (output/eye_candy.h).
     double chase_pixels_per_s = 30.0; // Chase speed.
     int chase_length = 6;             // Lit pixels, fading towards the tail.
     double level = 0.6;               // Every pattern but all on (which is 1).
