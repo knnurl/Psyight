@@ -116,6 +116,7 @@ The lights should flash when the audience hears the kick, not when the computer 
 
 - **Show:** the scenes follow the music's sections (groove, breakdown, build, drop) on their own.
 - **React:** the scene stays as you choose it from the scene buttons (or keys 1 to 9, on the number row or the keypad; 0 goes back to the sections); the effects still follow the music. A scene you pick waits for the next bar (or phrase, or none: the menu beside Auto), and its button pulses until it takes over. **Every scene...** (under Auto) lists every scene in columns by section (intro and outro, groove, breakdown, build, drop): this show's in the accent, then the built-in and your presets. Picking one plays it; a preset not in the show is added to it first.
+- **Full brightness** (the toggle at the top right of the rig preview): the preview shows the show undimmed (the brightness cap, Ambient's half and the power budget undone on screen) while the lights stay dimmed.
 - **Ambient:** a slow aurora (after WLED's Aurora): soft waves of green, teal, blue and violet drifting along each strip and fading in and out, at half the brightness cap. It ignores the music, needs no track and keeps moving while the transport is stopped. Use it between sets, during talks, or whenever the analysis looks wrong.
 - **Blackout and Hold** work in every state.
 

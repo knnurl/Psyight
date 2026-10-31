@@ -77,8 +77,14 @@ class PreviewView {
     int hovered_strip() const { return hovered_strip_; }
     void set_rig_view(std::string_view name) { canvas_.set_view(name); } // Capture's --view.
     void set_highlighted_strip(int strip) { highlighted_strip_ = strip; }
-    void apply_settings(const UserSettings &settings) { preview_open_ = settings.preview_open; }
-    void store_settings(UserSettings &settings) const { settings.preview_open = preview_open_; }
+    void apply_settings(const UserSettings &settings) {
+        preview_open_ = settings.preview_open;
+        full_brightness_ = settings.preview_full_brightness;
+    }
+    void store_settings(UserSettings &settings) const {
+        settings.preview_open = preview_open_;
+        settings.preview_full_brightness = full_brightness_;
+    }
 
   private:
     enum class Ladder { preflight, preview, ambient, react, show };
@@ -145,6 +151,7 @@ class PreviewView {
     bool scene_edited_ = false; // A scene changed this frame: the project is told once.
     Ladder ladder_ = Ladder::preview;
     bool preview_open_ = true;
+    bool full_brightness_ = false; // The preview with the dimming undone (the lights keep it).
     int hovered_strip_ = -1;
     int highlighted_strip_ = -1;
     std::filesystem::path presets_dir_ = "presets"; // Beside the project (the working directory).

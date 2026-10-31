@@ -27,6 +27,9 @@ struct UserSettings {
     bool show_pitch = true;      // Bass roll pitch background.
     bool snap = true;            // Bass roll: snap to 1/16.
     bool preview_open = true;    // The rig preview (folded when false).
+    // The rig preview at full brightness: the brightness cap, Ambient's half and the power
+    // budget undone on screen, while the lights stay dimmed.
+    bool preview_full_brightness = false;
     // Show mode (React and Show on the top bar): the Show theme, and the editing panels hidden.
     bool show_mode_theme = true;
     bool show_mode_hides_editing = true;

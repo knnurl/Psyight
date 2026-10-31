@@ -72,6 +72,7 @@ UserSettings load_user_settings(const std::filesystem::path &file) {
     read(root, "show_pitch", settings.show_pitch);
     read(root, "snap", settings.snap);
     read(root, "preview_open", settings.preview_open);
+    read(root, "preview_full_brightness", settings.preview_full_brightness);
     read(root, "show_mode_theme", settings.show_mode_theme);
     read(root, "show_mode_hides_editing", settings.show_mode_hides_editing);
     if (const auto it = root.find("label_folders"); it != root.end() && it->is_array()) {
@@ -112,6 +113,7 @@ void save_user_settings(const std::filesystem::path &file, const UserSettings &s
         {"show_pitch", settings.show_pitch},
         {"snap", settings.snap},
         {"preview_open", settings.preview_open},
+        {"preview_full_brightness", settings.preview_full_brightness},
         {"show_mode_theme", settings.show_mode_theme},
         {"show_mode_hides_editing", settings.show_mode_hides_editing},
         {"label_folders", settings.label_folders},

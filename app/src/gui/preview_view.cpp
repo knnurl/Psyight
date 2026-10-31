@@ -18,6 +18,7 @@
 #include <imgui_stdlib.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cfloat>
 #include <chrono>
@@ -418,6 +419,21 @@ void PreviewView::draw_preview(const ShowFrame *frame, const char *message) {
                   frame->report.power_scale < 1.0 ? " (power limited)" : "");
     } else {
         ImGui::TextDisabled("%s", message);
+    }
+    {
+        const char *full = "Full brightness";
+        const float fold_width = stage_ ? 0.0f
+                                        : ImGui::CalcTextSize(kIconFold).x +
+                                              2.0f * ImGui::GetStyle().FramePadding.x +
+                                              ImGui::GetStyle().ItemSpacing.x;
+        const float full_width =
+            ImGui::CalcTextSize(full).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), right - fold_width - full_width));
+        if (toggle_button(full, full_brightness_)) {
+            full_brightness_ = !full_brightness_;
+        }
+        ImGui::SetItemTooltip("The preview at full brightness: the brightness cap, Ambient's half "
+                              "and the power budget undone on screen. The lights stay dimmed.");
     }
     if (!stage_) {
         const std::string fold = std::string(kIconFold) + "###fold preview";
@@ -1963,8 +1979,27 @@ void PreviewView::draw_output(const ShowFrame &frame) {
 }
 
 void PreviewView::draw_rig(const ShowFrame &frame, bool tools) {
-    // The pixels, zoom and pan, hover arrows and the strip editor (gui/stage_canvas.h).
-    canvas_.draw(config_.rig, frame.node_rgb, config_.limiter.gamma, highlighted_strip_, tools);
+    // The pixels, zoom and pan, hover arrows and the strip editor (gui/stage_canvas.h). At full
+    // brightness, each byte is lifted by what dimmed it (the cap, which carries Ambient's half,
+    // and the power budget's scale), through the gamma: back to the frame before the dimming.
+    const double dimmed = std::clamp(config_.limiter.brightness_cap, 0.0, 1.0) *
+                          std::clamp(frame.report.power_scale, 0.0, 1.0);
+    if (full_brightness_ && dimmed > 1e-3 && dimmed < 0.999) {
+        const double gamma = std::max(0.1, config_.limiter.gamma);
+        std::array<std::uint8_t, 256> lift{};
+        for (int b = 0; b < 256; ++b) {
+            const double level = std::min(1.0, std::pow(b / 255.0, 1.0 / gamma) / dimmed);
+            lift[static_cast<size_t>(b)] =
+                static_cast<std::uint8_t>(std::lround(255.0 * std::pow(level, gamma)));
+        }
+        std::vector<std::uint8_t> lifted(frame.node_rgb.size());
+        for (size_t i = 0; i < lifted.size(); ++i) {
+            lifted[i] = lift[frame.node_rgb[i]];
+        }
+        canvas_.draw(config_.rig, lifted, config_.limiter.gamma, highlighted_strip_, tools);
+    } else {
+        canvas_.draw(config_.rig, frame.node_rgb, config_.limiter.gamma, highlighted_strip_, tools);
+    }
     hovered_strip_ = canvas_.hovered_strip();
 }
 
