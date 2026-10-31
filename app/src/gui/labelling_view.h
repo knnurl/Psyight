@@ -77,6 +77,10 @@ class LabellingView {
     std::vector<SectionLabel> working_sections() const;
     bool sections_labelled() const;
     void commit(std::vector<SectionLabel> sections); // One undo step; marks them edited.
+    // Breaks and fills: the labelled ones, else the detection's (what an edit starts from).
+    std::vector<EventLabel> working_events() const;
+    void toggle_event(const char *kind); // Keys B and F: one bar at the playhead's bar.
+    std::string section_text(const SectionLabel &s) const; // As the switch says.
     // The labelled phrase grid, or the detection's when none is labelled.
     LabelPhrases effective_phrases() const;
     bool detected_phrases_trusted() const; // The beat tracker's phrase offset, confident.
@@ -93,6 +97,7 @@ class LabellingView {
     bool folder_requested_ = false;
     std::string search_;
     std::string filter_ = "all"; // all, none, started, done.
+    bool detailed_ = true;       // Detailed section names (UserSettings::detailed_sections).
     std::string message_;        // The last save or scan outcome.
     float zoom_bars_ = 32.0f;    // The zoomed view's width.
     int dragging_ = -1;          // The boundary being dragged (index into the sections).

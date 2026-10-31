@@ -96,6 +96,7 @@ void LabellingView::apply_settings(const UserSettings &settings) {
         folders_.push_back(utf8_to_path(f));
     }
     filter_ = settings.label_filter;
+    detailed_ = settings.detailed_sections;
     scanned_ = false;
 }
 
@@ -105,6 +106,7 @@ void LabellingView::store_settings(UserSettings &settings) const {
         settings.label_folders.push_back(path_to_utf8(f));
     }
     settings.label_filter = filter_;
+    settings.detailed_sections = detailed_;
 }
 
 void LabellingView::after_frame(void *owner) {
@@ -161,8 +163,66 @@ std::vector<SectionLabel> LabellingView::working_sections() const {
         return session_.labels().labels().sections;
     }
     const TrackAnalysis *a = session_.track().track_analysis.get();
-    return a != nullptr ? sections_from_detection(a->sections, session_.labels().labels().grid)
-                        : std::vector<SectionLabel>{};
+    if (a == nullptr) {
+        return {};
+    }
+    std::vector<SectionLabel> drafted =
+        sections_from_detection(a->sections, session_.labels().labels().grid);
+    if (!detailed_) { // The previous names: no pre-drops, phases or roles.
+        std::erase_if(drafted, [](const SectionLabel &s) { return s.label == "predrop"; });
+        for (SectionLabel &s : drafted) {
+            s.phase.clear();
+            s.role.clear();
+        }
+    }
+    return drafted;
+}
+
+std::vector<EventLabel> LabellingView::working_events() const {
+    const Labels &l = session_.labels().labels();
+    if (!l.events.empty() || sections_labelled() || !session_.has_track()) {
+        return l.events;
+    }
+    std::vector<EventLabel> out;
+    if (const TrackAnalysis *a = session_.track().track_analysis.get(); a != nullptr) {
+        for (const DetectedEvent &e : a->events) {
+            out.push_back({e.kind, e.start_s, e.length_s});
+        }
+    }
+    return out;
+}
+
+void LabellingView::toggle_event(const char *kind) {
+    const LabelGrid &grid = session_.labels().labels().grid;
+    const double bar_s = bar_length_s(grid);
+    const double at =
+        bar_s > 0.0
+            ? grid.first_downbeat_s + static_cast<double>(bar_index_at(grid, playhead_s())) * bar_s
+            : playhead_s();
+    std::vector<EventLabel> events = working_events();
+    const auto here = std::find_if(events.begin(), events.end(), [&](const EventLabel &e) {
+        return e.kind == kind && at >= e.start_s - 1e-3 && at < e.start_s + e.length_s - 1e-3;
+    });
+    if (here != events.end()) {
+        events.erase(here);
+    } else {
+        events.push_back({kind, at, bar_s > 0.0 ? bar_s : 1.0});
+    }
+    session_.labels().set_events(std::move(events));
+}
+
+std::string LabellingView::section_text(const SectionLabel &s) const {
+    if (!detailed_) {
+        return s.label == "predrop" ? "build" : s.label;
+    }
+    std::string text = s.label;
+    if (!s.phase.empty()) {
+        text += " " + s.phase;
+    }
+    if (!s.role.empty()) {
+        text += " \xc2\xb7 " + s.role; // A middle dot.
+    }
+    return text;
 }
 
 void LabellingView::commit(std::vector<SectionLabel> sections) {
@@ -382,7 +442,7 @@ void LabellingView::draw_track() {
     from = std::clamp(from, -0.02 * window_s, std::max(0.0, track.duration_s - 0.98 * window_s));
     draw_timeline("##zoom", {from, from + window_s}, 11.0f * em, true);
     // The section keys as buttons in the sections' colours: a click marks at the playhead too.
-    for (int i = 0; i < static_cast<int>(std::size(kSectionNames)); ++i) {
+    for (int i = 0; i < (detailed_ ? static_cast<int>(std::size(kSectionNames)) : 6); ++i) {
         std::string name = kSectionNames[i];
         name[0] = static_cast<char>(name[0] - 'a' + 'A');
         const std::string text = std::to_string(i + 1) + "  " + name + "##mark";
@@ -406,7 +466,8 @@ void LabellingView::draw_track() {
                        ImGuiSliderFlags_Logarithmic);
     ImGui::SetItemTooltip("The zoomed view's width (or the mouse wheel over it).");
     ImGui::PushStyleColor(ImGuiCol_Text, theme().text_dim);
-    ImGui::TextWrapped("Keys: Space play; 1 to 7 sections (Shift: phrase, Alt: exact); Del "
+    ImGui::TextWrapped("Keys: Space play; 1 to 7 sections (Shift: phrase, Alt: exact; 7 pre-drop "
+                       "and B break, F fill with Detailed); Del "
                        "remove; P phrase; D downbeat; , . grid shift; [ ] jump; "
                        "Enter done; N next.");
     ImGui::PopStyleColor();
@@ -635,7 +696,12 @@ void LabellingView::draw_section_table() {
     }
     ImGui::EndDisabled();
     ImGui::SetItemTooltip("Drop the labelled sections (undoable).");
-    if (!ImGui::BeginTable("##sections", 5,
+    ImGui::SameLine();
+    ImGui::Checkbox("Detailed", &detailed_);
+    ImGui::SetItemTooltip("Detailed section names: phases (A, B...), roles (main, lead, peak, "
+                          "climax), pre-drops (key 7), breaks (B) and fills (F). Off: the previous "
+                          "six names; labelled detail is kept.");
+    if (!ImGui::BeginTable("##sections", detailed_ ? 7 : 5,
                            ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
                                ImGuiTableFlags_SizingFixedFit,
                            ImVec2(0.0f, std::max(6.0f * em, ImGui::GetContentRegionAvail().y)))) {
@@ -644,6 +710,10 @@ void LabellingView::draw_section_table() {
     ImGui::TableSetupColumn("Start");
     ImGui::TableSetupColumn("Bar");
     ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 9.0f * em);
+    if (detailed_) {
+        ImGui::TableSetupColumn("Phase", ImGuiTableColumnFlags_WidthFixed, 4.0f * em);
+        ImGui::TableSetupColumn("Role", ImGuiTableColumnFlags_WidthFixed, 6.0f * em);
+    }
     ImGui::TableSetupColumn("Length");
     ImGui::TableSetupColumn("##actions", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableHeadersRow();
@@ -652,6 +722,8 @@ void LabellingView::draw_section_table() {
     const double t = playhead_s();
     int changed_index = -1;
     std::string changed_label;
+    int detail_index = -1; // A phase or role changed.
+    SectionLabel detail;
     int removed = -1;
     for (size_t i = 0; i < sections.size(); ++i) {
         const SectionLabel &s = sections[i];
@@ -681,6 +753,39 @@ void LabellingView::draw_section_table() {
             }
             ImGui::EndCombo();
         }
+        if (detailed_) {
+            // Phases A to H (the letters so far, and the next), or none.
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("##phase", s.phase.c_str())) {
+                for (int p = -1; p < 8; ++p) {
+                    const std::string name = phase_name(p);
+                    if (ImGui::Selectable(p < 0 ? "none" : name.c_str(), s.phase == name)) {
+                        detail_index = static_cast<int>(i);
+                        detail = s;
+                        detail.phase = name;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("##role", s.role.c_str())) {
+                if (ImGui::Selectable("none", s.role.empty())) {
+                    detail_index = static_cast<int>(i);
+                    detail = s;
+                    detail.role.clear();
+                }
+                for (const char *role : kSectionRoles) {
+                    if (ImGui::Selectable(role, s.role == role)) {
+                        detail_index = static_cast<int>(i);
+                        detail = s;
+                        detail.role = role;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
         ImGui::TableNextColumn();
         if (bar_s > 0.0) {
             mono_text("%.1f bars", (end - s.start_s) / bar_s);
@@ -699,6 +804,9 @@ void LabellingView::draw_section_table() {
     ImGui::EndTable();
     if (changed_index >= 0) {
         sections[static_cast<size_t>(changed_index)].label = changed_label;
+        commit(std::move(sections));
+    } else if (detail_index >= 0) {
+        sections[static_cast<size_t>(detail_index)] = detail;
         commit(std::move(sections));
     } else if (removed > 0) {
         sections.erase(sections.begin() + removed);
@@ -922,10 +1030,27 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
                           to_u32(theme().section_boundary), labelled ? 2.0f : 1.0f);
         }
         const float text_x = std::max(x0, p0.x) + 3.0f;
-        const char *text = sections[i].label.c_str();
+        const std::string label_text = section_text(sections[i]);
+        const char *text = label_text.c_str();
         if (x1 - text_x > ImGui::CalcTextSize(text).x + 2.0f) {
             draw->AddText(ImVec2(text_x, band_y + 0.5f * (band_h - ImGui::GetTextLineHeight())),
                           to_u32(theme().section_text), text);
+        }
+    }
+
+    // Breaks and fills, a thin lane under the sections (detailed names only).
+    if (detailed_) {
+        const float lane_y = band_y + band_h - 0.25f * band_h;
+        for (const EventLabel &e : working_events()) {
+            if (e.start_s + e.length_s < span.from_s || e.start_s > span.to_s) {
+                continue;
+            }
+            const ImVec4 colour = e.kind == "break" ? theme().danger : theme().accent;
+            draw->AddRectFilled(
+                ImVec2(x_of(e.start_s), lane_y),
+                ImVec2(std::max(x_of(e.start_s) + 2.0f, x_of(e.start_s + e.length_s)),
+                       band_y + band_h),
+                to_u32(with_alpha(colour, labelled ? 0.9f : 0.5f)));
         }
     }
 
@@ -1057,6 +1182,36 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
                 changed.erase(changed.begin() + static_cast<std::ptrdiff_t>(index));
                 commit(std::move(changed));
             }
+            if (detailed_) {
+                ImGui::Separator();
+                if (ImGui::BeginMenu("Phase")) {
+                    for (int p = -1; p < 8; ++p) {
+                        const std::string name = phase_name(p);
+                        if (ImGui::MenuItem(p < 0 ? "none" : name.c_str(), nullptr,
+                                            sections[index].phase == name)) {
+                            std::vector<SectionLabel> changed = sections;
+                            changed[index].phase = name;
+                            commit(std::move(changed));
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Role")) {
+                    if (ImGui::MenuItem("none", nullptr, sections[index].role.empty())) {
+                        std::vector<SectionLabel> changed = sections;
+                        changed[index].role.clear();
+                        commit(std::move(changed));
+                    }
+                    for (const char *role : kSectionRoles) {
+                        if (ImGui::MenuItem(role, nullptr, sections[index].role == role)) {
+                            std::vector<SectionLabel> changed = sections;
+                            changed[index].role = role;
+                            commit(std::move(changed));
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+            }
         }
         ImGui::EndPopup();
     }
@@ -1097,7 +1252,8 @@ void LabellingView::handle_keys() {
         }
     }
     if (!io.KeyCtrl) {
-        for (int k = 0; k < static_cast<int>(std::size(kSectionNames)); ++k) {
+        const int keys = detailed_ ? static_cast<int>(std::size(kSectionNames)) : 6;
+        for (int k = 0; k < keys; ++k) {
             if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + k), false) ||
                 ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_Keypad1 + k), false)) {
                 mark(k);
@@ -1125,6 +1281,12 @@ void LabellingView::handle_keys() {
         }
         if (ImGui::IsKeyPressed(ImGuiKey_D, false)) {
             downbeat_at(t);
+        }
+        if (detailed_ && ImGui::IsKeyPressed(ImGuiKey_B, false)) {
+            toggle_event("break");
+        }
+        if (detailed_ && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+            toggle_event("fill");
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
             ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
