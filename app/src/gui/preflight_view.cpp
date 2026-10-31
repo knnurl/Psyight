@@ -526,6 +526,8 @@ void PreflightView::draw_node_setup() {
         ImGui::SetNextItemWidth(6.0f * em);
         fallback_changed |=
             drag_double("Fallback brightness", &fallback.brightness, 0.005f, 0.0, 1.0, "%.2f");
+        ImGui::SetItemTooltip("The top of the node's aurora: its brightness wanders between 30 %% "
+                              "of this and all of it (3 to 10 %% at 0.10).");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(6.0f * em);
         fallback_changed |=

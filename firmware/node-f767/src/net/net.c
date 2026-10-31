@@ -25,6 +25,7 @@ static struct udp_pcb *s_cfg;
 static uint32_t s_last_link_poll;
 static uint32_t s_dhcp_started;
 static bool s_dhcp_active;
+static bool s_link_was_up;
 static bool s_save;
 static bool s_reboot;
 static bool s_apply;
@@ -245,6 +246,7 @@ void net_init(node_config *config, const uint8_t mac[6], net_packet_handler hand
         printf("net: no link yet\r\n");
     }
     if (config->dhcp) {
+        netif_set_up(&s_netif); /* DHCP only runs on an interface that is up. */
         dhcp_start(&s_netif);
         s_dhcp_active = true;
         s_dhcp_started = HAL_GetTick();
@@ -268,9 +270,21 @@ void net_poll(uint32_t now_ms) {
         s_last_link_poll = now_ms;
         ethernetif_link_poll(&s_netif);
     }
-    if (!netif_is_link_up(&s_netif)) {
+    const bool link_up = netif_is_link_up(&s_netif);
+    if (!link_up) {
         s_dhcp_started = now_ms; /* The DHCP wait counts from the link coming up. */
+    } else if (!s_link_was_up && s_config->dhcp && !s_dhcp_active) {
+        /* A cable plugged in after the link-local fallback (say, moved from the PC to a router):
+         * ask for a lease again; with none in DHCP_FALLBACK_MS, the link-local address again. */
+        ip4_addr_t zero;
+        ip4_addr_set_zero(&zero);
+        netif_set_addr(&s_netif, &zero, &zero, &zero);
+        dhcp_start(&s_netif);
+        s_dhcp_active = true;
+        s_dhcp_started = now_ms;
+        printf("net: link up, asking for a DHCP lease again\r\n");
     }
+    s_link_was_up = link_up;
     if (s_dhcp_active && !dhcp_supplied_address(&s_netif) &&
         now_ms - s_dhcp_started > DHCP_FALLBACK_MS) {
         /* No DHCP server (a direct cable): a link-local address from the MAC, the range the PC
