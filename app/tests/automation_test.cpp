@@ -7,7 +7,9 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 
 using namespace psyight;
@@ -336,4 +338,54 @@ TEST_CASE("automation: live mode rotates by phrase_bars phrases from the section
     CHECK(at(10.0 + kPhraseS + 1.0).to == kGroove);
     CHECK(at(10.0 + 2 * kPhraseS + 0.01).to == kStaccato);
     CHECK(at(10.0 + 4 * kPhraseS + 0.01).to == kGroove);
+}
+
+TEST_CASE("automation: phrase-end fills in long grooves, before rotations, not at the end") {
+    const TrackAnalysis a = long_groove(); // Six phrases of groove, then a breakdown.
+    AutomationParams p;
+    p.fill = PhraseFill::gap;
+    p.fill_every_phrases = 3; // Phrase 2's end (38.4); and before each rotation (25.6, 51.2).
+    p.fill_beats = 2.0;
+    const auto fill_at = [&](double t) { return rotated_at(a, t, p); };
+    CHECK(fill_at(12.5).fill == PhraseFill::off); // Phrase 0's end: neither.
+    SceneMix m = fill_at(25.6 - kBeatS);          // Before the rotation at phrase 2.
+    CHECK(m.fill == PhraseFill::gap);
+    CHECK(m.fill_progress == doctest::Approx(0.5));
+    CHECK(fill_at(38.4 - 0.1).fill == PhraseFill::gap);        // Every third phrase.
+    CHECK(fill_at(38.4 - 3 * kBeatS).fill == PhraseFill::off); // Before the fill.
+    CHECK(fill_at(51.2 - 0.1).fill == PhraseFill::gap);
+    CHECK(fill_at(76.8 - 0.1).fill == PhraseFill::off); // The section's last phrase.
+    CHECK(fill_at(80.0).fill == PhraseFill::off);       // Breakdowns have none.
+    // Mix picks one of the five per phrase; off has none.
+    p.fill = PhraseFill::mix;
+    const PhraseFill picked = fill_at(25.6 - 0.1).fill;
+    CHECK(picked != PhraseFill::off);
+    CHECK(picked != PhraseFill::mix);
+    p.fill = PhraseFill::off;
+    CHECK(fill_at(25.6 - 0.1).fill == PhraseFill::off);
+    // A held scene has none.
+    p.fill = PhraseFill::gap;
+    CHECK(automate(default_scenes(), a, a.grid, inputs_at(a, a.grid, 25.5), p, kGroove).fill ==
+          PhraseFill::off);
+    // The gap darkens the frame; the others change it.
+    const Rig rig = default_rig();
+    const EngineInputs in = inputs_at(a, a.grid, 25.6 - 1.5 * kBeatS); // Mid-beat.
+    SceneMix plain = rotated_at(a, 25.6 - 1.5 * kBeatS, AutomationParams{});
+    plain.fill = PhraseFill::off;
+    const Frame base = render_mix(default_scenes(), plain, rig, in, default_palettes(), 1);
+    for (const PhraseFill f :
+         {PhraseFill::gap, PhraseFill::sweep, PhraseFill::implode, PhraseFill::pulse}) {
+        const std::string id = phrase_fill_id(f);
+        CAPTURE(id);
+        SceneMix filled = plain;
+        filled.fill = f;
+        filled.fill_s = 2 * kBeatS;
+        filled.fill_progress = 0.5;
+        const Frame out = render_mix(default_scenes(), filled, rig, in, default_palettes(), 1);
+        CHECK(max_difference(base, out) > 0.05f);
+        if (f == PhraseFill::gap) {
+            CHECK(std::all_of(out.begin(), out.end(),
+                              [](const Rgb &c) { return c.r + c.g + c.b == 0.0f; }));
+        }
+    }
 }

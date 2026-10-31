@@ -15,6 +15,12 @@
 //   its tag (and energy) takes over, on the phrase's downbeat, cut or crossfaded over
 //   rotate_fade_beats. Builds do not rotate: their arc runs through. Phrases count from the
 //   section's start (file mode: the analysis's phrase starts; live: phrase_bars bars each).
+// - Phrase-end fills (grooves and drops): over the last fill_beats beats of every
+//   fill_every_phrases-th phrase into the section, and of the phrase before a rotation, a fill
+//   plays over the scene: a gap (dark), a stutter (16th gate), a sweep across the rig, an
+//   implosion (a ring closing on the centre) or a pulse (pumping on the beats); mix picks one
+//   per phrase. Not at a section's last phrase in file mode (the section change is its own
+//   transition; live mode cannot know it), nor while a scene is held by hand.
 // - Entering a groove or drop cuts (sections start on downbeats, so the cut lands on one);
 //   entering anything else crossfades over crossfade_beats, at most half the section.
 // - The palette shifts by one every palette_every_phrases phrases (counted over the track),
@@ -37,6 +43,15 @@
 
 namespace psyight {
 
+// A phrase-end fill (above).
+enum class PhraseFill { off, gap, stutter, sweep, implode, pulse, mix };
+inline constexpr std::array<PhraseFill, 7> kPhraseFills = {
+    PhraseFill::off,     PhraseFill::gap,   PhraseFill::stutter, PhraseFill::sweep,
+    PhraseFill::implode, PhraseFill::pulse, PhraseFill::mix};
+const char *phrase_fill_id(PhraseFill fill);   // "off", "gap", ... (files).
+const char *phrase_fill_name(PhraseFill fill); // "Off", "Gap", ...
+std::optional<PhraseFill> phrase_fill_from_id(const std::string &id);
+
 // When a scene chosen by hand (or the return to the section rules) takes over.
 enum class SceneLaunch { now, bar, phrase };
 inline constexpr std::array<SceneLaunch, 3> kSceneLaunches = {SceneLaunch::now, SceneLaunch::bar,
@@ -52,6 +67,9 @@ struct AutomationParams {
     SceneLaunch launch = SceneLaunch::bar;
     int rotate_every_phrases = 2;   // Long sections: the next scene this often; 0: one a section.
     double rotate_fade_beats = 0.0; // 0: a cut on the phrase's downbeat.
+    PhraseFill fill = PhraseFill::mix;
+    int fill_every_phrases = 2; // And before every rotation; 0: only before rotations.
+    double fill_beats = 2.0;    // The fill's length, up to the phrase's end.
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
@@ -84,7 +102,10 @@ struct SceneMix {
     double to_weight = 1.0; // 1: `to` alone.
     int palette_shift = 0;  // Added to each scene's palette index.
     int palette_shift_from = 0;
-    double palette_weight = 1.0; // 1: palette_shift alone.
+    double palette_weight = 1.0;       // 1: palette_shift alone.
+    PhraseFill fill = PhraseFill::off; // A phrase-end fill playing (never mix: the one picked).
+    double fill_s = 0.0;               // Its length...
+    double fill_progress = 0.0;        // ...and how far through, 0 to 1.
 };
 
 // Energy tags, by DetectedSection::energy (0 low, 1 mid, 2 high).

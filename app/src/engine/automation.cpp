@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace psyight {
 
@@ -67,6 +68,35 @@ size_t rotation_step(const AutomationParams &params, const std::string &label, l
     return static_cast<size_t>(phrases / params.rotate_every_phrases);
 }
 
+// The fill over the end of phrase `phrase` (0-based within its section) that ends at end_s, if
+// t_s is inside it. last_phrase: the section ends with it (no fill). key: varies the mix's pick.
+void place_fill(SceneMix &mix, const AutomationParams &params, const std::string &label,
+                long long phrase, double end_s, bool last_phrase, double t_s, double beat_s,
+                std::uint64_t key) {
+    if (params.fill == PhraseFill::off || params.fill_beats <= 0.0 || last_phrase ||
+        (label != "groove" && label != "drop")) {
+        return;
+    }
+    const bool every =
+        params.fill_every_phrases > 0 && (phrase + 1) % params.fill_every_phrases == 0;
+    const bool before_rotation =
+        rotation_step(params, label, phrase + 1) != rotation_step(params, label, phrase);
+    const double fill_s = params.fill_beats * beat_s;
+    if (!(every || before_rotation) || t_s < end_s - fill_s || t_s >= end_s) {
+        return;
+    }
+    mix.fill = params.fill;
+    if (mix.fill == PhraseFill::mix) { // One of the five, seeded by the phrase.
+        std::uint64_t h = key * 0x9e3779b97f4a7c15ull + static_cast<std::uint64_t>(phrase);
+        h ^= h >> 29;
+        h *= 0xbf58476d1ce4e5b9ull;
+        h ^= h >> 32;
+        mix.fill = kPhraseFills[1 + h % 5];
+    }
+    mix.fill_s = fill_s;
+    mix.fill_progress = (t_s - (end_s - fill_s)) / fill_s;
+}
+
 // A rotation that began `since_s` ago (at a phrase start) crossfades from the scene before it.
 void fade_rotation(SceneMix &mix, int before, double since_s, double beat_s,
                    const AutomationParams &params) {
@@ -74,6 +104,54 @@ void fade_rotation(SceneMix &mix, int before, double since_s, double beat_s,
     if (before != mix.to && fade_s > 0.0 && since_s >= 0.0 && since_s < fade_s) {
         mix.from = before;
         mix.to_weight = since_s / fade_s;
+    }
+}
+
+// A phrase-end fill over the finished frame (SceneMix::fill).
+void apply_fill(Frame &frame, const SceneMix &mix, const Rig &rig, const EngineInputs &inputs) {
+    const double p = std::clamp(mix.fill_progress, 0.0, 1.0);
+    const double cx = 0.5 * (rig.min.x + rig.max.x);
+    const double cy = 0.5 * (rig.min.y + rig.max.y);
+    const double width = std::max(rig.max.x - rig.min.x, 1e-6);
+    const double radius =
+        std::max({0.5 * (rig.max.x - rig.min.x), 0.5 * (rig.max.y - rig.min.y), 1e-6});
+    const auto light = [](Rgb &c, double k) { // Towards white, keeping what is lit.
+        const auto w = static_cast<float>(std::clamp(k, 0.0, 1.0));
+        c = {std::max(c.r, w), std::max(c.g, w), std::max(c.b, w)};
+    };
+    for (size_t i = 0; i < frame.size() && i < rig.pixels.size(); ++i) {
+        Rgb &c = frame[i];
+        const Vec3 &q = rig.pixels[i].position;
+        switch (mix.fill) {
+        case PhraseFill::gap: // Dark, after a 50 ms fade.
+            c = scaled(c, std::max(0.0, 1.0 - p * mix.fill_s / 0.05));
+            break;
+        case PhraseFill::stutter: // Open for the first half of each 16th; a dip, not dark (the
+                                  // flash limiter would flatten a full 10 Hz chop).
+            c = scaled(c, inputs.slot_phase < 0.5 ? 1.0 : 0.35);
+            break;
+        case PhraseFill::sweep: { // A band from left to right.
+            const double band = 0.12 * width;
+            const double at = rig.min.x - band + p * (width + 2.0 * band);
+            const double d = (q.x - at) / band;
+            light(c, 0.8 * std::exp(-d * d));
+            break;
+        }
+        case PhraseFill::implode: { // A ring closing on the centre.
+            const double r = std::hypot(q.x - cx, q.y - cy) / radius;
+            const double d = (r - (1.0 - p)) / 0.08;
+            light(c, 0.8 * std::exp(-d * d));
+            break;
+        }
+        case PhraseFill::pulse: { // Pumping on the beats.
+            const double fall = 1.0 - inputs.beat_phase;
+            c = scaled(c, 0.3 + 0.7 * fall * fall);
+            break;
+        }
+        case PhraseFill::off:
+        case PhraseFill::mix:
+            return;
+        }
     }
 }
 
@@ -168,6 +246,17 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         return mix;
     }
     const auto index = static_cast<size_t>(inputs.section_index);
+    { // A phrase-end fill.
+        const DetectedSection &own = sections[own_section(sections, index, phrase_s)];
+        const long long phrase = phrases_run(phrase_starts, own.start_s, inputs.t_s);
+        const auto next = static_cast<size_t>(inputs.phrase_index + 1);
+        if (inputs.phrase_index >= 0 && next < phrase_starts.size()) {
+            const double end_s = phrase_starts[next];
+            place_fill(mix, params, own.label, phrase, end_s,
+                       end_s >= sections[index].end_s - kPhraseToleranceS, inputs.t_s, beat_s,
+                       static_cast<std::uint64_t>(std::llround(own.start_s * 1000.0)));
+        }
+    }
     // The scene of section i at time t_s: its own (or the one before a blip), rotated by the
     // phrases it has run.
     const auto scene_at = [&](size_t i, double t_s, size_t *step_out) {
@@ -249,6 +338,9 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
     const double into_s = std::max(0.0, inputs.t_s - state.section_start_s);
     const auto phrases = static_cast<long long>(std::floor(into_s / phrase_s + 1e-9));
     const size_t step = rotation_step(params, inputs.section, phrases);
+    place_fill(mix, params, inputs.section, phrases,
+               state.section_start_s + static_cast<double>(phrases + 1) * phrase_s, false,
+               inputs.t_s, beat_s, static_cast<std::uint64_t>(state.section_count));
     mix.to = scene_for_label(scenes, inputs.section, occurrence(state.section),
                              state.section_energy, step);
     if (step > 0 && rotation_step(params, inputs.section, phrases - 1) != step) {
@@ -273,6 +365,55 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
         mix.to_weight = inputs.since_section_s / fade_s;
     }
     return mix;
+}
+
+const char *phrase_fill_id(PhraseFill fill) {
+    switch (fill) {
+    case PhraseFill::off:
+        return "off";
+    case PhraseFill::gap:
+        return "gap";
+    case PhraseFill::stutter:
+        return "stutter";
+    case PhraseFill::sweep:
+        return "sweep";
+    case PhraseFill::implode:
+        return "implode";
+    case PhraseFill::pulse:
+        return "pulse";
+    case PhraseFill::mix:
+        return "mix";
+    }
+    return "off";
+}
+
+const char *phrase_fill_name(PhraseFill fill) {
+    switch (fill) {
+    case PhraseFill::off:
+        return "Off";
+    case PhraseFill::gap:
+        return "Gap";
+    case PhraseFill::stutter:
+        return "Stutter";
+    case PhraseFill::sweep:
+        return "Sweep";
+    case PhraseFill::implode:
+        return "Implode";
+    case PhraseFill::pulse:
+        return "Pulse";
+    case PhraseFill::mix:
+        return "Mix";
+    }
+    return "Off";
+}
+
+std::optional<PhraseFill> phrase_fill_from_id(const std::string &id) {
+    for (const PhraseFill f : kPhraseFills) {
+        if (id == phrase_fill_id(f)) {
+            return f;
+        }
+    }
+    return std::nullopt;
 }
 
 const char *scene_launch_id(SceneLaunch launch) {
@@ -367,12 +508,15 @@ Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Ri
         return frame;
     };
     Frame frame = render_scenes(mix.palette_shift);
-    if (mix.palette_weight >= 1.0) {
-        return frame;
+    if (mix.palette_weight < 1.0) {
+        Frame old = render_scenes(mix.palette_shift_from);
+        mix_into(old, frame, mix.palette_weight);
+        frame = std::move(old);
     }
-    Frame old = render_scenes(mix.palette_shift_from);
-    mix_into(old, frame, mix.palette_weight);
-    return old;
+    if (mix.fill != PhraseFill::off) {
+        apply_fill(frame, mix, rig, inputs);
+    }
+    return frame;
 }
 
 } // namespace psyight

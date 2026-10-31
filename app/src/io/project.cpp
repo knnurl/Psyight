@@ -181,6 +181,10 @@ AutomationParams parse_automation(const json &aut) {
     a.launch = from_id_or_throw(scene_launch_from_id(launch), "launch", launch);
     a.rotate_every_phrases = integer(aut, "rotate_every_phrases", a.rotate_every_phrases, 0, 64);
     a.rotate_fade_beats = number(aut, "rotate_fade_beats", a.rotate_fade_beats, 0.0, 64.0);
+    const std::string fill = optional<std::string>(aut, "fill", phrase_fill_id(a.fill));
+    a.fill = from_id_or_throw(phrase_fill_from_id(fill), "fill", fill);
+    a.fill_every_phrases = integer(aut, "fill_every_phrases", a.fill_every_phrases, 0, 64);
+    a.fill_beats = number(aut, "fill_beats", a.fill_beats, 0.0, 16.0);
     return a;
 }
 
@@ -190,7 +194,10 @@ json automation_json(const AutomationParams &a) {
             {"palette_slew_beats", finite(a.palette_slew_beats, "palette_slew_beats")},
             {"launch", scene_launch_id(a.launch)},
             {"rotate_every_phrases", a.rotate_every_phrases},
-            {"rotate_fade_beats", finite(a.rotate_fade_beats, "rotate_fade_beats")}};
+            {"rotate_fade_beats", finite(a.rotate_fade_beats, "rotate_fade_beats")},
+            {"fill", phrase_fill_id(a.fill)},
+            {"fill_every_phrases", a.fill_every_phrases},
+            {"fill_beats", finite(a.fill_beats, "fill_beats")}};
 }
 
 json scene_json(const Scene &s) {

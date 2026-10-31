@@ -2117,6 +2117,27 @@ void PreviewView::draw_automation() {
     ImGui::SetNextItemWidth(6.0f * em);
     field(drag_double("Change fade (beats)", &a.rotate_fade_beats, 0.05f, 0.0, 16.0, "%.1f"),
           "0: a cut on the downbeat.");
+    ImGui::SetNextItemWidth(6.0f * em);
+    if (ImGui::BeginCombo("Phrase-end fill", phrase_fill_name(a.fill))) {
+        for (const PhraseFill f : kPhraseFills) {
+            if (ImGui::Selectable(phrase_fill_name(f), f == a.fill)) {
+                a.fill = f;
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("In grooves and drops, over a phrase's last beats: a gap (dark), a "
+                          "stutter, a sweep across the rig, an implosion to the centre, or a pulse "
+                          "on the beats; Mix picks one each time.");
+    ImGui::BeginDisabled(a.fill == PhraseFill::off);
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_int("Fill every (phrases)", &a.fill_every_phrases, 0.05f, 0, 64, "%d"),
+          "And always before a scene change; 0: only then.");
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_double("Fill length (beats)", &a.fill_beats, 0.05f, 0.0, 16.0, "%.1f"),
+          "Up to the phrase's end.");
+    ImGui::EndDisabled();
     if (changed) {
         project_.edit().automation = a;
         project_.changed();

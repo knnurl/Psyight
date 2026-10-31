@@ -147,6 +147,7 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 
 - **Crossfade** into intros, breakdowns, builds and outros (grooves and drops cut in), and **Palette every** so many phrases.
 - **Long sections:** **Next scene every** so many phrases, the next scene for the section takes over on the phrase's downbeat (builds keep theirs; 0: one scene a section), cut or faded over **Change fade** beats. A pack with two groove scenes alternates them; more scenes give more variety.
+- **Phrase-end fill:** in grooves and drops, over a phrase's last beats (**Fill length**), every so many phrases (**Fill every**) and always before a scene change: Gap (dark), Stutter (a 16th dip), Sweep (a band across the rig), Implode (a ring closing on the centre), Pulse (pumping on the beats), or Mix (one of them each time). Not at a section's last phrase, nor while a scene is held by hand.
 
 **Undo:** Ctrl+Z and Ctrl+Y undo and redo show edits (scenes, layers, modulation, macros, palettes, the rig, settings) while the Show, Rig or Preview panel has the focus, and label edits elsewhere. A knob drag undoes in one step. The Edit menu lists both.
 
