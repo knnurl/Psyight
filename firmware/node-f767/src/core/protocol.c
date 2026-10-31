@@ -74,6 +74,25 @@ bool psy_parse_sacn(const uint8_t *p, size_t n, psy_packet *out) {
     return out->universe >= 1 && out->universe <= 63999;
 }
 
+bool psy_parse_ddp(const uint8_t *p, size_t n, psy_packet *out) {
+    if (n < 10 || (p[0] >> 6) != 1 || (p[0] & 0x06u) != 0 || p[3] != 1) {
+        return false;
+    }
+    const size_t header = (p[0] & 0x10u) != 0 ? 14 : 10;
+    const size_t length = be16(p, 8);
+    if (n < header + length) {
+        return false;
+    }
+    memset(out, 0, sizeof(*out));
+    out->kind = PSY_PACKET_DDP;
+    out->sequence = (uint8_t)(p[1] & 0x0Fu);
+    out->offset = be32(p, 4);
+    out->push = (p[0] & 0x01u) != 0;
+    out->slots = p + header;
+    out->slot_count = (uint16_t)length;
+    return true;
+}
+
 bool psy_parse_art_net(const uint8_t *p, size_t n, psy_packet *out) {
     if (n < ART_MIN_BYTES || memcmp(p, kArtId, 8) != 0) {
         return false;

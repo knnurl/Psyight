@@ -38,8 +38,9 @@ struct NodeSink final : PacketSink {
     void send(std::span<const std::uint8_t> packet, const Ipv4Endpoint &to) override {
         psy_packet p{};
         const bool art = to.port == PSY_ARTNET_PORT;
-        const bool ok = art ? psy_parse_art_net(packet.data(), packet.size(), &p)
-                            : psy_parse_sacn(packet.data(), packet.size(), &p);
+        const bool ok = to.port == PSY_DDP_PORT ? psy_parse_ddp(packet.data(), packet.size(), &p)
+                        : art ? psy_parse_art_net(packet.data(), packet.size(), &p)
+                              : psy_parse_sacn(packet.data(), packet.size(), &p);
         if (!ok) {
             ++bad;
             return;
@@ -153,7 +154,8 @@ TEST_CASE("node firmware: the node's ArtPollReply parses in the app's discovery"
 TEST_CASE("node firmware: frames from the app reach the right lanes, latched on sync") {
     const Rig rig = default_rig();
     const Patch patch = build_patch(rig, 1);
-    for (const OutputProtocol protocol : {OutputProtocol::sacn, OutputProtocol::art_net}) {
+    for (const OutputProtocol protocol :
+         {OutputProtocol::sacn, OutputProtocol::art_net, OutputProtocol::ddp}) {
         CAPTURE(static_cast<int>(protocol));
         auto node = std::make_unique<node_state>();
         const node_settings settings = node_default_settings();

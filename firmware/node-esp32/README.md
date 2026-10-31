@@ -6,7 +6,7 @@ The STM32 node (`../node-f767`) ported to an **ESP32 DevKit (WROOM-32)** for WiF
 
 - `src/main.c`: start-up, the LED loop (core 1), the command handler (the shared protocol plus the WiFi settings), the USB serial console.
 - `src/led.c`: WS2812 on the RMT peripheral (10 MHz: 0 bit 0.4 µs high, 1 bit 0.8 µs high, 300 µs latch).
-- `src/net.c`: UDP sockets on 6454 (Art-Net, ArtPollReply to the subnet's broadcast address), 5568 (sACN, a multicast join per universe and the sync universe) and 6455 (configuration), one task on core 0.
+- `src/net.c`: UDP sockets on 6454 (Art-Net, ArtPollReply to the subnet's broadcast address), 5568 (sACN, a multicast join per universe and the sync universe), 4048 (DDP, always on) and 6455 (configuration), one task on core 0.
 - `src/wifi.c`: joins the stored network; opens its own access point when it cannot.
 - `src/config_store.c`: the settings and WiFi credentials in NVS.
 

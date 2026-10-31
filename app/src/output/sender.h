@@ -15,7 +15,7 @@
 
 namespace psyight {
 
-enum class OutputProtocol { sacn, art_net };
+enum class OutputProtocol { sacn, art_net, ddp };
 
 struct OutputSettings {
     OutputProtocol protocol = OutputProtocol::sacn;
@@ -43,6 +43,8 @@ class OutputSender {
   private:
     std::uint32_t frame_ = 0;
     std::vector<std::uint8_t> buffer_;
+    std::vector<std::uint8_t> ddp_frame_;
+    std::uint8_t ddp_sequence_ = 0; // 1 to 15, a packet each.
 };
 
 // Fixed per-installation sACN CID derived from a name (a name-based id, not an RFC 4122 UUID

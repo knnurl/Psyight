@@ -31,7 +31,7 @@ static bool s_apply;
 static uint16_t s_sync_joined;
 static uint16_t s_joined_first; /* The data universes whose groups are joined. */
 static uint16_t s_joined_count;
-static uint8_t s_packet[1024]; /* For the rare chained pbuf. */
+static uint8_t s_packet[1500]; /* For the rare chained pbuf (a full DDP packet: 1450). */
 
 u32_t sys_now(void) { /* lwIP's clock for its timeouts. */ return HAL_GetTick(); }
 
@@ -165,6 +165,21 @@ static void on_sacn(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_add
     pbuf_free(p);
 }
 
+static void on_ddp(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *from,
+                   u16_t port) {
+    (void)arg;
+    (void)pcb;
+    (void)from;
+    (void)port;
+    uint16_t n = 0;
+    const uint8_t *data = contiguous(p, &n);
+    psy_packet packet;
+    if (data != NULL && psy_parse_ddp(data, n, &packet)) { /* DDP is always on. */
+        s_handler(&packet, false, HAL_GetTick());
+    }
+    pbuf_free(p);
+}
+
 static void on_config(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *from,
                       u16_t port) {
     (void)arg;
@@ -238,6 +253,7 @@ void net_init(node_config *config, const uint8_t mac[6], net_packet_handler hand
     }
     s_art = listen_on(PSY_ARTNET_PORT, on_art_net);
     s_sacn = listen_on(PSY_SACN_PORT, on_sacn);
+    (void)listen_on(PSY_DDP_PORT, on_ddp);
     s_cfg = listen_on(NODE_CONFIG_PORT, on_config);
     net_set_universes(config->node.first_universe, config->node.universe_count);
 }

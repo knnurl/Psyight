@@ -1,5 +1,7 @@
-// Output packets (SPEC section 8): sACN (ANSI E1.31-2018) data and universe sync, and Art-Net 4
-// ArtDmx and ArtSync, built into caller-owned buffers. The same file parses them back, as the
+// Output packets (SPEC section 8): sACN (ANSI E1.31-2018) data and universe sync, Art-Net 4
+// ArtDmx and ArtSync, and DDP (Distributed Display Protocol, 3waylabs: a 10-byte header, then
+// pixel bytes at a byte offset, up to 1440 a packet; the push flag shows the frame), built into
+// caller-owned buffers. The same file parses them back, as the
 // virtual node does, so tests can check a build-then-parse round trip as well as byte layouts.
 // Assumptions: one universe per packet, start code 0, up to 512 slots. sACN universes are 1 to
 // 63999; the Art-Net port address is the sACN universe minus 1 (Art-Net counts from 0).
@@ -16,6 +18,8 @@ namespace psyight {
 
 constexpr std::uint16_t kSacnPort = 5568;
 constexpr std::uint16_t kArtNetPort = 6454;
+constexpr std::uint16_t kDdpPort = 4048;
+constexpr size_t kDdpMaxData = 1440; // 480 RGB pixels.
 constexpr size_t kSacnHeaderBytes = 126;
 constexpr size_t kSacnSyncBytes = 49;
 constexpr size_t kArtDmxHeaderBytes = 18;
@@ -42,19 +46,26 @@ size_t build_sacn_sync(const Cid &cid, std::uint16_t sync_universe, std::uint8_t
 size_t build_art_dmx(std::uint16_t port_address, std::uint8_t sequence,
                      std::span<const std::uint8_t> slots, std::vector<std::uint8_t> &out);
 size_t build_art_sync(std::vector<std::uint8_t> &out);
+// DDP data for display 1, 8-bit RGB: `data` at byte `offset` of the frame; push on the frame's
+// last packet. sequence: 1 to 15 (0: unsequenced).
+size_t build_ddp(std::uint8_t sequence, std::uint32_t offset, std::span<const std::uint8_t> data,
+                 bool push, std::vector<std::uint8_t> &out);
 
 // What the virtual node takes out of a packet.
 struct ParsedPacket {
-    enum class Kind { dmx, sync };
+    enum class Kind { dmx, sync, ddp };
     Kind kind = Kind::dmx;
     std::uint16_t universe = 0; // sACN numbering for both protocols (Art-Net port address + 1).
     std::uint8_t sequence = 0;
     std::uint16_t sync_universe = 0;
     std::uint8_t priority = 0;
     std::vector<std::uint8_t> slots;
+    std::uint32_t offset = 0; // DDP: where `slots` go in the frame, in bytes.
+    bool push = false;        // DDP: the frame is complete.
 };
 
 std::optional<ParsedPacket> parse_sacn(std::span<const std::uint8_t> packet);
 std::optional<ParsedPacket> parse_art_net(std::span<const std::uint8_t> packet);
+std::optional<ParsedPacket> parse_ddp(std::span<const std::uint8_t> packet);
 
 } // namespace psyight

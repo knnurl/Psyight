@@ -35,6 +35,7 @@ class VirtualNode final : public PacketSink {
     int slot_of(int universe) const;
 
     Patch patch_;
+    size_t ddp_stride_ = 0; // Bytes a universe takes in a DDP frame (0: one universe only).
     std::vector<std::vector<std::uint8_t>> pending_;
     std::vector<std::vector<std::uint8_t>> latched_;
     std::vector<int> last_sequence_; // -1 before the first packet.

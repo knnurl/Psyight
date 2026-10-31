@@ -148,6 +148,46 @@ size_t build_art_sync(std::vector<std::uint8_t> &out) {
     return out.size(); // Aux1 and Aux2 are zero.
 }
 
+size_t build_ddp(std::uint8_t sequence, std::uint32_t offset, std::span<const std::uint8_t> data,
+                 bool push, std::vector<std::uint8_t> &out) {
+    if (data.size() > kDdpMaxData) {
+        return 0;
+    }
+    out.assign(10 + data.size(), 0);
+    out[0] = static_cast<std::uint8_t>(0x40 | (push ? 0x01 : 0x00)); // Version 1, push.
+    out[1] = static_cast<std::uint8_t>(sequence & 0x0F);
+    out[2] = 0x0B; // RGB, 8 bits a channel.
+    out[3] = 0x01; // The default output device.
+    out[4] = static_cast<std::uint8_t>(offset >> 24);
+    out[5] = static_cast<std::uint8_t>(offset >> 16);
+    out[6] = static_cast<std::uint8_t>(offset >> 8);
+    out[7] = static_cast<std::uint8_t>(offset);
+    out[8] = static_cast<std::uint8_t>(data.size() >> 8);
+    out[9] = static_cast<std::uint8_t>(data.size());
+    std::copy(data.begin(), data.end(), out.begin() + 10);
+    return out.size();
+}
+
+std::optional<ParsedPacket> parse_ddp(std::span<const std::uint8_t> in) {
+    if (in.size() < 10 || (in[0] >> 6) != 1 || (in[0] & 0x06) != 0) { // Not a reply or query.
+        return std::nullopt;
+    }
+    const size_t header = (in[0] & 0x10) != 0 ? 14 : 10; // With a timecode.
+    const size_t length = static_cast<size_t>(in[8] << 8 | in[9]);
+    if (in[3] != 1 || in.size() < header + length) {
+        return std::nullopt;
+    }
+    ParsedPacket p;
+    p.kind = ParsedPacket::Kind::ddp;
+    p.sequence = in[1] & 0x0F;
+    p.offset = static_cast<std::uint32_t>(in[4]) << 24 | static_cast<std::uint32_t>(in[5]) << 16 |
+               static_cast<std::uint32_t>(in[6]) << 8 | in[7];
+    p.push = (in[0] & 0x01) != 0;
+    p.slots.assign(in.begin() + static_cast<std::ptrdiff_t>(header),
+                   in.begin() + static_cast<std::ptrdiff_t>(header + length));
+    return p;
+}
+
 std::optional<ParsedPacket> parse_sacn(std::span<const std::uint8_t> in) {
     if (in.size() == kSacnSyncBytes && has_root(in, kVectorRootExtended)) {
         if (pdu_length(in, 38) != in.size() - 38 || get32(in, 40) != kVectorFramingSync) {

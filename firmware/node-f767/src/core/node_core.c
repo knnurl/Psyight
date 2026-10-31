@@ -92,10 +92,44 @@ static void latch_all(node_state *n) {
     n->latches += any ? 1u : 0u;
 }
 
+/* DDP: the frame's bytes in node order (pixel g at byte 3g, as universes map it: universe
+ * g / pixels_per_universe from the first), held until a packet with push shows the frame. */
+static void on_ddp(node_state *n, const psy_packet *p, uint32_t now_ms) {
+    if (p->sequence != 0) {
+        if (n->last_ddp_sequence > 0 && p->sequence != (uint8_t)(n->last_ddp_sequence % 15 + 1)) {
+            ++n->sequence_gaps;
+        }
+        n->last_ddp_sequence = p->sequence;
+    }
+    const uint32_t ppu = n->s.pixels_per_universe;
+    for (uint32_t i = 0; i < p->slot_count; ++i) {
+        const uint32_t at = p->offset + i;
+        const uint32_t pixel = at / 3u;
+        const uint32_t u = pixel / ppu;
+        if (u >= n->s.universe_count) {
+            break;
+        }
+        n->received[u][(pixel % ppu) * 3u + at % 3u] = p->slots[i];
+        if (!n->pending[u]) {
+            n->pending[u] = true;
+            n->pending_since_ms[u] = now_ms;
+        }
+    }
+    n->have_data = true;
+    n->last_data_ms = now_ms;
+    if (p->push) {
+        latch_all(n);
+    }
+}
+
 void node_on_packet(node_state *n, const psy_packet *p, bool art_net, uint32_t now_ms) {
     ++n->packets;
     if (p->kind == PSY_PACKET_POLL) {
         return; /* Answered by the network layer. */
+    }
+    if (p->kind == PSY_PACKET_DDP) {
+        on_ddp(n, p, now_ms);
+        return;
     }
     if (p->kind == PSY_PACKET_SYNC) {
         if (art_net) {

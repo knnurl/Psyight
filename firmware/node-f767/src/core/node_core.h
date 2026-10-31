@@ -80,6 +80,7 @@ typedef struct {
     bool pending[NODE_MAX_UNIVERSES]; /* Data waiting for its sync. */
     uint32_t pending_since_ms[NODE_MAX_UNIVERSES];
     int16_t last_sequence[NODE_MAX_UNIVERSES]; /* -1 before the first packet. */
+    int16_t last_ddp_sequence;                 /* 0: none yet (DDP counts 1 to 15). */
     uint16_t sacn_sync_universe;
     bool art_sync_mode;
     uint32_t art_sync_ms;

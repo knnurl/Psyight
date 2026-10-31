@@ -1879,19 +1879,22 @@ void PreviewView::draw_output(const ShowFrame &frame) {
                                "Ambient, React and Show send.");
     }
     ImGui::BeginDisabled(!tier_at_least(Tier::tune));
-    int protocol = o.protocol == OutputProtocol::sacn ? 0 : 1;
+    int protocol = static_cast<int>(o.protocol);
     ImGui::SetNextItemWidth(8.5f * em);
-    if (ImGui::Combo("Protocol", &protocol, "sACN (E1.31)\0Art-Net 4\0")) {
-        o.protocol = protocol == 0 ? OutputProtocol::sacn : OutputProtocol::art_net;
+    if (ImGui::Combo("Protocol", &protocol, "sACN (E1.31)\0Art-Net 4\0DDP\0")) {
+        o.protocol = static_cast<OutputProtocol>(protocol);
         changed = true;
     }
+    ImGui::SetItemTooltip("DDP sends a frame in as few packets as it can (480 pixels each), "
+                          "unicast to the node: the best over WiFi. Its push flag shows the "
+                          "frame, so Sync does not apply.");
     if (o.protocol == OutputProtocol::sacn) {
         ImGui::SameLine();
         changed |= ImGui::Checkbox("Multicast", &o.multicast);
         ImGui::SetItemTooltip("239.255.hi.lo per universe. Switches need IGMP snooping, or "
                               "multicast floods the network (SPEC 8).");
     }
-    if (o.protocol == OutputProtocol::art_net || !o.multicast) {
+    if (o.protocol != OutputProtocol::sacn || !o.multicast) {
         ImGui::SetNextItemWidth(8.0f * em);
         if (!address_active_ && parse_ipv4(address_text_) != o.address) {
             address_text_ = ipv4_text(o.address); // Loaded or reset elsewhere.
@@ -1914,7 +1917,9 @@ void PreviewView::draw_output(const ShowFrame &frame) {
         first_universe = std::clamp(first_universe, 1, 63000);
         changed = true;
     }
+    ImGui::BeginDisabled(o.protocol == OutputProtocol::ddp); // Its push flag syncs.
     changed |= ImGui::Checkbox("Sync", &o.sync);
+    ImGui::EndDisabled();
     if (o.sync && o.protocol == OutputProtocol::sacn) {
         ImGui::SameLine();
         int sync_universe = o.sync_universe;

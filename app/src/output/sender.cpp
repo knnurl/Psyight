@@ -33,6 +33,36 @@ int OutputSender::send_frame(const OutputSettings &settings,
         }
         return sent;
     }
+    if (settings.protocol == OutputProtocol::ddp) {
+        // One frame of bytes, universe after universe as a node maps them (a universe's place is
+        // its pixels per universe times three, the first universe's length when there are more),
+        // in packets of up to 480 pixels; the last pushes the frame.
+        if (universes.empty()) {
+            return 0;
+        }
+        const size_t stride = universes.size() > 1 ? universes.front().channels.size() : 0;
+        std::vector<std::uint8_t> &frame = ddp_frame_;
+        frame.clear();
+        for (const UniverseData &u : universes) {
+            const size_t at = static_cast<size_t>(u.universe - universes.front().universe) * stride;
+            if (frame.size() < at + u.channels.size()) {
+                frame.resize(at + u.channels.size(), 0);
+            }
+            std::copy(u.channels.begin(), u.channels.end(),
+                      frame.begin() + static_cast<std::ptrdiff_t>(at));
+        }
+        const Ipv4Endpoint to{settings.address, kDdpPort};
+        for (size_t at = 0; at < frame.size(); at += kDdpMaxData) {
+            const size_t n = std::min(kDdpMaxData, frame.size() - at);
+            ddp_sequence_ = static_cast<std::uint8_t>(ddp_sequence_ % 15 + 1);
+            build_ddp(ddp_sequence_, static_cast<std::uint32_t>(at),
+                      std::span<const std::uint8_t>(frame).subspan(at, n), at + n >= frame.size(),
+                      buffer_);
+            sink.send(buffer_, to);
+            ++sent;
+        }
+        return sent;
+    }
     const Ipv4Endpoint to{settings.address, kArtNetPort};
     for (const UniverseData &u : universes) {
         if (u.universe < 1 || build_art_dmx(static_cast<std::uint16_t>(u.universe - 1),

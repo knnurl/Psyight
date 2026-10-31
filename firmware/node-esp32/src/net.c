@@ -20,6 +20,7 @@ static net_command_handler s_commands;
 static int s_art = -1;
 static int s_sacn = -1;
 static int s_cfg = -1;
+static int s_ddp = -1;
 static uint16_t s_first;
 static uint16_t s_count;
 static uint16_t s_sync; /* The sync universe joined; 0: none. */
@@ -55,8 +56,8 @@ static void membership(uint16_t universe, bool join) {
     psy_sacn_group(universe, g);
     struct ip_mreq m;
     memset(&m, 0, sizeof(m));
-    m.imr_multiaddr.s_addr = htonl(((uint32_t)g[0] << 24) | ((uint32_t)g[1] << 16) |
-                                   ((uint32_t)g[2] << 8) | g[3]);
+    m.imr_multiaddr.s_addr =
+        htonl(((uint32_t)g[0] << 24) | ((uint32_t)g[1] << 16) | ((uint32_t)g[2] << 8) | g[3]);
     m.imr_interface.s_addr = htonl(INADDR_ANY);
     setsockopt(s_sacn, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP, &m, sizeof(m));
 }
@@ -96,10 +97,10 @@ static void send_poll_replies(void) {
     memset(&to, 0, sizeof(to));
     to.sin_family = AF_INET;
     to.sin_port = htons(PSY_ARTNET_PORT);
-    to.sin_addr.s_addr = htonl(((uint32_t)(ip[0] | (uint8_t)~mask[0]) << 24) |
-                               ((uint32_t)(ip[1] | (uint8_t)~mask[1]) << 16) |
-                               ((uint32_t)(ip[2] | (uint8_t)~mask[2]) << 8) |
-                               (uint8_t)(ip[3] | (uint8_t)~mask[3]));
+    to.sin_addr.s_addr =
+        htonl(((uint32_t)(ip[0] | (uint8_t)~mask[0]) << 24) |
+              ((uint32_t)(ip[1] | (uint8_t)~mask[1]) << 16) |
+              ((uint32_t)(ip[2] | (uint8_t)~mask[2]) << 8) | (uint8_t)(ip[3] | (uint8_t)~mask[3]));
     const node_settings *s = &s_config->node;
     uint8_t buffer[PSY_ART_POLL_REPLY_BYTES];
     psy_poll_reply r;
@@ -137,8 +138,10 @@ static void net_task(void *arg) {
         FD_SET(s_art, &ready);
         FD_SET(s_sacn, &ready);
         FD_SET(s_cfg, &ready);
-        const int top = (s_art > s_sacn ? (s_art > s_cfg ? s_art : s_cfg)
-                                        : (s_sacn > s_cfg ? s_sacn : s_cfg));
+        FD_SET(s_ddp, &ready);
+        int top = s_art > s_sacn ? s_art : s_sacn;
+        top = top > s_cfg ? top : s_cfg;
+        top = top > s_ddp ? top : s_ddp;
         struct timeval wait = {.tv_sec = 0, .tv_usec = 100000};
         if (select(top + 1, &ready, NULL, NULL, &wait) <= 0) {
             continue;
@@ -156,6 +159,12 @@ static void net_task(void *arg) {
                 s_packets(&packet, false, net_now_ms());
             }
         }
+        if (FD_ISSET(s_ddp, &ready)) { /* DDP is always on. */
+            const int n = recv(s_ddp, buffer, sizeof(buffer), 0);
+            if (n > 0 && psy_parse_ddp(buffer, (size_t)n, &packet)) {
+                s_packets(&packet, false, net_now_ms());
+            }
+        }
         if (FD_ISSET(s_art, &ready)) {
             const int n = recv(s_art, buffer, sizeof(buffer), 0);
             if (n > 0 && psy_parse_art_net(buffer, (size_t)n, &packet)) {
@@ -170,8 +179,8 @@ static void net_task(void *arg) {
         if (FD_ISSET(s_cfg, &ready)) {
             struct sockaddr_in from;
             socklen_t from_size = sizeof(from);
-            const int n =
-                recvfrom(s_cfg, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&from, &from_size);
+            const int n = recvfrom(s_cfg, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&from,
+                                   &from_size);
             if (n > 0) {
                 s_commands((const char *)buffer, (size_t)n, reply, sizeof(reply));
                 sendto(s_cfg, reply, strlen(reply), 0, (struct sockaddr *)&from, from_size);
@@ -189,7 +198,8 @@ void net_start(const node_config *config, const uint8_t mac[6], net_packet_handl
     s_art = listen_on(PSY_ARTNET_PORT);
     s_sacn = listen_on(PSY_SACN_PORT);
     s_cfg = listen_on(NODE_CONFIG_PORT);
-    if (s_art < 0 || s_sacn < 0 || s_cfg < 0) {
+    s_ddp = listen_on(PSY_DDP_PORT);
+    if (s_art < 0 || s_sacn < 0 || s_cfg < 0 || s_ddp < 0) {
         ESP_LOGE(TAG, "could not open the UDP ports");
         return;
     }

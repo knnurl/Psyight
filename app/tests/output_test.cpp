@@ -3,10 +3,13 @@
 #include "engine/rig.h"
 #include "output/packets.h"
 #include "output/patch.h"
+#include "output/sender.h"
+#include "output/virtual_node.h"
 
 #include <doctest/doctest.h>
 
 #include <numeric>
+#include <optional>
 #include <vector>
 
 using namespace psyight;
@@ -185,4 +188,69 @@ TEST_CASE("output packets: build then parse returns what went in, and corrupt pa
     parsed = parse_art_net(p);
     REQUIRE(parsed.has_value());
     CHECK(parsed->kind == ParsedPacket::Kind::sync);
+}
+
+TEST_CASE("DDP: a frame in packets of 480 pixels, pushed on the last; the virtual node shows it") {
+    std::vector<std::uint8_t> packet;
+    const std::vector<std::uint8_t> data = {1, 2, 3, 4, 5, 6};
+    REQUIRE(build_ddp(7, 1440, data, true, packet) == 16);
+    CHECK(packet[0] == 0x41); // Version 1, push.
+    CHECK(packet[1] == 7);
+    CHECK(packet[3] == 1);
+    CHECK(packet[6] == 0x05); // 1440 = 0x5A0.
+    CHECK(packet[7] == 0xA0);
+    CHECK(packet[9] == 6);
+    const std::optional<ParsedPacket> back = parse_ddp(packet);
+    REQUIRE(back);
+    CHECK(back->kind == ParsedPacket::Kind::ddp);
+    CHECK(back->offset == 1440);
+    CHECK(back->push);
+    CHECK(back->slots == data);
+    CHECK_FALSE(parse_ddp(std::span(packet).first(12))); // Shorter than it says.
+    std::vector<std::uint8_t> big(kDdpMaxData + 1);
+    CHECK(build_ddp(1, 0, big, true, packet) == 0);
+
+    // Three full universes (1530 bytes): two packets, the second pushing.
+    struct Capture final : PacketSink {
+        std::vector<std::vector<std::uint8_t>> packets;
+        void send(std::span<const std::uint8_t> p, const Ipv4Endpoint &to) override {
+            CHECK(to.port == kDdpPort);
+            packets.emplace_back(p.begin(), p.end());
+        }
+    } sink;
+    OutputSettings settings;
+    settings.protocol = OutputProtocol::ddp;
+    settings.address = {192, 168, 0, 220};
+    std::vector<UniverseData> universes;
+    for (int u = 0; u < 3; ++u) {
+        universes.push_back(
+            {1 + u, std::vector<std::uint8_t>(510, static_cast<std::uint8_t>(u + 1))});
+    }
+    OutputSender sender;
+    CHECK(sender.send_frame(settings, universes, sink) == 2);
+    REQUIRE(sink.packets.size() == 2);
+    const auto first = parse_ddp(sink.packets[0]);
+    const auto second = parse_ddp(sink.packets[1]);
+    REQUIRE(first);
+    REQUIRE(second);
+    CHECK_FALSE(first->push);
+    CHECK(second->push);
+    CHECK(first->slots.size() == 1440);
+    CHECK(second->offset == 1440);
+    CHECK(second->slots.size() == 90);
+    CHECK(first->slots[510] == 2); // Universe 2 starts at 510.
+    CHECK(second->sequence == first->sequence % 15 + 1);
+
+    // The virtual node puts a DDP frame back on the rig.
+    const Rig rig = default_rig();
+    const Patch patch = build_patch(rig);
+    std::vector<std::uint8_t> rgb(3 * rig.pixels.size());
+    for (size_t i = 0; i < rgb.size(); ++i) {
+        rgb[i] = static_cast<std::uint8_t>(i * 13 + 5);
+    }
+    VirtualNode node;
+    node.set_patch(patch);
+    sender.send_frame(settings, patch_frame(patch, rgb), node);
+    CHECK(node.rgb() == rgb);
+    CHECK(node.stats().bad_packets == 0);
 }

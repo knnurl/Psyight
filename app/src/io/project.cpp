@@ -509,10 +509,12 @@ Result<Project> parse_project_json(std::string_view json_text) {
 
         const json &out = section(root, "output");
         const std::string protocol = optional<std::string>(out, "protocol", "sacn");
-        if (protocol != "sacn" && protocol != "art_net") {
+        if (protocol != "sacn" && protocol != "art_net" && protocol != "ddp") {
             throw FieldError{"unknown protocol " + protocol};
         }
-        p.output.protocol = protocol == "sacn" ? OutputProtocol::sacn : OutputProtocol::art_net;
+        p.output.protocol = protocol == "sacn"      ? OutputProtocol::sacn
+                            : protocol == "art_net" ? OutputProtocol::art_net
+                                                    : OutputProtocol::ddp;
         p.output.multicast = optional(out, "multicast", true);
         const std::string address = optional<std::string>(out, "address", "127.0.0.1");
         const auto parsed = parse_ipv4(address);
@@ -658,7 +660,9 @@ Result<std::string> to_project_json(const Project &p) {
              {{"first_universe", p.first_universe},
               {"pixels_per_universe", p.pixels_per_universe}}},
             {"output",
-             {{"protocol", p.output.protocol == OutputProtocol::sacn ? "sacn" : "art_net"},
+             {{"protocol", p.output.protocol == OutputProtocol::sacn      ? "sacn"
+                           : p.output.protocol == OutputProtocol::art_net ? "art_net"
+                                                                          : "ddp"},
               {"multicast", p.output.multicast},
               {"address", ipv4_text(p.output.address)},
               {"sync", p.output.sync},
