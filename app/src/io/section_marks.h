@@ -13,9 +13,16 @@
 
 namespace psyight {
 
-// The section labels the keys 1 to 6 set, in that order.
-inline constexpr const char *kSectionNames[] = {"intro", "groove", "breakdown",
-                                                "build", "drop",   "outro"};
+// The section labels the keys 1 to 7 set, in that order (predrop: the bars just before a drop).
+inline constexpr const char *kSectionNames[] = {"intro", "groove", "breakdown", "build",
+                                                "drop",  "outro",  "predrop"};
+// Roles a section may take (SPEC 6.6.1): grooves main, lead or peak; drops climax or main.
+inline constexpr const char *kSectionRoles[] = {"main", "lead", "peak", "climax"};
+
+// The labelled sections as the engine's: a predrop folds into the section before it (its
+// predrop_s), phases and roles carried over; sorted, each to the next, the last to duration_s.
+std::vector<DetectedSection> engine_sections(const std::vector<SectionLabel> &sections,
+                                             double duration_s);
 
 double bar_length_s(const LabelGrid &grid); // 0 without a tempo.
 // The nearest downbeat to t_s (t_s itself without a tempo).

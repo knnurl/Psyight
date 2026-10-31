@@ -53,9 +53,20 @@ struct BassNoteLabel {
 
 struct SectionLabel {
     double start_s = 0.0;
-    std::string label;
+    std::string label; // As DetectedSection's, or "predrop" (the bars just before a drop).
+    std::string phase; // Grooves and drops: "A", "B"...; empty: none (SPEC 6.6.1).
+    std::string role;  // Grooves: main, lead, peak; drops: climax, main; empty: none.
 
     bool operator==(const SectionLabel &) const = default;
+};
+
+// A short event inside a section (SPEC 6.6.1): a break or a fill.
+struct EventLabel {
+    std::string kind; // "break" or "fill".
+    double start_s = 0.0;
+    double length_s = 0.0;
+
+    bool operator==(const EventLabel &) const = default;
 };
 
 // The phrase grid, labelled by ear: phrases of `bars` bars on the grid's bars, one of them
@@ -78,6 +89,7 @@ struct Labels {
     std::vector<LabelEvent> beats;
     std::vector<LabelEvent> downbeats;
     std::vector<SectionLabel> sections;
+    std::vector<EventLabel> events; // Breaks and fills.
     // The sections were edited by hand: the show follows them instead of the detection. (Drafted
     // sections, never edited, leave it false.)
     bool sections_edited = false;
@@ -92,7 +104,7 @@ struct Labels {
 // Parses labels JSON. Fails on malformed JSON, a schema other than kLabelsSchemaVersion, or a
 // missing or wrongly typed field (integer fields must not have a fractional part). Optional fields:
 // slide_in, slide_out (false), velocity (1.0), cents (0), every event list (empty), phrases
-// (unset) and sections_done (false).
+// (unset), sections_done (false), a section's phase and role (empty) and the events (none).
 Result<Labels> parse_labels_json(std::string_view json);
 
 // Serialises labels as schema-1 JSON. Fails on a non-finite number or a string that is not valid

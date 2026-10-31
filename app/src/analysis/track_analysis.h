@@ -47,6 +47,7 @@ struct TrackAnalysis {
     Grid grid; // The grid the bass tracker used.
     BassTrackResult bass;
     std::vector<DetectedSection> sections;
+    std::vector<DetectedEvent> events;    // Breaks and fills (SPEC 6.6.1).
     std::vector<SectionBar> section_bars; // What the sections were found from (and edited ones'
                                           // energy).
     std::vector<float> riser;             // Per mix frame, 0 to 1 (riser_curve).

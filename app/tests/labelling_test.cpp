@@ -231,3 +231,48 @@ TEST_CASE("labelling: bar 1 may lie before the audio; analyses start at the firs
     CHECK(first_downbeat_in_audio_s({192.0, 0.35}) == doctest::Approx(0.35)); // Already in it.
     CHECK(first_downbeat_in_audio_s({192.0, -1.25}) == doctest::Approx(0.0)); // On 0 s exactly.
 }
+
+TEST_CASE("finer sections: phases, roles, pre-drops and events in labels and for the engine") {
+    CHECK(phase_name(0) == "A");
+    CHECK(phase_name(25) == "Z");
+    CHECK(phase_name(26) == "AA");
+    CHECK(phase_name(-1).empty());
+    for (const int p : {0, 3, 25, 26, 51}) {
+        CHECK(phase_from_name(phase_name(p)) == p);
+    }
+    CHECK(phase_from_name("a") == -1);
+
+    // Labels keep a section's phase and role and the events; older files read as before.
+    Labels l;
+    l.sections = {{0.0, "intro"},
+                  {20.0, "groove", "A", "main"},
+                  {60.0, "build"},
+                  {80.0, "predrop"},
+                  {84.0, "drop", "A", "climax"}};
+    l.events = {{"break", 30.0, 2.8}, {"fill", 52.0, 1.4}};
+    const Result<Labels> back = parse_labels_json(to_labels_json(l).value());
+    REQUIRE(back.ok());
+    CHECK(back.value().sections == l.sections);
+    CHECK(back.value().events == l.events);
+
+    // For the engine the pre-drop folds into the build before it.
+    const std::vector<DetectedSection> engine = engine_sections(l.sections, 120.0);
+    REQUIRE(engine.size() == 4);
+    CHECK(engine[2].label == "build");
+    CHECK(engine[2].end_s == 84.0);
+    CHECK(engine[2].predrop_s == 80.0);
+    CHECK(engine[1].phase == 0);
+    CHECK(engine[1].role == "main");
+    CHECK(engine[3].role == "climax");
+
+    // And the detection's pre-drop shows as its own section in the labels.
+    LabelGrid grid;
+    grid.bpm = 150.0; // Bars of 1.6 s.
+    std::vector<DetectedSection> detected = engine;
+    detected[2].predrop_s = 80.0;
+    const std::vector<SectionLabel> drafted = sections_from_detection(detected, grid);
+    REQUIRE(drafted.size() == 5);
+    CHECK(drafted[3].label == "predrop");
+    CHECK(drafted[3].start_s == doctest::Approx(80.0));
+    CHECK(drafted[1].phase == "A");
+}

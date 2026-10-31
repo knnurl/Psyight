@@ -54,6 +54,7 @@ class LabelEditor {
     // Replaces the sections (sorted by start) and the edited flag; one undo step (or part of a
     // gesture).
     void set_sections(std::vector<SectionLabel> sections, bool edited);
+    void set_events(std::vector<EventLabel> events); // Breaks and fills, sorted; one undo step.
     // Moves every time in the labels by delta_s in one undo step: notes, kicks, beats, downbeats,
     // sections, regions and the grid (for labels made against audio with a constant offset). The
     // shift is limited so no time goes below 0; a grid downbeat that would is moved a whole number

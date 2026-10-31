@@ -2,6 +2,7 @@
 
 #include "core/paths.h"
 #include "io/recovery.h"
+#include "io/section_marks.h"
 #include "io/stems.h"
 
 #include <spdlog/spdlog.h>
@@ -326,13 +327,9 @@ std::shared_ptr<const SectionTimeline> Session::edited_sections() {
         timeline_analysis_ == track_->track_analysis.get()) {
         return timeline_;
     }
-    std::vector<std::pair<double, std::string>> starts;
-    for (const SectionLabel &s : l.sections) {
-        starts.emplace_back(s.start_s, s.label);
-    }
     const TrackAnalysis &analysis = *track_->track_analysis;
-    timeline_ = std::make_shared<const SectionTimeline>(section_timeline(
-        analysis, g, sections_from_starts(std::move(starts), analysis.duration_s)));
+    timeline_ = std::make_shared<const SectionTimeline>(
+        section_timeline(analysis, g, engine_sections(l.sections, analysis.duration_s)));
     timeline_from_ = l.sections;
     timeline_bpm_ = g.bpm;
     timeline_downbeat_ = g.first_downbeat;

@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <iterator>
 
 namespace psyight {
 
@@ -31,11 +32,11 @@ constexpr double kTrustedPhraseConfidence = 0.5;
 
 ImU32 section_colour(const std::string &label, float alpha = 1.0f) {
     const ThemeTokens &t = theme();
-    const ImVec4 c = label == "groove"      ? t.section_groove
-                     : label == "breakdown" ? t.section_breakdown
-                     : label == "build"     ? t.section_build
-                     : label == "drop"      ? t.section_drop
-                                            : t.section_other;
+    const ImVec4 c = label == "groove"                        ? t.section_groove
+                     : label == "breakdown"                   ? t.section_breakdown
+                     : label == "build" || label == "predrop" ? t.section_build
+                     : label == "drop"                        ? t.section_drop
+                                                              : t.section_other;
     return to_u32(with_alpha(c, c.w * alpha));
 }
 
@@ -381,7 +382,7 @@ void LabellingView::draw_track() {
     from = std::clamp(from, -0.02 * window_s, std::max(0.0, track.duration_s - 0.98 * window_s));
     draw_timeline("##zoom", {from, from + window_s}, 11.0f * em, true);
     // The section keys as buttons in the sections' colours: a click marks at the playhead too.
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < static_cast<int>(std::size(kSectionNames)); ++i) {
         std::string name = kSectionNames[i];
         name[0] = static_cast<char>(name[0] - 'a' + 'A');
         const std::string text = std::to_string(i + 1) + "  " + name + "##mark";
@@ -405,7 +406,7 @@ void LabellingView::draw_track() {
                        ImGuiSliderFlags_Logarithmic);
     ImGui::SetItemTooltip("The zoomed view's width (or the mouse wheel over it).");
     ImGui::PushStyleColor(ImGuiCol_Text, theme().text_dim);
-    ImGui::TextWrapped("Keys: Space play; 1 to 6 sections (Shift: phrase, Alt: exact); Del "
+    ImGui::TextWrapped("Keys: Space play; 1 to 7 sections (Shift: phrase, Alt: exact); Del "
                        "remove; P phrase; D downbeat; , . grid shift; [ ] jump; "
                        "Enter done; N next.");
     ImGui::PopStyleColor();
@@ -1096,7 +1097,7 @@ void LabellingView::handle_keys() {
         }
     }
     if (!io.KeyCtrl) {
-        for (int k = 0; k < 6; ++k) {
+        for (int k = 0; k < static_cast<int>(std::size(kSectionNames)); ++k) {
             if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + k), false) ||
                 ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_Keypad1 + k), false)) {
                 mark(k);

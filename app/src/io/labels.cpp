@@ -100,8 +100,17 @@ Result<Labels> parse_labels_json(std::string_view json_text) {
         labels.downbeats = parse_events(root, "downbeats");
         if (const auto it = root.find("sections"); it != root.end()) {
             for (const json &item : it->get_ref<const json::array_t &>()) {
-                labels.sections.push_back(
-                    {item.at("start_s").get<double>(), item.at("label").get<std::string>()});
+                labels.sections.push_back({item.at("start_s").get<double>(),
+                                           item.at("label").get<std::string>(),
+                                           optional_field(item, "phase", std::string()),
+                                           optional_field(item, "role", std::string())});
+            }
+        }
+        if (const auto it = root.find("events"); it != root.end()) {
+            for (const json &item : it->get_ref<const json::array_t &>()) {
+                labels.events.push_back({item.at("kind").get<std::string>(),
+                                         item.at("start_s").get<double>(),
+                                         item.at("length_s").get<double>()});
             }
         }
         labels.sections_edited = optional_field(root, "sections_edited", false);
@@ -142,8 +151,20 @@ Result<std::string> to_labels_json(const Labels &labels) {
         }
         json sections = json::array();
         for (const SectionLabel &section : labels.sections) {
-            sections.push_back(
-                {{"start_s", finite(section.start_s, "start_s")}, {"label", section.label}});
+            json item = {{"start_s", finite(section.start_s, "start_s")}, {"label", section.label}};
+            if (!section.phase.empty()) {
+                item["phase"] = section.phase;
+            }
+            if (!section.role.empty()) {
+                item["role"] = section.role;
+            }
+            sections.push_back(std::move(item));
+        }
+        json events = json::array();
+        for (const EventLabel &e : labels.events) {
+            events.push_back({{"kind", e.kind},
+                              {"start_s", finite(e.start_s, "start_s")},
+                              {"length_s", finite(e.length_s, "length_s")}});
         }
         json root = {
             {"schema", kLabelsSchemaVersion},
@@ -161,6 +182,9 @@ Result<std::string> to_labels_json(const Labels &labels) {
             {"sections", sections},
             {"sections_done", labels.sections_done},
         };
+        if (!labels.events.empty()) {
+            root["events"] = events;
+        }
         if (labels.phrases.set) {
             root["phrases"] = {{"start_s", finite(labels.phrases.start_s, "phrases.start_s")},
                                {"bars", labels.phrases.bars}};

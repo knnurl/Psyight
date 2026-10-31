@@ -110,13 +110,52 @@ std::vector<SectionLabel> move_boundary(std::vector<SectionLabel> sections, size
 std::vector<SectionLabel> sections_from_detection(const std::vector<DetectedSection> &detected,
                                                   const LabelGrid &grid) {
     std::vector<SectionLabel> out;
-    for (const DetectedSection &d : detected) {
-        const double start = out.empty() ? 0.0 : std::max(0.0, snap_to_bar(grid, d.start_s));
+    const auto add = [&](double t_s, const SectionLabel &s) {
+        const double start = out.empty() ? 0.0 : std::max(0.0, snap_to_bar(grid, t_s));
         if (!out.empty() && start <= out.back().start_s) {
-            out.back().label = d.label; // Snapped onto the one before: the later label wins.
+            const double kept = out.back().start_s;
+            out.back() = s; // Snapped onto the one before: the later label wins.
+            out.back().start_s = kept;
+            return;
+        }
+        SectionLabel placed = s;
+        placed.start_s = start;
+        out.push_back(std::move(placed));
+    };
+    for (const DetectedSection &d : detected) {
+        add(d.start_s, {0.0, d.label, phase_name(d.phase), d.role});
+        if (d.predrop_s > d.start_s && d.predrop_s < d.end_s) {
+            add(d.predrop_s, {0.0, "predrop", "", ""});
+        }
+    }
+    return out;
+}
+
+std::vector<DetectedSection> engine_sections(const std::vector<SectionLabel> &sections,
+                                             double duration_s) {
+    std::vector<SectionLabel> sorted = sections;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const SectionLabel &a, const SectionLabel &b) { return a.start_s < b.start_s; });
+    std::erase_if(sorted, [&](const SectionLabel &s) { return s.start_s >= duration_s; });
+    std::vector<DetectedSection> out;
+    for (size_t i = 0; i < sorted.size(); ++i) {
+        const SectionLabel &s = sorted[i];
+        const double end = i + 1 < sorted.size() ? sorted[i + 1].start_s : duration_s;
+        if (s.label == "predrop" && !out.empty()) { // Part of the section before it.
+            out.back().predrop_s = s.start_s;
+            out.back().end_s = end;
             continue;
         }
-        out.push_back({start, d.label});
+        DetectedSection d;
+        d.start_s = out.empty() ? 0.0 : s.start_s;
+        d.end_s = end;
+        d.label = s.label == "predrop" ? "build" : s.label;
+        d.confidence = 1.0;
+        d.phase = phase_from_name(s.phase);
+        d.role = s.role;
+        if (d.end_s > d.start_s) {
+            out.push_back(std::move(d));
+        }
     }
     return out;
 }

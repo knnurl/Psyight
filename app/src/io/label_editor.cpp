@@ -192,6 +192,16 @@ void LabelEditor::set_sections_done(bool done) {
     labels_.sections_done = done;
 }
 
+void LabelEditor::set_events(std::vector<EventLabel> events) {
+    std::sort(events.begin(), events.end(),
+              [](const EventLabel &a, const EventLabel &b) { return a.start_s < b.start_s; });
+    if (events == labels_.events) {
+        return;
+    }
+    before_edit();
+    labels_.events = std::move(events);
+}
+
 void LabelEditor::set_sections(std::vector<SectionLabel> sections, bool edited) {
     std::sort(sections.begin(), sections.end(),
               [](const SectionLabel &a, const SectionLabel &b) { return a.start_s < b.start_s; });
@@ -217,6 +227,9 @@ double LabelEditor::shift_all(double delta_s) {
     for (const SectionLabel &s : labels_.sections) {
         earliest_s = std::min(earliest_s, s.start_s);
     }
+    for (const EventLabel &e : labels_.events) {
+        earliest_s = std::min(earliest_s, e.start_s);
+    }
     for (const LabelRegion &r : labels_.regions) {
         earliest_s = std::min(earliest_s, r.start_s);
     }
@@ -241,6 +254,9 @@ double LabelEditor::shift_all(double delta_s) {
     }
     for (SectionLabel &s : labels_.sections) {
         s.start_s += delta_s;
+    }
+    for (EventLabel &e : labels_.events) {
+        e.start_s += delta_s;
     }
     for (LabelRegion &r : labels_.regions) {
         r.start_s += delta_s;

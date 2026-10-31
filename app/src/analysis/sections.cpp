@@ -444,6 +444,31 @@ std::vector<float> riser_curve(const ResidualFeatures &residual,
     return curve;
 }
 
+std::string phase_name(int phase) {
+    if (phase < 0) {
+        return {};
+    }
+    std::string name;
+    for (int p = phase; p >= 0; p = p / 26 - 1) { // A..Z, then AA, AB...
+        name.insert(name.begin(), static_cast<char>('A' + p % 26));
+    }
+    return name;
+}
+
+int phase_from_name(const std::string &name) {
+    if (name.empty()) {
+        return -1;
+    }
+    int phase = 0;
+    for (const char c : name) {
+        if (c < 'A' || c > 'Z') {
+            return -1;
+        }
+        phase = phase * 26 + (c - 'A' + 1);
+    }
+    return phase - 1;
+}
+
 std::vector<DetectedSection>
 sections_from_starts(std::vector<std::pair<double, std::string>> starts, double duration_s) {
     std::sort(starts.begin(), starts.end(),

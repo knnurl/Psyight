@@ -27,7 +27,7 @@ ImU32 section_colour(const std::string &label) {
     if (label == "breakdown") {
         return to_u32(t.section_breakdown);
     }
-    if (label == "build") {
+    if (label == "build" || label == "predrop") {
         return to_u32(t.section_build);
     }
     if (label == "drop") {

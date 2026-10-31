@@ -79,7 +79,28 @@ struct DetectedSection {
     std::string label; // "intro", "groove", "breakdown", "build", "drop" or "outro" (SPEC 6.10).
     double confidence = 0.0;
     int energy = 1; // 0 low, 1 mid, 2 high: the section's level against the track's.
+    // Finer detail (SPEC 6.6.1): grooves and drops get a phase (0 for A, 1 for B...; -1 none),
+    // sections whose bassline and texture are close sharing one; grooves a role (main, lead,
+    // peak), drops climax or main; a build or breakdown before a drop where its pre-drop starts
+    // (-1: none). The engine reads none of them yet.
+    int phase = -1;
+    std::string role;
+    double predrop_s = -1.0;
 };
+
+// Short events inside sections (SPEC 6.6.1): a break (the kick out for 1 to 4 bars in a groove or
+// drop) or a fill (a phrase's last bar departing from the phrase).
+struct DetectedEvent {
+    std::string kind; // "break" or "fill".
+    double start_s = 0.0;
+    double length_s = 0.0;
+
+    bool operator==(const DetectedEvent &) const = default;
+};
+
+// "A" for 0, "B" for 1... ("" for none); and back (-1 for anything else).
+std::string phase_name(int phase);
+int phase_from_name(const std::string &name);
 
 // The bars from the grid's first downbeat; empty when the beat tracker found no grid. Without
 // the residual, flatness and centroid are 0.
