@@ -2,6 +2,7 @@
 
 #include "analysis/align.h"
 #include "analysis/intensity.h"
+#include "analysis/section_detail.h"
 #include "audio/audio_file.h"
 #include "core/paths.h"
 #include "io/stems.h"
@@ -190,6 +191,10 @@ Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_
                        static_cast<int>(std::lround(options.beats.bars_per_phrase)),
                        analysis.beats.phrase_bar_offset);
     analysis.intensity = intensity_curve(analysis.section_bars, analysis.aggregates.bars);
+    analysis.events = detect_section_detail(
+        analysis.sections, analysis.section_bars, analysis.aggregates.bars, analysis.intensity,
+        analysis.phrase_starts_s, analysis.beats.bpm > 0.0 ? 4.0 * 60.0 / analysis.beats.bpm : 0.0,
+        options.sections);
     return analysis;
 }
 

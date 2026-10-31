@@ -62,7 +62,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/audio/transport_render.cpp src/audio/stretch_renderer.cpp
                                src/analysis/stft.cpp src/analysis/filterbank.cpp
                                src/analysis/front_end.cpp src/analysis/bass_tracker.cpp
-                               src/analysis/beat_tracker.cpp src/analysis/sections.cpp src/analysis/intensity.cpp
+                               src/analysis/beat_tracker.cpp src/analysis/sections.cpp src/analysis/intensity.cpp src/analysis/section_detail.cpp
                                src/analysis/track_analysis.cpp src/io/stems.cpp
                                src/analysis/align.cpp src/analysis/residual.cpp
                                src/analysis/bass_aggregates.cpp src/engine/rig.cpp
@@ -198,7 +198,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/midi_test.cpp tests/png_test.cpp
                              tests/recent_files_test.cpp tests/user_settings_test.cpp
                              tests/rig_templates_test.cpp tests/presets_test.cpp
-                             tests/test_patterns_test.cpp tests/aurora_test.cpp tests/media_library_test.cpp tests/scene_launch_test.cpp
+                             tests/test_patterns_test.cpp tests/aurora_test.cpp tests/media_library_test.cpp tests/section_detail_test.cpp tests/scene_launch_test.cpp
                              tests/undo_history_test.cpp tests/sections_edit_test.cpp
                              tests/pattern_effects_test.cpp tests/labelling_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp

@@ -236,7 +236,7 @@ Built per bar of the beat grid (`app/src/analysis/sections.*`). The kick state p
 - **Riser curve:** 0 to 1 per frame. Through each build it follows the residual's flatness (1 s average) from the build's start to its peak, never falling, and holds to the build's end (a build without a flatness rise ramps linearly); 0 elsewhere. Live: 0 when the build is declared, 1 at the riser ratio squared, never falling within the build. It is an engine input and a modulation source ("some parts follow the risers").
 - Outputs carry a label, an energy, a confidence and a timestamp. Scene automation (section 7.6) consumes them. `psyight_analyse --sections-report <audio or folder>` measures fragmentation: sections per minute, median length, short sections, boundaries on the phrase grid and kick flips per minute.
 
-### 6.6.1 Finer sections for psytrance (2026-10-31: decided; data model built, detection next)
+### 6.6.1 Finer sections for psytrance (2026-10-31: data model and detection built; view and scoring next)
 
 The six kinds stay; sections gain attributes and short events get their own list (owner: "more detailed phase names for this genre"; chosen: groove phases, roles, pre-drop and climax, breaks and fills).
 - **Phase (A, B, C...):** grooves and drops (one set of letters: a drop reprising groove A's bassline is drop A) whose bassline (notes per 16th slot and pitch range, from the bass aggregates) and texture (the section bars' band levels, bass and hats density) are close share a letter, in order of first appearance: groove A, groove B, groove A again. Greedy in time: a section joins the nearest earlier phase within a distance on z-scored features, else opens a new letter. The threshold is set on the owner's labels, after the view exists.

@@ -326,9 +326,19 @@ int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions 
         std::printf("  sections:");
         for (const DetectedSection &section : a.sections) {
             static constexpr const char *kEnergy[] = {"low", "mid", "high"};
-            std::printf(" %s %.0f-%.0f s (%.2f, %s);", section.label.c_str(), section.start_s,
-                        section.end_s, section.confidence,
+            const std::string phase = phase_name(section.phase);
+            std::printf(" %s%s%s%s%s %.0f-%.0f s (%.2f, %s)", section.label.c_str(),
+                        phase.empty() ? "" : " ", phase.c_str(), section.role.empty() ? "" : " ",
+                        section.role.c_str(), section.start_s, section.end_s, section.confidence,
                         kEnergy[std::clamp(section.energy, 0, 2)]);
+            if (section.predrop_s >= 0.0) {
+                std::printf(" pre-drop from %.1f s", section.predrop_s);
+            }
+            std::printf(";");
+        }
+        std::printf("\n  events:");
+        for (const DetectedEvent &e : a.events) {
+            std::printf(" %s %.1f s (%.1f s);", e.kind.c_str(), e.start_s, e.length_s);
         }
         std::printf("\n");
     }

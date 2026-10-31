@@ -546,6 +546,15 @@ const ParamEntry kParamTable[] = {
     {&SectionParams::kick_switch_penalty, "section.kick_switch_penalty", "Kick hysteresis", "beats", 0.0, 32.0, ParamTier::tune, "Beats of evidence a change between kick and no kick costs: higher keeps fills and dropouts inside the groove."},
     {&SectionParams::energy_step_db, "section.energy_step_db", "Energy step", "dB", 0.5, 20.0, ParamTier::tune, "A level change between phrases that splits a groove into two sections."},
     {&SectionParams::build_snap_bars, "section.build_snap_bars", "Build snap", "bars", 0.0, 2.0, ParamTier::engineer, "A build start this close to a 4-bar line moves onto it."},
+    {&SectionParams::phase_distance, "section.phase_distance", "Phase distance", "", 0.2, 10.0, ParamTier::engineer, "Grooves and drops whose sound and bassline (scaled over the track) are within this share a phase letter."},
+    {&SectionParams::peak_share, "section.peak_share", "Peak share", "", 0.0, 1.0, ParamTier::engineer, "Grooves whose intensity is in this top share of the track's are peaks."},
+    {&SectionParams::lead_flatness_ratio, "section.lead_flatness_ratio", "Lead flatness", "x", 0.1, 2.0, ParamTier::engineer, "A lead's residual is less flat than this share of the grooves' median."},
+    {&SectionParams::lead_centroid_ratio, "section.lead_centroid_ratio", "Lead brightness", "x", 0.5, 3.0, ParamTier::engineer, "A lead's residual is brighter than this share of the grooves' median."},
+    {&SectionParams::lead_bars_share, "section.lead_bars_share", "Lead bars", "", 0.0, 1.0, ParamTier::engineer, "Share of a groove's bars that must sound like a lead."},
+    {&SectionParams::predrop_drop_db, "section.predrop_drop_db", "Pre-drop gap", "dB", 0.0, 40.0, ParamTier::engineer, "A pre-drop bar is this much quieter than its section's median."},
+    {&SectionParams::predrop_max_bars, "section.predrop_max_bars", "Pre-drop length", "bars", 1.0, 8.0, ParamTier::engineer, "The longest pre-drop."},
+    {&SectionParams::break_max_bars, "section.break_max_bars", "Break length", "bars", 1.0, 8.0, ParamTier::engineer, "The longest kickless run inside a groove counted as a break."},
+    {&SectionParams::fill_distance, "section.fill_distance", "Fill distance", "", 0.2, 10.0, ParamTier::engineer, "A phrase's last bar this far (scaled over the track) from the rest of the phrase is a fill."},
     {&SectionParams::texture_step, "section.texture_step", "Texture step", "", 0.2, 10.0, ParamTier::tune, "How much a bar's sound (band levels, bass and hats density, scaled over the track) must change from the bar before to start a new section on a 4-bar line."},
 };
 // clang-format on
@@ -565,7 +574,14 @@ Result<void> declare_section_params(ParamRegistry &registry) {
                                 entry.member == &SectionParams::build_flatness_ratio ||
                                 entry.member == &SectionParams::build_min_flatness ||
                                 entry.member == &SectionParams::energy_step_db ||
-                                entry.member == &SectionParams::texture_step;
+                                entry.member == &SectionParams::texture_step ||
+                                entry.member == &SectionParams::phase_distance ||
+                                entry.member == &SectionParams::peak_share ||
+                                entry.member == &SectionParams::lead_flatness_ratio ||
+                                entry.member == &SectionParams::lead_centroid_ratio ||
+                                entry.member == &SectionParams::lead_bars_share ||
+                                entry.member == &SectionParams::predrop_drop_db ||
+                                entry.member == &SectionParams::fill_distance;
         spec.step = continuous ? 0.0 : 1.0;
         spec.tier = entry.tier;
         spec.description = entry.description;

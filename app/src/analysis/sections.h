@@ -57,6 +57,16 @@ struct SectionParams {
     double energy_step_db = 3.0;      // A level change between phrases that splits a groove.
     double build_snap_bars = 1.0;     // A build start this close to a 4-bar line moves onto it.
     double texture_step = 1.5; // Bar-to-bar texture change (track-scaled) splitting on 4-bar lines.
+    // Finer detail (analysis/section_detail.h): first guesses, to be scored against labels.
+    double phase_distance = 1.5; // Texture and bass distance within which sections share a phase.
+    double peak_share = 0.2;     // Grooves in the top fifth of intensity are peaks.
+    double lead_flatness_ratio = 0.8; // A lead's residual: flatter than this share of the median...
+    double lead_centroid_ratio = 1.1; // ...and brighter than this.
+    double lead_bars_share = 0.6;     // Of a groove's bars, for it to be a lead.
+    double predrop_drop_db = 6.0;     // A pre-drop bar is this far under its section's median.
+    double predrop_max_bars = 4.0;
+    double break_max_bars = 4.0;
+    double fill_distance = 2.5; // A phrase's last bar this far from the rest of it is a fill.
 };
 
 // One bar of the grid as the section rules see it (also printed by psyight_analyse --bars).
