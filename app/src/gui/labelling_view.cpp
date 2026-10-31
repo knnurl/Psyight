@@ -1002,11 +1002,14 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
         session_.labels().end_gesture();
         dragging_ = -1;
     }
+    // Each strip (the overview and the zoomed lanes) has its own menu: drawn by both under one
+    // name, a right-click opened it twice over.
+    const std::string menu_id = std::string(id) + " section menu";
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && mouse.y >= band_y &&
         mouse.y <= band_y + band_h) {
         menu_time_s_ = t_of(mouse.x);
         menu_section_ = section_at(sections, menu_time_s_);
-        ImGui::OpenPopup("##section menu");
+        ImGui::OpenPopup(menu_id.c_str());
     }
     if (hovered && !lanes) {
         ImGui::SetItemTooltip("Click or drag to move the playhead; drag a boundary to move it "
@@ -1026,7 +1029,7 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
                               "drag moves the grid; the wheel zooms, Shift and the wheel pan; "
                               "drag a boundary to move it.");
     }
-    if (ImGui::BeginPopup("##section menu")) {
+    if (ImGui::BeginPopup(menu_id.c_str())) {
         if (menu_section_ >= 0 && menu_section_ < static_cast<int>(sections.size())) {
             const auto index = static_cast<size_t>(menu_section_);
             ImGui::TextDisabled("%s from %s", sections[index].label.c_str(),
