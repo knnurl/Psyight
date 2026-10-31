@@ -119,7 +119,8 @@ class PreviewView {
     // Presets (engine/presets.h, io/presets.h). The user's are rescanned when a menu opens. A
     // scene preset is applied after the scene editor (which holds references into the scenes).
     void draw_library(); // Show packs: load (confirmed) and save.
-    // The pack whose scenes (by name, in order) the show has, or "custom".
+    // The pack whose scenes (by name, in order) the show has; else the pack last loaded, with
+    // pack_edited_ set; else "custom".
     const std::string &current_pack();
     void draw_scene_presets();   // In the scene editor: replace this scene or add one; save.
     void draw_palette_library(); // In Palettes: add from the library; save one.
@@ -170,7 +171,8 @@ class PreviewView {
     std::string preset_name_;
     std::string preset_description_;
     std::string preset_status_;
-    std::string pack_name_; // current_pack(), for pack_version_.
+    std::string pack_name_;    // current_pack(), for pack_version_.
+    bool pack_edited_ = false; // The show differs from the pack it loaded (Reload offered).
     std::uint64_t pack_version_ = ~0ull;
     bool stage_ = false;    // The preview is drawn in the Stage window (draw).
     int playing_scene_ = 0; // The automation's current scene, from the latest frame.

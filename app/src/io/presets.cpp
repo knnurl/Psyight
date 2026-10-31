@@ -145,6 +145,7 @@ void apply_show_pack(Project &project, const ShowPack &pack) {
     project.palettes = pack.palettes;
     project.automation = pack.automation;
     project.macro_names = pack.macro_names;
+    project.show_pack = pack.name;
 }
 
 int add_palette(Project &project, const Palette &palette) {

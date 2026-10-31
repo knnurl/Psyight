@@ -55,7 +55,8 @@ Result<void> save_rig_preset(const std::filesystem::path &dir, const RigPreset &
 // range); its palette is the project's of the same name, or the preset's added. Returns the
 // scene's index.
 int apply_scene_preset(Project &project, const ScenePreset &preset, int index);
-// Scenes, palettes, automation and macro names from the pack (macro values stay).
+// Scenes, palettes, automation and macro names from the pack (macro values stay); the project
+// remembers the pack's name.
 void apply_show_pack(Project &project, const ShowPack &pack);
 // Adds the palette, or replaces the colours of one with the same name. Returns its index.
 int add_palette(Project &project, const Palette &palette);

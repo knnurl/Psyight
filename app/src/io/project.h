@@ -79,6 +79,7 @@ struct Project {
     // The macro knobs (modulation sources), saved with the show as a set saves its macros.
     std::array<double, kMacroCount> macro_values{};
     std::array<std::string, kMacroCount> macro_names{}; // Empty: "Macro n".
+    std::string show_pack; // The show pack last loaded (apply_show_pack); empty: none.
 };
 
 // "Macro n" (from 1) unless the project names it.

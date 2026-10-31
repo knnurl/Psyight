@@ -2081,14 +2081,19 @@ const std::string &PreviewView::current_pack() {
         return std::equal(scenes.begin(), scenes.end(), pack.scenes.begin(), pack.scenes.end(),
                           [](const Scene &a, const Scene &b) { return a.name == b.name; });
     };
-    pack_name_ = "custom";
+    pack_name_.clear();
     for (const std::vector<ShowPack> *list :
          std::initializer_list<const std::vector<ShowPack> *>{&builtins, &user_presets_.shows}) {
         for (const ShowPack &pack : *list) {
-            if (pack_name_ == "custom" && same(pack)) {
+            if (pack_name_.empty() && same(pack)) {
                 pack_name_ = pack.name;
             }
         }
+    }
+    const std::string &loaded = project_.project().show_pack;
+    pack_edited_ = pack_name_.empty() && !loaded.empty();
+    if (pack_name_.empty()) {
+        pack_name_ = pack_edited_ ? loaded + " (edited)" : "custom";
     }
     return pack_name_;
 }
@@ -2180,13 +2185,34 @@ void PreviewView::draw_library() {
     ImGui::SetItemTooltip("Whole show styles: scenes, palettes, automation and macro names.");
     ImGui::SameLine();
     ImGui::TextUnformatted(current_pack().c_str());
-    ImGui::SetItemTooltip("The pack this show's scenes come from (custom: none matches).");
+    ImGui::SetItemTooltip("The pack this show's scenes come from; edited: the pack loaded last, "
+                          "changed since; custom: none.");
+    bool confirm = false;
+    bool save = false;
+    if (pack_edited_) { // Back to the pack as it comes.
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reload")) {
+            user_presets_ = load_user_presets(presets_dir_);
+            const std::string &name = project_.project().show_pack;
+            for (const std::vector<ShowPack> &list : {builtin_show_packs(), user_presets_.shows}) {
+                for (const ShowPack &pack : list) {
+                    if (!pending_pack_ && pack.name == name) {
+                        pending_pack_ = pack;
+                        confirm = true;
+                    }
+                }
+            }
+            if (!pending_pack_) {
+                preset_status_ = name + " is no longer a pack.";
+            }
+        }
+        ImGui::SetItemTooltip("Load %s again: its scenes, palettes, automation and macro names.",
+                              project_.project().show_pack.c_str());
+    }
     if (!preset_status_.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("%s", preset_status_.c_str());
     }
-    bool confirm = false;
-    bool save = false;
     if (ImGui::BeginPopup("##show packs")) {
         const auto item = [&](const ShowPack &pack) {
             if (ImGui::Selectable(pack.name.c_str())) {

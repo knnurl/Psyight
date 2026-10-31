@@ -563,6 +563,7 @@ Result<Project> parse_project_json(std::string_view json_text) {
         }
 
         p.latency_offset_ms = number(root, "latency_offset_ms", 0.0, -1000.0, 1000.0);
+        p.show_pack = optional<std::string>(root, "show_pack", "");
         if (const auto it = root.find("midi"); it != root.end()) {
             const json &midi = *it;
             p.midi_port = midi.value("port", std::string());
@@ -683,6 +684,7 @@ Result<std::string> to_project_json(const Project &p) {
               {"group_caps", group_caps}}},
             {"latency_offset_ms", finite(p.latency_offset_ms, "latency_offset_ms")},
             {"automation", automation_json(a)},
+            {"show_pack", p.show_pack},
             {"scenes", scenes},
             {"palettes", palettes},
             {"midi", {{"port", p.midi_port}, {"bindings", midi_bindings}}},
