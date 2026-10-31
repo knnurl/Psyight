@@ -134,6 +134,12 @@ std::optional<std::filesystem::path> open_rekordbox_file_dialog(void *owner) {
                        {filters, 2, L"The rekordbox collection exported as XML", nullptr, {}});
 }
 
+std::optional<std::filesystem::path> open_playlist_file_dialog(void *owner) {
+    const COMDLG_FILTERSPEC filters[] = {
+        {L"Playlists (M3U, M3U8, rekordbox TXT)", L"*.m3u;*.m3u8;*.txt"}, {L"All files", L"*.*"}};
+    return show_dialog(owner, false, {filters, 2, L"Import a playlist", nullptr, {}});
+}
+
 std::optional<std::filesystem::path>
 save_drawing_file_dialog(void *owner, const std::filesystem::path &suggested, bool dxf) {
     const COMDLG_FILTERSPEC svg_filters[] = {{L"SVG drawing", L"*.svg"}, {L"All files", L"*.*"}};

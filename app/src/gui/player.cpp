@@ -65,6 +65,7 @@ Player::~Player() {
 
 void Player::apply_settings(const UserSettings &settings) {
     folders_ = settings.library_folders;
+    playlist_files_ = settings.playlist_files;
     rekordbox_file_ = settings.rekordbox_xml;
     queue_.clear();
     for (const std::string &p : settings.queue) {
@@ -81,12 +82,14 @@ void Player::apply_settings(const UserSettings &settings) {
         by_path_[library_.tracks[i].path] = i;
     }
     load_rekordbox();
+    load_playlist_files();
     start_scan(); // Refresh in the background: new, changed and removed files.
     rows_dirty_ = true;
 }
 
 void Player::store_settings(UserSettings &settings) const {
     settings.library_folders = folders_;
+    settings.playlist_files = playlist_files_;
     settings.rekordbox_xml = rekordbox_file_;
     settings.queue.clear();
     for (const std::filesystem::path &p : queue_) {
@@ -108,6 +111,48 @@ void Player::start_scan() {
     scan_ = std::async(std::launch::async, [this, roots, previous = library_] {
         return scan_library(roots, previous, &scanned_, &cancel_);
     });
+}
+
+void Player::load_playlist_files() {
+    imported_.clear();
+    // Tracks in the library by lower-case title, for files that only name them.
+    std::multimap<std::string, size_t> by_title;
+    for (size_t i = 0; i < library_.tracks.size(); ++i) {
+        by_title.emplace(lower(display_title(library_.tracks[i])), i);
+    }
+    for (const std::string &file : playlist_files_) {
+        Imported imported;
+        imported.file = file;
+        imported.name = path_to_utf8(utf8_to_path(file).stem());
+        Result<PlaylistFile> read = read_playlist_file(utf8_to_path(file));
+        if (!read) {
+            imported.error = read.error().message;
+            imported_.push_back(std::move(imported));
+            continue;
+        }
+        for (const PlaylistEntry &e : read.value().entries) {
+            std::error_code error;
+            if (!e.path.empty() && std::filesystem::exists(e.path, error)) {
+                imported.tracks.push_back(e.path);
+                continue;
+            }
+            std::optional<std::filesystem::path> found;
+            const auto [from, to] = by_title.equal_range(lower(e.title));
+            for (auto it = from; it != to && !found; ++it) {
+                const LibraryTrack &t = library_.tracks[it->second];
+                if (e.artist.empty() || t.tags.artist.empty() ||
+                    lower(t.tags.artist) == lower(e.artist)) {
+                    found = t.path;
+                }
+            }
+            if (found) {
+                imported.tracks.push_back(*found);
+            } else {
+                ++imported.missing;
+            }
+        }
+        imported_.push_back(std::move(imported));
+    }
 }
 
 void Player::load_rekordbox() {
@@ -182,6 +227,11 @@ void Player::rebuild_rows() {
             paths = rekordbox_.playlists[selection_.playlist].tracks;
         }
         break;
+    case Selection::Kind::file:
+        if (selection_.playlist < imported_.size()) {
+            paths = imported_[selection_.playlist].tracks;
+        }
+        break;
     }
     const std::string needle = lower(search_);
     for (const std::filesystem::path &p : paths) {
@@ -228,6 +278,7 @@ void Player::update() {
             spdlog::warn("Library index not saved: {}", saved.error().message);
         }
         spdlog::info("Library: {} tracks", library_.tracks.size());
+        load_playlist_files(); // Their titles may match more tracks now.
         rows_dirty_ = true;
     }
 
@@ -331,6 +382,13 @@ void Player::draw_library() {
     ImGui::SetItemTooltip("rekordbox: File > Export Collection in xml format; its playlists "
                           "appear in the tree. Choose it again after a new export.");
     ImGui::SameLine();
+    if (ImGui::Button("Import playlist...")) {
+        playlist_requested_ = true;
+    }
+    ImGui::SetItemTooltip("An M3U or M3U8 file, or rekordbox's playlist export (right-click a "
+                          "playlist > Export a playlist to a file: M3U8 lists the files; TXT is "
+                          "matched to the library by title and artist).");
+    ImGui::SameLine();
     if (scan_.valid()) {
         ImGui::TextDisabled("Scanning: %d files...", scanned_.load());
     } else {
@@ -388,6 +446,18 @@ void Player::after_frame(void *owner) {
                 folders_.push_back(f);
                 start_scan();
             }
+        }
+    }
+    if (playlist_requested_) {
+        playlist_requested_ = false;
+        if (const auto chosen = open_playlist_file_dialog(owner); chosen) {
+            const std::string f = path_to_utf8(*chosen);
+            if (std::find(playlist_files_.begin(), playlist_files_.end(), f) ==
+                playlist_files_.end()) {
+                playlist_files_.push_back(f);
+            }
+            load_playlist_files();
+            rows_dirty_ = true;
         }
     }
     if (rekordbox_requested_) {
@@ -522,6 +592,49 @@ void Player::draw_tree() {
             }
         }
         ImGui::TreePop();
+    }
+    // Imported playlist files.
+    if (!imported_.empty() && ImGui::TreeNodeEx("Playlists", ImGuiTreeNodeFlags_SpanAvailWidth |
+                                                                 ImGuiTreeNodeFlags_DefaultOpen)) {
+        std::optional<size_t> drop;
+        for (size_t i = 0; i < imported_.size(); ++i) {
+            const Imported &p = imported_[i];
+            const bool selected =
+                selection_.kind == Selection::Kind::file && selection_.playlist == i;
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::TreeNodeEx(p.name.c_str(), leaf | (selected ? ImGuiTreeNodeFlags_Selected : 0));
+            if (ImGui::IsItemClicked()) {
+                pick({Selection::Kind::file, "", "", i});
+            }
+            if (!p.error.empty()) {
+                ImGui::SetItemTooltip("%s", p.error.c_str());
+            } else {
+                ImGui::SetItemTooltip(
+                    "%zu tracks%s; %s", p.tracks.size(),
+                    p.missing > 0
+                        ? (", " + std::to_string(p.missing) + " not found in the library").c_str()
+                        : "",
+                    p.file.c_str());
+            }
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Read it again")) {
+                    load_playlist_files();
+                    rows_dirty_ = true;
+                }
+                if (ImGui::MenuItem("Remove from the library")) {
+                    drop = i;
+                }
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+        }
+        ImGui::TreePop();
+        if (drop) {
+            playlist_files_.erase(playlist_files_.begin() + static_cast<std::ptrdiff_t>(*drop));
+            load_playlist_files();
+            selection_ = {};
+            rows_dirty_ = true;
+        }
     }
     if (folders_.empty()) {
         ImGui::TextDisabled("Add a music folder to start.");

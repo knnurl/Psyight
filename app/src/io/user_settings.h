@@ -41,6 +41,7 @@ struct UserSettings {
     // paths), and the queue with the index of its current track (-1: none).
     std::vector<std::string> library_folders;
     std::string rekordbox_xml;
+    std::vector<std::string> playlist_files; // M3U, M3U8 or rekordbox TXT exports.
     std::vector<std::string> queue;
     int queue_index = -1;
 

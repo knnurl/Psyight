@@ -84,7 +84,8 @@ UserSettings load_user_settings(const std::filesystem::path &file) {
     read(root, "label_filter", settings.label_filter);
     read(root, "detailed_sections", settings.detailed_sections);
     for (auto [key, list] : {std::pair{"library_folders", &settings.library_folders},
-                             std::pair{"queue", &settings.queue}}) {
+                             std::pair{"queue", &settings.queue},
+                             std::pair{"playlist_files", &settings.playlist_files}}) {
         if (const auto it = root.find(key); it != root.end() && it->is_array()) {
             for (const nlohmann::json &item : *it) {
                 if (item.is_string()) {
@@ -118,6 +119,7 @@ void save_user_settings(const std::filesystem::path &file, const UserSettings &s
         {"detailed_sections", settings.detailed_sections},
         {"library_folders", settings.library_folders},
         {"rekordbox_xml", settings.rekordbox_xml},
+        {"playlist_files", settings.playlist_files},
         {"queue", settings.queue},
         {"queue_index", settings.queue_index},
     };

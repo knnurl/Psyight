@@ -14,6 +14,7 @@
 
 #include "gui/session.h"
 #include "io/media_library.h"
+#include "io/playlist_file.h"
 #include "io/rekordbox.h"
 #include "io/user_settings.h"
 
@@ -61,7 +62,7 @@ class Player {
     };
     // What the tree has selected: everything, a library folder, or a rekordbox playlist.
     struct Selection {
-        enum class Kind { all, folder, playlist } kind = Kind::all;
+        enum class Kind { all, folder, playlist, file } kind = Kind::all; // file: imported.
         std::string root;   // Folder: its library root.
         std::string folder; // Folder: under the root ('/' separated; empty: the root itself).
         size_t playlist = 0;
@@ -70,6 +71,7 @@ class Player {
 
     void start_scan();
     void load_rekordbox();
+    void load_playlist_files(); // Reads them and matches their tracks to the library.
     void rebuild_rows();
     Row row_for(const std::filesystem::path &path) const;
     void draw_tree();
@@ -90,6 +92,18 @@ class Player {
     RekordboxLibrary rekordbox_;
     std::map<std::filesystem::path, size_t> rekordbox_by_path_; // Into rekordbox_.tracks.
     std::string rekordbox_status_;
+    // Imported playlist files, their tracks matched to files (by path, else by title and artist
+    // in the library); `missing` counts the rows found nowhere.
+    struct Imported {
+        std::string file; // UTF-8.
+        std::string name;
+        std::vector<std::filesystem::path> tracks;
+        int missing = 0;
+        std::string error;
+    };
+    std::vector<std::string> playlist_files_;
+    std::vector<Imported> imported_;
+    bool playlist_requested_ = false;
 
     Selection selection_;
     std::string search_;

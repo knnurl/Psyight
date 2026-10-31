@@ -5,6 +5,7 @@
 #include "core/paths.h"
 #include "io/audio_tags.h"
 #include "io/media_library.h"
+#include "io/playlist_file.h"
 #include "io/rekordbox.h"
 
 #include <doctest/doctest.h>
@@ -267,4 +268,41 @@ TEST_CASE("rekordbox: the collection, folders and playlists by id or location") 
     CHECK(r.playlists[1].folder.empty());
     CHECK(r.playlists[1].tracks == std::vector<std::filesystem::path>{r.tracks[1].path});
     CHECK_FALSE(parse_rekordbox_xml("<html></html>").ok());
+}
+
+TEST_CASE("playlist files: M3U8 paths and titles; rekordbox TXT in UTF-16, with or without paths") {
+    const std::filesystem::path dir = scratch("playlists");
+    const PlaylistFile m3u =
+        parse_playlist_text("#EXTM3U\n#EXTINF:420,Artist One - Song One\nSets/a.mp3\n"
+                            "file://localhost/C:/Music/b%20c.flac\r\n\n",
+                            dir, true);
+    REQUIRE(m3u.entries.size() == 2);
+    CHECK(m3u.entries[0].path == (dir / "Sets/a.mp3").lexically_normal());
+    CHECK(m3u.entries[0].artist == "Artist One");
+    CHECK(m3u.entries[0].title == "Song One");
+    CHECK(m3u.entries[1].path == utf8_to_path("C:/Music/b c.flac").lexically_normal());
+
+    // rekordbox's TXT: UTF-16 LE with its mark, tab-separated, titles and artists only.
+    const std::u16string table =
+        u"#\tTrack Title\tArtist\tBPM\r\n1\tParanubis\tStar Beings\t171.00\r\n"
+        u"2\tOMG\tSomeone\t180.00\r\n";
+    std::string bytes = "\xFF\xFE";
+    for (const char16_t c : table) {
+        bytes += static_cast<char>(c & 0xFF);
+        bytes += static_cast<char>(c >> 8);
+    }
+    write(dir / "set.txt", Bytes(bytes.begin(), bytes.end()));
+    const Result<PlaylistFile> txt = read_playlist_file(dir / "set.txt");
+    REQUIRE(txt.ok());
+    CHECK(txt.value().name == "set");
+    REQUIRE(txt.value().entries.size() == 2);
+    CHECK(txt.value().entries[0].title == "Paranubis");
+    CHECK(txt.value().entries[0].artist == "Star Beings");
+    CHECK(txt.value().entries[0].path.empty());
+    // With a location column, the path.
+    const PlaylistFile located =
+        parse_playlist_text("Track Title\tLocation\nOne\tC:/Music/one.wav\n", dir, false);
+    REQUIRE(located.entries.size() == 1);
+    CHECK(located.entries[0].path == utf8_to_path("C:/Music/one.wav").lexically_normal());
+    CHECK_FALSE(read_playlist_file(dir / "missing.m3u8").ok());
 }

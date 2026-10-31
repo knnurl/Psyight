@@ -21,6 +21,8 @@ std::optional<std::filesystem::path>
 save_drawing_file_dialog(void *owner, const std::filesystem::path &suggested, bool dxf);
 // A rekordbox collection exported as XML (the media player's playlists).
 std::optional<std::filesystem::path> open_rekordbox_file_dialog(void *owner);
+// A playlist file: M3U, M3U8 or rekordbox's text export.
+std::optional<std::filesystem::path> open_playlist_file_dialog(void *owner);
 // A folder (the labelling mode's music folders).
 std::optional<std::filesystem::path> pick_folder_dialog(void *owner);
 // suggested: the file name (and folder, when it has one) to start from. The chosen path always

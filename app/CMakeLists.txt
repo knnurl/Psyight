@@ -83,7 +83,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/audio/capture.cpp src/audio/live_input.cpp
                                src/io/midi_map.cpp src/io/png.cpp src/io/recent_files.cpp src/io/recovery.cpp
                                src/output/node_setup.cpp
-                               src/io/user_settings.cpp src/io/presets.cpp src/io/audio_tags.cpp src/io/media_library.cpp src/io/rekordbox.cpp src/output/test_patterns.cpp src/output/eye_candy.cpp
+                               src/io/user_settings.cpp src/io/presets.cpp src/io/audio_tags.cpp src/io/media_library.cpp src/io/rekordbox.cpp src/io/playlist_file.cpp src/output/test_patterns.cpp src/output/eye_candy.cpp
                                src/io/svg_rig.cpp src/io/dxf_rig.cpp
                                src/io/rig_export.cpp src/io/build_kit.cpp)
 target_include_directories(psyight_lib PUBLIC src)
