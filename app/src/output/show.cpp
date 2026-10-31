@@ -4,6 +4,7 @@
 #include "engine/inputs.h"
 #include "output/precise_sleep.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 
@@ -64,6 +65,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     if (config.test.kind != test_kind_) {
         test_kind_ = config.test.kind;
         test_frames_ = 0;
+        candy_clock_s_ = 0.0;
     }
     const bool network = config.send_to_network || (testing && config.test.send);
     if (network && socket_ != nullptr && socket_interface_ != config.output_interface) {
@@ -86,9 +88,17 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     if (testing) {
         out.section = "test";
         out.test_clock_s = static_cast<double>(test_frames_++) / kTestPatternFrameRateHz;
-        out.frame = config.blackout ? Frame(config.rig.pixels.size())
-                                    : render_test_pattern(config.test, config.rig, config.patch,
-                                                          out.test_clock_s);
+        // Eye candy's clock runs at its speed, advanced a frame at a time so a new speed does
+        // not jump the show.
+        double clock_s = out.test_clock_s;
+        if (config.test.kind == TestPatternKind::eye_candy) {
+            clock_s = candy_clock_s_;
+            candy_clock_s_ +=
+                std::clamp(config.test.candy_speed, 0.0, 10.0) / kTestPatternFrameRateHz;
+        }
+        out.frame = config.blackout
+                        ? Frame(config.rig.pixels.size())
+                        : render_test_pattern(config.test, config.rig, config.patch, clock_s);
     } else if (config.hold && !config.blackout && held_.frame.size() == config.rig.pixels.size()) {
         out = held_; // The look, frozen; the limiters and automation are skipped.
     } else if (config.ambient) {

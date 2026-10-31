@@ -49,7 +49,7 @@ Open the Preflight tab. **Test patterns** check the wiring before anything else 
 - **Colour order:** the whole rig shows red, green, blue in turn, and the panel names the colour. A strip showing another colour needs its Order changed in the Rig tab.
 - **Identify universe:** only one universe's pixels light.
 - **All on:** full white through the limiters, with the current it draws. Mind the supply.
-- **Eye candy:** no check, just shows to watch, picked from the menu beside it: Hunt (a little game: a hunter chases five prey round the rig, nearest first, each caught in a burst of its colour, a new round every 10 s), Billiards, Bouncing balls, Meteors, Fireworks, Ocean, Lava lamp, Spiral and Aurora. For showing the lights off.
+- **Eye candy:** no check, just shows to watch, picked from the menu beside it: Hunt (a little game: a hunter chases five prey round the rig, nearest first, each caught in a burst of its colour, a new round every 10 s), Billiards, Bouncing balls, Meteors, Fireworks, Ocean, Lava lamp, Spiral and Aurora, with a **Speed** (1x as made; a new speed carries on from where the show is). For showing the lights off.
 
 Every check line should be green; read every amber line:
 

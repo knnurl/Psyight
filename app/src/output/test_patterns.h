@@ -27,6 +27,7 @@ struct TestPattern {
     int strip = -1;                   // Chase: one strip by index, or -1 for every strip.
     int universe = 1;                 // Identify: the universe number.
     int candy = 0;                    // Eye candy: which show (output/eye_candy.h).
+    double candy_speed = 1.0;         // Eye candy: its clock runs this fast (the show renderer).
     double chase_pixels_per_s = 30.0; // Chase speed.
     int chase_length = 6;             // Lit pixels, fading towards the tail.
     double level = 0.6;               // Every pattern but all on (which is 1).

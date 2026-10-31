@@ -166,3 +166,39 @@ TEST_CASE("show renderer: a test pattern replaces the scenes, through the limite
     config.version = 2;
     CHECK_FALSE(lit(renderer.render(config, 1.0 / 60.0).frame[0]));
 }
+
+TEST_CASE("show renderer: eye candy's speed runs its clock, without a jump when it changes") {
+    ShowConfig config;
+    config.rig = two_strips();
+    config.patch = build_patch(config.rig);
+    config.limiter.flash_limiter = false;
+    config.test.kind = TestPatternKind::eye_candy;
+    config.test.candy = 7; // Spiral.
+    // Twice the speed for 61 frames reaches the show's 2 s; at 1x that takes 121 frames.
+    const auto run = [&](ShowRenderer &r, double speed, int frames) {
+        config.test.candy_speed = speed;
+        ShowFrame f;
+        for (int k = 0; k < frames; ++k) {
+            f = r.render(config, 0.0);
+        }
+        return f.frame;
+    };
+    const auto close = [](const Frame &a, const Frame &b) { // Clocks summed frame by frame.
+        float most = 0.0f;
+        for (size_t i = 0; i < a.size(); ++i) {
+            most = std::max({most, std::abs(a[i].r - b[i].r), std::abs(a[i].g - b[i].g),
+                             std::abs(a[i].b - b[i].b)});
+        }
+        return most;
+    };
+    ShowRenderer fast;
+    ShowRenderer steady;
+    CHECK(close(run(fast, 2.0, 61), run(steady, 1.0, 121)) < 1e-4f);
+    CHECK(close(run(fast, 2.0, 1), run(steady, 1.0, 1)) > 1e-3f); // Each at its own pace.
+    // A new speed carries on from where the show is: 2 s plus a frame, then half speed.
+    ShowRenderer changed;
+    ShowRenderer reference;
+    run(changed, 2.0, 61);
+    const Frame after = run(changed, 0.5, 3); // Clock 2 + 2/60, then + 0.5/60 twice.
+    CHECK(close(after, run(reference, 1.0, 121 + 2 + 1)) < 1e-4f); // 2 + 3/60 at 1x.
+}

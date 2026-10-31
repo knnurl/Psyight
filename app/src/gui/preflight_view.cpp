@@ -345,6 +345,10 @@ void PreflightView::draw_test_patterns() {
             }
             ImGui::EndCombo();
         }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(6.0f * em);
+        drag_double("Speed", &t.candy_speed, 0.01f, 0.1, 4.0, "%.2fx");
+        ImGui::SetItemTooltip("How fast the show runs: 1 as made, 0.5 half speed.");
         help(eye_candy_description(t.candy));
         break;
     }
