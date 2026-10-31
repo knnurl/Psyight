@@ -784,7 +784,7 @@ void Player::draw_queue_contents() {
         session_.preload({});
     }
     ImGui::EndDisabled();
-    ImGui::SameLine();
+    // On its own line, the tracks under it (narrow columns would cut it off beside the buttons).
     if (has_next()) {
         const std::filesystem::path &next = queue_[static_cast<size_t>(current_ + 1)];
         ImGui::TextDisabled("Next: %s", session_.preload_ready() && session_.preload_path() == next
