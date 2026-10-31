@@ -441,6 +441,7 @@ void LiveBeat::reset() {
     acquiring_ = true;
     off_grid_kicks_ = 0;
     in_lock_kicks_ = 0;
+    loop_period_s_ = 0.4;
     breakdown_floor_ = 1.0;
     flatness_slow_ = 0.0;
     level_slow_ = 0.0;
@@ -450,6 +451,15 @@ void LiveBeat::reset() {
     energy_section_ = -1;
     last_update_s_ = -1.0;
     drop_end_beat_ = 0;
+}
+
+double LiveBeat::published(double period_s) const {
+    if (!params_.whole_bpm || period_s <= 0.0) {
+        return period_s;
+    }
+    const double bpm = std::clamp(std::round(60.0 / period_s), std::ceil(params_.min_bpm),
+                                  std::floor(params_.max_bpm));
+    return 60.0 / bpm;
 }
 
 double LiveBeat::time_of(const LiveState &s, long long beat) {
@@ -520,7 +530,8 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
         const bool first = !s.tempo_known;
         s.tempo_known = true;
         s.locked = false;
-        s.period_s = median;
+        loop_period_s_ = median;
+        s.period_s = published(median);
         s.anchor_s = t_s;
         s.anchor_beat = beat;
         s.downbeat_beat = beat;
@@ -537,7 +548,7 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
         return;
     }
 
-    const double period = s.period_s;
+    const double period = loop_period_s_;
     const auto n = static_cast<long long>(std::llround((t_s - s.anchor_s) / period));
     const double predicted = s.anchor_s + static_cast<double>(n) * period;
     const double error_s = t_s - predicted;
@@ -559,9 +570,10 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
     const long long beats_since = std::max(1LL, beat - s.last_kick_beat);
     s.anchor_s = predicted + params_.pll_phase_gain * error_s;
     s.anchor_beat = beat;
-    s.period_s =
+    loop_period_s_ =
         std::clamp(period + params_.pll_period_gain * error_s / static_cast<double>(beats_since),
                    min_period, max_period);
+    s.period_s = published(loop_period_s_);
     s.last_error_ms = 1e3 * error_s;
     in_lock_kicks_ = std::abs(error_s) <= params_.lock_beats * period ? in_lock_kicks_ + 1 : 0;
     // Once locked, the loop stays locked while kicks keep within the capture range (and runs

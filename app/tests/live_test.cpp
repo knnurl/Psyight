@@ -151,6 +151,24 @@ TEST_CASE("live beat: acquires, locks and predicts a steady kick with jitter") {
     CHECK(rig.state.section == LiveSection::groove);
 }
 
+TEST_CASE("live beat: the tempo is published in whole BPM; a pitched track keeps its phase") {
+    for (const double true_bpm : {150.0, 145.6}) {
+        CAPTURE(true_bpm);
+        BeatRig rig;
+        const double period = 60.0 / true_bpm;
+        std::mt19937 rng(4);
+        std::uniform_real_distribution<double> jitter(-0.003, 0.003);
+        for (int k = 0; k < 96; ++k) {
+            rig.kick(1.0 + k * period + jitter(rng));
+        }
+        REQUIRE(rig.state.locked);
+        CHECK(60.0 / rig.state.period_s == std::round(true_bpm)); // 150, 146.
+        for (const double t : {1.0 + 95.3 * period, 1.0 + 95.7 * period}) {
+            CHECK(std::abs(rig.phase_error_s(t, 1.0, period)) < 0.006);
+        }
+    }
+}
+
 TEST_CASE("live beat: follows a tempo ramp and ignores off-beat hits") {
     BeatRig rig;
     double t = 1.0;

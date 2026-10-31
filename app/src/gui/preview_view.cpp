@@ -515,7 +515,7 @@ void PreviewView::draw_live() {
     } else {
         const double now_s = static_cast<double>(live->now()) / live->sample_rate_hz();
         const EngineInputs in = inputs_at(s, now_s);
-        mono_text("%s %.2f BPM, beat %d of the bar, %s (last kick %+.1f ms off the beat)",
+        mono_text("%s %g BPM, beat %d of the bar, %s (last kick %+.1f ms off the beat)",
                   s.locked ? "Locked:" : "Acquiring:", bpm, in.beat_in_bar + 1,
                   live_section_name(s.section), s.last_error_ms);
     }
@@ -1673,7 +1673,7 @@ void PreviewView::draw_perform(bool *open) {
         if (const std::shared_ptr<const LiveInput> live = session_.live_input(); live) {
             const LiveState s = live->state();
             if (s.tempo_known) {
-                mono_text("%.1f BPM  %s", 60.0 / s.period_s, s.locked ? "locked" : "acquiring");
+                mono_text("%g BPM  %s", 60.0 / s.period_s, s.locked ? "locked" : "acquiring");
             } else {
                 mono_text("listening");
             }

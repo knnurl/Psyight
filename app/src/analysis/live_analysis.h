@@ -61,8 +61,12 @@ struct LiveParams {
     double acquire_spread = 0.04;  // Folded intervals must agree within this fraction.
     double pll_phase_gain = 0.25;  // Of each kick's phase error, applied to the phase.
     double pll_period_gain = 0.05; // Of each kick's phase error, applied to the period.
-    double capture_beats = 0.25;   // A kick this close to a predicted beat steers the loop.
-    double lock_beats = 0.06;      // Within this, a kick counts towards lock (24 ms at 150 BPM).
+    // The tempo published (LiveState::period_s) rounded to whole BPM: tracks are made at whole
+    // tempos. The loop itself keeps its unrounded period, so a pitched track (a DJ's tempo
+    // fader) shows the nearest whole BPM while each kick still steers the phase.
+    bool whole_bpm = true;
+    double capture_beats = 0.25; // A kick this close to a predicted beat steers the loop.
+    double lock_beats = 0.06;    // Within this, a kick counts towards lock (24 ms at 150 BPM).
     int lock_kicks = 4;
     int reacquire_kicks = 4; // Consecutive kicks outside the capture range: start again.
     int breakdown_bars = 2;
@@ -175,12 +179,14 @@ class LiveBeat {
 
   private:
     void set_section(LiveState &state, LiveSection section, double start_s);
+    double published(double period_s) const; // Rounded to whole BPM when whole_bpm.
 
     LiveParams params_;
     std::vector<double> acquire_kicks_s_; // Recent kick times while acquiring.
     bool acquiring_ = true;
     int off_grid_kicks_ = 0;
     int in_lock_kicks_ = 0;
+    double loop_period_s_ = 0.4;   // The loop's own period (LiveState::period_s may be rounded).
     double breakdown_floor_ = 1.0; // Lowest residual activity since the breakdown began.
     double flatness_slow_ = 0.0;   // The residual's flatness, averaged over about a second.
     double level_slow_ = 0.0;      // The residual's activity, averaged likewise.
