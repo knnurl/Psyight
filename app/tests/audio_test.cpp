@@ -175,6 +175,33 @@ TEST_CASE("transport: a device thread plays, pauses, seeks, loops and stops (nul
     CHECK_FALSE(transport.is_open());
 }
 
+TEST_CASE("transport: a queued buffer plays on at the end without stopping (null backend)") {
+    Transport transport({true});
+    REQUIRE(transport.open(ramp_buffer(48000 / 4)).ok()); // 0.25 s.
+    AudioBuffer other_rate = ramp_buffer(4800);
+    other_rate.sample_rate_hz = 44100;
+    CHECK_FALSE(transport.queue_next(other_rate)); // Refused: another rate.
+    REQUIRE(transport.queue_next(ramp_buffer(48000 * 2)));
+    CHECK(transport.switches() == 0);
+    transport.play();
+    REQUIRE(wait_until([&] { return transport.switches() == 1; }, 3000));
+    CHECK(transport.playing()); // It never stopped.
+    CHECK(transport.position() < 48000 * 2);
+    REQUIRE(wait_until([&] { return transport.position() > 4800; }, 2000));
+    // Nothing queued now: the end stops as before.
+    transport.seek(48000 * 2 - 480);
+    REQUIRE(wait_until([&] { return !transport.playing(); }, 2000));
+    CHECK(transport.switches() == 1);
+    // A queued buffer can be dropped.
+    REQUIRE(transport.queue_next(ramp_buffer(4800)));
+    transport.clear_next();
+    transport.seek(0);
+    transport.play();
+    transport.seek(48000 * 2 - 480);
+    REQUIRE(wait_until([&] { return !transport.playing(); }, 2000));
+    CHECK(transport.switches() == 1);
+}
+
 TEST_CASE("transport: position_now glides between callbacks and holds when paused") {
     Transport transport({true});
     REQUIRE(transport.open(ramp_buffer(48000 * 4)).ok());

@@ -10,6 +10,9 @@
 // copy goes beside the file (io/recovery.h) at most once a minute and on exit. Opening another
 // track then waits for a decision (pending_open(), resolve_pending_open()), and a track whose
 // recovery copy is newer than its labels offers it back (labels_recovery_available()).
+// Gapless playback (the media player, SPEC 9.5): preload() loads and analyses the next track in
+// the background and queues its audio on the transport; when the playing track ends the audio
+// thread continues into it, and update() then makes it the loaded track (labels and all).
 #pragma once
 
 #include "engine/inputs.h"
@@ -25,6 +28,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <future>
 #include <memory>
@@ -77,8 +81,15 @@ class Session {
   public:
     ~Session(); // Writes a recovery copy of unsaved labels; never the labels file itself.
 
-    // Loads a track. With unsaved labels it only becomes pending, until resolve_pending_open().
-    void open_file(const std::filesystem::path &path);
+    // Loads a track (playing it once loaded with `play`). With unsaved labels it only becomes
+    // pending, until resolve_pending_open().
+    void open_file(const std::filesystem::path &path, bool play = false);
+    // The track to continue into, gaplessly, when the playing one ends: loaded and analysed in
+    // the background, then queued on the transport. Another path replaces it; an empty one
+    // drops it.
+    void preload(const std::filesystem::path &path);
+    const std::filesystem::path &preload_path() const { return preload_path_; }
+    bool preload_ready() const { return preloaded_ != nullptr; } // Queued on the transport.
     const std::filesystem::path &pending_open() const { return pending_open_; } // Empty: none.
     enum class PendingChoice { save, discard, cancel };
     void resolve_pending_open(PendingChoice choice);
@@ -150,6 +161,14 @@ class Session {
     std::atomic<std::shared_ptr<const LiveInput>> live_;
     std::shared_ptr<const LoadedTrack> track_;
     std::future<LoadResult> loading_;
+    bool play_when_loaded_ = false;
+    // The next track for gapless playback: its load, then the track once its audio is queued.
+    std::future<LoadResult> preloading_;
+    std::filesystem::path preloading_path_; // What preloading_ loads (it may be stale).
+    std::filesystem::path preload_path_;    // What is wanted.
+    std::shared_ptr<const LoadedTrack> preloaded_;
+    std::uint64_t switches_seen_ = 0;
+    void adopt_labels(); // The labels file of the track just made current, or fresh ones.
     std::future<Result<TrackAnalysis>> reanalysis_;
     const LoadedTrack *reanalysis_track_ = nullptr; // The track a re-analysis was started for.
     std::string loading_name_;

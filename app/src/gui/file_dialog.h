@@ -19,6 +19,8 @@ std::optional<std::filesystem::path> open_svg_file_dialog(void *owner);
 // Where to save the rig as a drawing: an SVG or (dxf) a DXF; the extension is added when missing.
 std::optional<std::filesystem::path>
 save_drawing_file_dialog(void *owner, const std::filesystem::path &suggested, bool dxf);
+// A rekordbox collection exported as XML (the media player's playlists).
+std::optional<std::filesystem::path> open_rekordbox_file_dialog(void *owner);
 // A folder (the labelling mode's music folders).
 std::optional<std::filesystem::path> pick_folder_dialog(void *owner);
 // suggested: the file name (and folder, when it has one) to start from. The chosen path always

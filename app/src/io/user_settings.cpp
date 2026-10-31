@@ -82,6 +82,18 @@ UserSettings load_user_settings(const std::filesystem::path &file) {
         }
     }
     read(root, "label_filter", settings.label_filter);
+    for (auto [key, list] : {std::pair{"library_folders", &settings.library_folders},
+                             std::pair{"queue", &settings.queue}}) {
+        if (const auto it = root.find(key); it != root.end() && it->is_array()) {
+            for (const nlohmann::json &item : *it) {
+                if (item.is_string()) {
+                    list->push_back(item.get<std::string>());
+                }
+            }
+        }
+    }
+    read(root, "rekordbox_xml", settings.rekordbox_xml);
+    read(root, "queue_index", settings.queue_index);
     return settings;
 }
 
@@ -102,6 +114,10 @@ void save_user_settings(const std::filesystem::path &file, const UserSettings &s
         {"show_mode_hides_editing", settings.show_mode_hides_editing},
         {"label_folders", settings.label_folders},
         {"label_filter", settings.label_filter},
+        {"library_folders", settings.library_folders},
+        {"rekordbox_xml", settings.rekordbox_xml},
+        {"queue", settings.queue},
+        {"queue_index", settings.queue_index},
     };
     std::ofstream(file, std::ios::binary) << root.dump(2) << "\n";
 }

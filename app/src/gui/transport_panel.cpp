@@ -80,6 +80,22 @@ void TransportPanel::draw() {
         playing ? transport.pause() : transport.play();
     }
     ImGui::SameLine();
+    if (player_ != nullptr) { // The queue's previous and next.
+        ImGui::BeginDisabled(!player_->has_previous());
+        if (ImGui::Button(icon_label(kIconPrevious, "previous").c_str())) {
+            player_->previous();
+        }
+        ImGui::SetItemTooltip("The previous track in the queue.");
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!player_->has_next());
+        if (ImGui::Button(icon_label(kIconNext, "next").c_str())) {
+            player_->next();
+        }
+        ImGui::SetItemTooltip("The next track in the queue.");
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+    }
     const double position_s = samples_to_seconds(transport.position(), track.sample_rate_hz);
     if (toggle_button(icon_label(kIconLoop, "loop").c_str(), loop.enabled)) {
         loop.enabled = !loop.enabled;

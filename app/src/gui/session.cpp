@@ -26,7 +26,8 @@ constexpr double kMaxViewS = 120.0;
 
 } // namespace
 
-void Session::open_file(const std::filesystem::path &path) {
+void Session::open_file(const std::filesystem::path &path, bool play) {
+    play_when_loaded_ = play;
     if (has_track() && labels_.dirty()) {
         pending_open_ = path; // The GUI asks what to do with the unsaved labels first.
         return;
@@ -50,6 +51,19 @@ void Session::resolve_pending_open(PendingChoice choice) {
         discard_label_changes();
     }
     start_loading(path);
+}
+
+void Session::preload(const std::filesystem::path &path) {
+    if (path == preload_path_) {
+        return;
+    }
+    preload_path_ = path;
+    preloaded_.reset();
+    transport_.clear_next();
+    if (!path.empty() && !preloading_.valid()) {
+        preloading_path_ = path;
+        preloading_ = std::async(std::launch::async, &Session::load, path, student_model_);
+    }
 }
 
 void Session::start_loading(const std::filesystem::path &path) {
@@ -423,6 +437,35 @@ void Session::update() {
     if (labels_.dirty() && std::chrono::steady_clock::now() - last_save_ > kRecoveryInterval) {
         write_labels_recovery("periodic");
     }
+    if (preloading_.valid() &&
+        preloading_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        LoadResult result = preloading_.get();
+        if (preloading_path_ != preload_path_) { // Wanted another one meanwhile.
+            if (!preload_path_.empty()) {
+                preloading_path_ = preload_path_;
+                preloading_ =
+                    std::async(std::launch::async, &Session::load, preload_path_, student_model_);
+            }
+        } else if (!result.audio) {
+            spdlog::warn("Next track not preloaded: {}", result.audio.error().message);
+        } else if (transport_.queue_next(std::move(result.audio.value()))) {
+            preloaded_ = std::move(result.track);
+            spdlog::info("Next track ready: {}", preloaded_->name);
+        }
+    }
+    if (const std::uint64_t switches = transport_.switches(); switches != switches_seen_) {
+        switches_seen_ = switches;
+        if (preloaded_ != nullptr) { // The audio thread went on into the next track.
+            write_labels_recovery("switching track");
+            track_ = std::move(preloaded_);
+            preloaded_.reset();
+            preload_path_.clear();
+            loop_ = {};
+            status_.clear();
+            spdlog::info("Playing on into {} ({:.2f} s)", track_->name, track_->duration_s);
+            adopt_labels();
+        }
+    }
     if (!loading_.valid() ||
         loading_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
         return;
@@ -444,9 +487,19 @@ void Session::update() {
     track_ = std::move(result.track);
     loop_ = {};
     status_.clear();
+    switches_seen_ = transport_.switches();
+    preloaded_.reset(); // The transport was reopened: nothing is queued on it.
+    preload_path_.clear();
     spdlog::info("Loaded {} ({:.2f} s), device period {} frames", track_->name, track_->duration_s,
                  transport_.device_period_frames());
+    if (play_when_loaded_) {
+        play_when_loaded_ = false;
+        transport_.play();
+    }
+    adopt_labels();
+}
 
+void Session::adopt_labels() {
     // Labels: load the file next to the audio, or start empty; a newer recovery copy is offered.
     labels_file_unreadable_ = false;
     labels_recovery_available_ = recovery_newer(labels_path());

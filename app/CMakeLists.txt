@@ -92,7 +92,7 @@ target_link_libraries(psyight_lib PRIVATE psyight_options nlohmann_json::nlohman
                                           ws2_32 iphlpapi)
 
 add_executable(psyight src/main.cpp src/gui/frame_pacing_win32.cpp src/gui/command_line_win32.cpp
-                       src/gui/session.cpp src/gui/file_flow.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
+                       src/gui/session.cpp src/gui/player.cpp src/gui/file_flow.cpp src/gui/layout.cpp src/gui/transport_panel.cpp
                        src/gui/analysis_view.cpp src/gui/bass_roll_view.cpp src/gui/time_plot.cpp
                        src/gui/spectrogram_textures.cpp
                        src/gui/spectrogram_image.cpp src/gui/preview_view.cpp src/gui/stage_canvas.cpp

@@ -32,6 +32,7 @@ Result<void> Transport::open(AudioBuffer buffer) {
     close();
     impl_ = std::make_unique<Impl>();
     impl_->buffer = std::move(buffer);
+    frames_.store(impl_->buffer.frames(), std::memory_order_release);
     impl_->stretch.prepare(impl_->buffer.sample_rate_hz); // Allocates: before the device starts.
     state_ = TransportState{};
     position_.store(0, std::memory_order_release);
@@ -72,6 +73,8 @@ Result<void> Transport::open(AudioBuffer buffer) {
 }
 
 void Transport::close() {
+    clear_next();
+    free_retired();
     if (!impl_) {
         return;
     }
@@ -116,7 +119,8 @@ SampleIndex Transport::position_now() const {
     const double rate = impl_->buffer.sample_rate_hz * static_cast<double>(speed());
     const double ahead = std::clamp(static_cast<double>(now_ns - time_ns) * 1e-9 * rate, 0.0,
                                     2.0 * device_period_frames());
-    return std::min<SampleIndex>(at + static_cast<SampleIndex>(ahead), impl_->buffer.frames());
+    return std::min<SampleIndex>(at + static_cast<SampleIndex>(ahead),
+                                 frames_.load(std::memory_order_acquire));
 }
 
 int Transport::device_period_frames() const {
@@ -133,6 +137,19 @@ void Transport::set_loop(SampleIndex start, SampleIndex end) {
 }
 void Transport::set_gain(float gain) { send({Command::Kind::set_gain, 0, 0, gain}); }
 void Transport::set_speed(float speed) { send({Command::Kind::set_speed, 0, 0, speed}); }
+
+bool Transport::queue_next(AudioBuffer buffer) {
+    free_retired();
+    if (!impl_ || buffer.sample_rate_hz != impl_->buffer.sample_rate_hz || buffer.frames() == 0) {
+        return false;
+    }
+    delete next_.exchange(new AudioBuffer(std::move(buffer)), std::memory_order_acq_rel);
+    return true;
+}
+
+void Transport::clear_next() { delete next_.exchange(nullptr, std::memory_order_acq_rel); }
+
+void Transport::free_retired() { delete retired_.exchange(nullptr, std::memory_order_acq_rel); }
 
 void Transport::send(const Command &command) {
     // The queue holds 256 commands and the audio thread drains it every period; a full queue
@@ -181,7 +198,27 @@ void Transport::on_audio(float *out, SampleIndex frame_count) {
         impl_->stretch.render(state_, impl_->buffer, out, frame_count);
         published = state_.playing ? impl_->stretch.heard_position(state_) : state_.position;
     } else {
-        render_transport(state_, impl_->buffer, out, frame_count);
+        SampleIndex done = 0;
+        const bool looping = state_.loop_end > state_.loop_start;
+        // The current buffer ends inside this callback: play it out, then continue into the next
+        // one (gapless), if one is queued.
+        const SampleIndex left = impl_->buffer.frames() - state_.position;
+        if (state_.playing && !looping && left >= 0 && left < frame_count &&
+            next_.load(std::memory_order_acquire) != nullptr) {
+            render_transport(state_, impl_->buffer, out, left);
+            if (AudioBuffer *next = next_.exchange(nullptr, std::memory_order_acq_rel)) {
+                std::swap(impl_->buffer.samples, next->samples); // Pointers only.
+                frames_.store(impl_->buffer.frames(), std::memory_order_release);
+                // The old samples go back to the GUI thread to be freed; one not yet collected
+                // (two switches between its polls) is freed here, which never happens in a set.
+                delete retired_.exchange(next, std::memory_order_acq_rel);
+                state_.position = 0;
+                state_.playing = true;
+                switches_.fetch_add(1, std::memory_order_acq_rel);
+                done = left;
+            }
+        }
+        render_transport(state_, impl_->buffer, out + 2 * done, frame_count - done);
         published = state_.position;
     }
     position_.store(published, std::memory_order_release);

@@ -35,7 +35,9 @@ class Transport {
     Result<void> open(AudioBuffer buffer);
     void close();
     bool is_open() const;
-    const AudioBuffer &buffer() const; // Precondition: is_open().
+    // Precondition: is_open(). Other threads than the GUI's read only its sample rate (the
+    // samples change hands at a gapless switch).
+    const AudioBuffer &buffer() const;
 
     void play();
     void pause();
@@ -44,6 +46,14 @@ class Transport {
     void set_gain(float gain);
     // 1 for normal playback; below 1 plays slower with the pitch kept (StretchRenderer).
     void set_speed(float speed);
+    // Gapless playback (SPEC 9.5): the buffer to continue into when the current one ends while
+    // playing at normal speed with no loop; the audio thread swaps it in within the callback, so
+    // no sample is lost. Refused (false) at another sample rate. A later call replaces it;
+    // clear_next() drops it. switches() counts the swaps: when it moves, the next buffer plays
+    // (position() is then in it) and buffer() is it.
+    bool queue_next(AudioBuffer buffer);
+    void clear_next();
+    std::uint64_t switches() const { return switches_.load(std::memory_order_acquire); }
     float speed() const { return speed_.load(std::memory_order_acquire); }
 
     // Published by the audio thread after each callback.
@@ -83,6 +93,13 @@ class Transport {
     std::atomic<std::int64_t> stamp_time_ns_{0}; // steady_clock, at the callback.
     std::atomic<bool> playing_{false};
     std::atomic<float> speed_{1.0f};
+    // Gapless: the GUI thread exchanges a buffer in; the audio thread takes it with an exchange,
+    // swaps the samples (no allocation) and hands the old ones back through retired_.
+    std::atomic<AudioBuffer *> next_{nullptr};
+    std::atomic<AudioBuffer *> retired_{nullptr};
+    std::atomic<std::uint64_t> switches_{0};
+    std::atomic<SampleIndex> frames_{0}; // The playing buffer's length, for other threads.
+    void free_retired();
 };
 
 } // namespace psyight

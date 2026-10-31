@@ -34,6 +34,12 @@ struct UserSettings {
     // tracks its list shows (all, not started, in progress, done).
     std::vector<std::string> label_folders;
     std::string label_filter = "all";
+    // The media player (gui/player.h): its library folders and rekordbox XML export (UTF-8
+    // paths), and the queue with the index of its current track (-1: none).
+    std::vector<std::string> library_folders;
+    std::string rekordbox_xml;
+    std::vector<std::string> queue;
+    int queue_index = -1;
 
     bool operator==(const UserSettings &) const = default;
 };

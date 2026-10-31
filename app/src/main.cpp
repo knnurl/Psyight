@@ -12,6 +12,7 @@
 #include "gui/labelling_view.h"
 #include "gui/layout.h"
 #include "gui/log_view.h"
+#include "gui/player.h"
 #include "gui/preflight_view.h"
 #include "gui/preview_view.h"
 #include "gui/project_state.h"
@@ -262,6 +263,8 @@ int main() {
         }
         psyight::Session session;
         psyight::TransportPanel transport_panel(session);
+        psyight::Player player(session); // The media player (Library and Queue).
+        transport_panel.set_player(&player);
         psyight::AnalysisView analysis_view(session);
         psyight::BassRollView bass_roll_view(session);
         psyight::ScoringView scoring_view(session);
@@ -301,6 +304,7 @@ int main() {
             bass_roll_view.apply_settings(settings);
             preview_view.apply_settings(settings);
             labelling_view.apply_settings(settings);
+            player.apply_settings(settings);
         }
         psyight::UserSettings prefs = settings;
         // Show mode (React or Show on the top bar): the Show theme and the editing panels hidden,
@@ -494,6 +498,7 @@ int main() {
             ImGui::DockSpaceOverViewport(dockspace_id);
             psyight::draw_pane_dividers(dockspace_id);
             session.update();
+            player.update();
             if (!capture && session.has_track() && session.track().path != recent_path) {
                 recent_path = session.track().path; // Loaded (from the menu, a drop or the
                 recent.add(recent_path);            // command line): first in the recent list.
@@ -531,6 +536,8 @@ int main() {
             scoring_view.draw();
             // The tabs' order (Log, Preflight, Rig, Show) is set by apply_default_layout.
             log_view.draw();
+            player.draw_library();
+            player.draw_queue();
             preflight_view.draw();
             rig_view.draw();
             preview_view.draw(hide_editing);
@@ -582,6 +589,7 @@ int main() {
                 bass_roll_view.store_settings(now);
                 preview_view.store_settings(now);
                 labelling_view.store_settings(now);
+                player.store_settings(now);
                 if (now != settings) {
                     settings = now;
                     psyight::save_user_settings(kSettingsFile, settings);
@@ -624,6 +632,7 @@ int main() {
                 psyight::wait_for_display_refresh();
                 file_flow.after_frame(glfwGetWin32Window(window)); // Its file dialogs.
                 labelling_view.after_frame(glfwGetWin32Window(window));
+                player.after_frame(glfwGetWin32Window(window));
                 rig_view.after_frame(glfwGetWin32Window(window));
                 if (open_requested) { // After the frame is shown, not halfway through it.
                     open_requested = false;

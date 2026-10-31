@@ -18,5 +18,9 @@ inline constexpr const char *kIconRight = "\xee\x81\xb3";     // chevron-right, 
 inline constexpr const char *kIconRemove = "\xee\x86\xb2";    // x, U+E1B2.
 inline constexpr const char *kIconAdd = "\xee\x85\x81";       // plus, U+E141.
 inline constexpr const char *kIconRename = "\xee\x87\xb9";    // pencil, U+E1F9.
+inline constexpr const char *kIconPrevious = "\xee\x85\xa3";  // skip-back, U+E163.
+inline constexpr const char *kIconNext = "\xee\x85\xa4";      // skip-forward, U+E164.
+inline constexpr const char *kIconShuffle = "\xee\x85\xa2";   // shuffle, U+E162.
+inline constexpr const char *kIconFolderAdd = "\xee\x83\x9e"; // folder-plus, U+E0DE.
 
 } // namespace psyight
