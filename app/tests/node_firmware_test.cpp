@@ -817,3 +817,31 @@ TEST_CASE("node setup: one strip per data line when the strips fit the eight") {
     REQUIRE(back.ok());
     CHECK(back.value().node.one_strip_per_line);
 }
+
+TEST_CASE("node firmware: the fallback's brightness wanders between 30 % and all of its setting") {
+    node_settings s = node_default_settings();
+    s.loss_timeout_ms = 100;
+    s.lanes[0] = {0, 408};
+    for (int l = 1; l < NODE_LANES; ++l) {
+        s.lanes[l] = {0, 0};
+    }
+    s.fallback_brightness = 1.0f; // Full scale, so the drive shows the wander clearly.
+    auto node = std::make_unique<node_state>();
+    node_init(node.get(), &s);
+    auto lanes = std::make_unique<LaneBuffer>();
+    double dimmest = 1e9;
+    double brightest = 0.0;
+    for (std::uint32_t t = 1000; t < 1000 + 180000; t += 2000) { // Three minutes.
+        REQUIRE(node_frame(node.get(), t, lanes->lanes));
+        double sum = 0.0;
+        for (int i = 0; i < 408 * 3; ++i) {
+            sum += lanes->lanes[0][i];
+        }
+        dimmest = std::min(dimmest, sum);
+        brightest = std::max(brightest, sum);
+    }
+    CAPTURE(dimmest);
+    CAPTURE(brightest);
+    CHECK(brightest > 2.0 * dimmest); // It wanders...
+    CHECK(dimmest > 0.0);             // ...but never to black.
+}

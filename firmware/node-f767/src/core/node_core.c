@@ -224,6 +224,11 @@ static void fill_from_latched(const node_state *n, float scale,
 #define AURORA_MAX_SPEED_PX_PER_S 4.5f
 #define AURORA_MIN_ALPHA 0.6f
 #define AURORA_PACE_HZ 0.05f /* fallback_speed at the aurora's own pace. */
+/* The brightness wanders between this share of fallback_brightness and all of it (3 to 10 % at
+ * 0.1), as two slow sines of unrelated periods, so it never settles into a rhythm. */
+#define AURORA_WANDER_LOW 0.3f
+#define AURORA_WANDER_A_S 23.0
+#define AURORA_WANDER_B_S 61.0
 /* A channel at least this bright (before gamma) is sent as at least 1 (the app's kVisibleFloor):
  * at low fallback brightness the faint parts of the waves would round to black. */
 #define NODE_VISIBLE_FLOOR 0.02f
@@ -260,6 +265,12 @@ static void fill_fallback(const node_state *n, uint32_t now_ms,
     const node_settings *s = &n->s;
     /* Seconds at the aurora's pace; double, so hours of uptime keep their milliseconds. */
     const double t = (double)now_ms * 0.001 * (double)(s->fallback_speed_hz / AURORA_PACE_HZ);
+    const double wall_s = (double)now_ms * 0.001;
+    const float wander =
+        (float)(0.5 + 0.25 * sin(2.0 * 3.14159265358979 * wall_s / AURORA_WANDER_A_S) +
+                0.25 * sin(2.0 * 3.14159265358979 * wall_s / AURORA_WANDER_B_S + 1.3));
+    const float brightness =
+        s->fallback_brightness * (AURORA_WANDER_LOW + (1.0f - AURORA_WANDER_LOW) * wander);
     const int colours = s->palette_size > 0 ? (s->palette_size < 4 ? s->palette_size : 4) : 1;
     for (int l = 0; l < NODE_LANES; ++l) {
         uint8_t *out = lanes[l];
@@ -324,7 +335,7 @@ static void fill_fallback(const node_state *n, uint32_t now_ms,
             /* Overlaps keep their hue: scaled down, not clipped towards white. */
             float peak = sum[0] > sum[1] ? sum[0] : sum[1];
             peak = peak > sum[2] ? peak : sum[2];
-            const float scale = s->fallback_brightness / (peak > 1.0f ? peak : 1.0f);
+            const float scale = brightness / (peak > 1.0f ? peak : 1.0f);
             for (int c = 0; c < 3; ++c) { /* R, G, B, each to its place in the lane's order. */
                 const float level = sum[c] * scale;
                 const float drive = powf(level, 2.2f); /* Perceptual to LED drive. */
