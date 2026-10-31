@@ -42,6 +42,7 @@ class ShowRenderer::Tee final : public PacketSink {
 
 namespace {
 constexpr double kSilenceFadeS = 2.0; // Live: the lights fade out once the music stopped.
+constexpr double kTrackFadeInS = 1.0; // File mode: a track's first second fades up from black.
 } // namespace
 
 ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
@@ -109,12 +110,11 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
                                     : render_aurora(config.rig, clock_s, config.seed);
     } else if (config.analysis != nullptr || config.live != nullptr) {
         EngineInputs inputs;
-        double silence_fade = 1.0;
+        double fade = 1.0;
         if (config.live != nullptr) {
             const LiveState state = config.live->state();
             if (state.silent) {
-                silence_fade =
-                    std::clamp(1.0 - (t_s - state.silent_since_s) / kSilenceFadeS, 0.0, 1.0);
+                fade = std::clamp(1.0 - (t_s - state.silent_since_s) / kSilenceFadeS, 0.0, 1.0);
             }
             inputs = inputs_at(state, t_s);
             const int manual =
@@ -137,9 +137,12 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         } else {
             out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
                                    config.seed, &modulation_, &variants_);
-            if (silence_fade < 1.0) { // Live, the music stopped: fade out.
+            if (config.live == nullptr && t_s < kTrackFadeInS) { // A track's start: from black.
+                fade = std::max(0.0, t_s) / kTrackFadeInS;
+            }
+            if (fade < 1.0) { // The music stopped (live), or a track starting (file).
                 for (Rgb &c : out.frame) {
-                    c = scaled(c, silence_fade);
+                    c = scaled(c, fade);
                 }
             }
             if (out.mix.to >= 0 && static_cast<size_t>(out.mix.to) < modulation_.size()) {

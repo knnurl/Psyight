@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -201,4 +202,27 @@ TEST_CASE("show renderer: eye candy's speed runs its clock, without a jump when 
     run(changed, 2.0, 61);
     const Frame after = run(changed, 0.5, 3); // Clock 2 + 2/60, then + 0.5/60 twice.
     CHECK(close(after, run(reference, 1.0, 121 + 2 + 1)) < 1e-4f); // 2 + 3/60 at 1x.
+}
+
+TEST_CASE("show renderer: a track's first second fades up from black") {
+    ShowConfig config;
+    config.limiter.flash_limiter = false;
+    TrackAnalysis analysis;
+    analysis.sample_rate_hz = 48000;
+    analysis.duration_s = 30.0;
+    analysis.grid = {150.0, 0, 48000};
+    analysis.sections = {{0.0, 30.0, "intro", 1.0}};
+    config.analysis = std::make_shared<const TrackAnalysis>(analysis);
+    config.grid = analysis.grid;
+    const auto brightest = [&](double t) {
+        ShowRenderer renderer;
+        float most = 0.0f;
+        for (const Rgb &c : renderer.render(config, t).frame) {
+            most = std::max({most, c.r, c.g, c.b});
+        }
+        return most;
+    };
+    CHECK(brightest(0.0) == 0.0f);
+    CHECK(brightest(0.5) > 0.0f);
+    CHECK(brightest(0.5) < brightest(1.5));
 }
