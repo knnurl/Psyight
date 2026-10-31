@@ -80,6 +80,17 @@ Result<std::vector<ArtNode>> discover(std::vector<NetworkInterface> interfaces) 
 } // namespace
 
 std::array<std::uint8_t, 4> PreflightView::node_interface() const {
+    const OutputSettings &o = project_.project().output;
+    if (o.protocol == OutputProtocol::art_net || !o.multicast) {
+        // Unicast: the way to that address, not to whichever node answered first (a WiFi node
+        // beside a wired one).
+        for (const NetworkInterface &i : interfaces_) {
+            if (i.contains(o.address)) {
+                return i.address;
+            }
+        }
+        return {};
+    }
     if (nodes_.has_value()) {
         for (const ArtNode &n : *nodes_) {
             for (const NetworkInterface &i : interfaces_) {

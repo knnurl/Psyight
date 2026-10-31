@@ -49,8 +49,9 @@ class PreflightView {
     void draw_node_setup();
     const std::vector<PreflightCheck> &checks() const { return checks_; }
     const std::optional<std::vector<ArtNode>> &nodes() const { return nodes_; }
-    // The address of the local interface whose subnet holds the first node found; all zero when
-    // none was found (the output then leaves where the system routes it).
+    // The local interface the show's output leaves on: sending unicast (Art-Net, or sACN without
+    // multicast), the one whose subnet holds the node address; with multicast, the one whose
+    // subnet holds the first node found. All zero when none does (the system routes it).
     std::array<std::uint8_t, 4> node_interface() const;
 
   private:
