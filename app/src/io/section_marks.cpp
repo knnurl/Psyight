@@ -233,6 +233,69 @@ SectionScore score_sections(const std::vector<SectionLabel> &labelled,
     return score;
 }
 
+DetailScore &DetailScore::operator+=(const DetailScore &o) {
+    phase_pairs += o.phase_pairs;
+    phase_pairs_agreeing += o.phase_pairs_agreeing;
+    role_bars += o.role_bars;
+    role_bars_agreeing += o.role_bars_agreeing;
+    labelled_events += o.labelled_events;
+    detected_events += o.detected_events;
+    matched_events += o.matched_events;
+    return *this;
+}
+
+DetailScore score_section_detail(const std::vector<SectionLabel> &labelled,
+                                 const std::vector<SectionLabel> &detected,
+                                 const std::vector<EventLabel> &labelled_events,
+                                 const std::vector<EventLabel> &detected_events,
+                                 const LabelGrid &grid, double duration_s) {
+    DetailScore score;
+    const double bar_s = bar_length_s(grid);
+    if (bar_s <= 0.0) {
+        return score;
+    }
+    std::vector<std::pair<std::string, std::string>> phases; // Per bar with both phases.
+    for (double start = first_downbeat_in_audio_s(grid); start + bar_s <= duration_s + 1e-9;
+         start += bar_s) {
+        const double middle = start + 0.5 * bar_s;
+        const int a = section_at(labelled, middle);
+        const int b = section_at(detected, middle);
+        if (a < 0 || b < 0) {
+            continue;
+        }
+        const SectionLabel &l = labelled[static_cast<size_t>(a)];
+        const SectionLabel &d = detected[static_cast<size_t>(b)];
+        if (!l.phase.empty() && !d.phase.empty()) {
+            phases.emplace_back(l.phase, d.phase);
+        }
+        if (!l.role.empty()) {
+            ++score.role_bars;
+            score.role_bars_agreeing += l.role == d.role;
+        }
+    }
+    for (size_t i = 0; i < phases.size(); ++i) {
+        for (size_t j = i + 1; j < phases.size(); ++j) {
+            ++score.phase_pairs;
+            score.phase_pairs_agreeing +=
+                (phases[i].first == phases[j].first) == (phases[i].second == phases[j].second);
+        }
+    }
+    score.labelled_events = static_cast<int>(labelled_events.size());
+    score.detected_events = static_cast<int>(detected_events.size());
+    std::vector<bool> used(detected_events.size(), false);
+    for (const EventLabel &l : labelled_events) {
+        for (size_t j = 0; j < detected_events.size(); ++j) {
+            if (!used[j] && detected_events[j].kind == l.kind &&
+                std::fabs(detected_events[j].start_s - l.start_s) <= bar_s + 1e-6) {
+                used[j] = true;
+                ++score.matched_events;
+                break;
+            }
+        }
+    }
+    return score;
+}
+
 int section_at(const std::vector<SectionLabel> &sections, double t_s) {
     int at = -1;
     for (size_t i = 0; i < sections.size(); ++i) {

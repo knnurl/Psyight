@@ -83,4 +83,37 @@ SectionScore score_sections(const std::vector<SectionLabel> &labelled,
                             const std::vector<SectionLabel> &detected, const LabelGrid &grid,
                             double duration_s, double tolerance_bars = 1.0);
 
+// The finer detail (SPEC 6.6.1) against the labels, per bar of the grid: phases by pairs of bars
+// (both labelled with a phase: the labels and the detection agree on same or different, which
+// does not depend on the letters chosen), roles over the bars with a labelled role, and events
+// matched one to one by kind within a bar.
+struct DetailScore {
+    long long phase_pairs = 0;
+    long long phase_pairs_agreeing = 0;
+    int role_bars = 0;
+    int role_bars_agreeing = 0;
+    int labelled_events = 0;
+    int detected_events = 0;
+    int matched_events = 0;
+    double phase_agreement() const {
+        return phase_pairs > 0 ? 1.0 * phase_pairs_agreeing / phase_pairs : 1.0;
+    }
+    double role_accuracy() const {
+        return role_bars > 0 ? 1.0 * role_bars_agreeing / role_bars : 1.0;
+    }
+    double event_precision() const {
+        return detected_events > 0 ? 1.0 * matched_events / detected_events : 1.0;
+    }
+    double event_recall() const {
+        return labelled_events > 0 ? 1.0 * matched_events / labelled_events : 1.0;
+    }
+    bool labelled() const { return phase_pairs > 0 || role_bars > 0 || labelled_events > 0; }
+    DetailScore &operator+=(const DetailScore &o);
+};
+DetailScore score_section_detail(const std::vector<SectionLabel> &labelled,
+                                 const std::vector<SectionLabel> &detected,
+                                 const std::vector<EventLabel> &labelled_events,
+                                 const std::vector<EventLabel> &detected_events,
+                                 const LabelGrid &grid, double duration_s);
+
 } // namespace psyight

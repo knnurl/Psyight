@@ -536,6 +536,7 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
         tracks.push_back(std::move(t));
     }
     SectionScore total;
+    DetailScore detail_total;
     int phrase_tracks = 0;
     int phrase_agree = 0;
     int scored = 0;
@@ -584,6 +585,22 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
                     track.name.substr(0, 50).c_str(), s.precision(), s.recall(), s.f1(),
                     s.labelled_boundaries, s.detected_boundaries, 100.0 * s.bar_accuracy(),
                     phrase.c_str(), options.source == AnalysisSource::stems ? "stems" : "mix");
+        {
+            std::vector<EventLabel> found;
+            for (const DetectedEvent &e : a.events) {
+                found.push_back({e.kind, e.start_s, e.length_s});
+            }
+            const DetailScore d =
+                score_section_detail(l.sections, detected, l.events, found, l.grid, a.duration_s);
+            if (d.labelled()) {
+                detail_total += d;
+                std::printf("%-50s  phases %.2f agree (bar pairs), roles %.0f%% of %d bars, "
+                            "events P %.2f R %.2f (%d labelled, %d detected)\n",
+                            "", d.phase_agreement(), 100.0 * d.role_accuracy(), d.role_bars,
+                            d.event_precision(), d.event_recall(), d.labelled_events,
+                            d.detected_events);
+            }
+        }
         if (detail) {
             print_boundary_detail(l, detected, a);
         }
@@ -598,6 +615,16 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
                 "labelled alike; phrase grid agrees on %d of %d labelled\n",
                 scored, scored == 1 ? "" : "s", total.precision(), total.recall(), total.f1(),
                 100.0 * total.bar_accuracy(), phrase_agree, phrase_tracks);
+    if (detail_total.labelled()) {
+        std::printf("Finer detail: phases %.2f agree, roles %.0f%% of %d bars, events P %.2f "
+                    "R %.2f (%d labelled)\n",
+                    detail_total.phase_agreement(), 100.0 * detail_total.role_accuracy(),
+                    detail_total.role_bars, detail_total.event_precision(),
+                    detail_total.event_recall(), detail_total.labelled_events);
+    } else {
+        std::printf("Finer detail: none labelled yet (phases, roles, breaks and fills in the "
+                    "labelling mode, Detailed on).\n");
+    }
     return 0;
 }
 

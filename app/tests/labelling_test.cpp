@@ -276,3 +276,27 @@ TEST_CASE("finer sections: phases, roles, pre-drops and events in labels and for
     CHECK(drafted[3].start_s == doctest::Approx(80.0));
     CHECK(drafted[1].phase == "A");
 }
+
+TEST_CASE("finer sections: scoring phases by bar pairs, roles by bar, events within a bar") {
+    LabelGrid grid;
+    grid.bpm = 150.0; // Bars of 1.6 s.
+    // Labels: A (bars 0 to 9), B (10 to 19), A (20 to 29). The detection names them X, Y, X:
+    // other letters, the same structure, so every pair agrees.
+    const std::vector<SectionLabel> labelled = {
+        {0.0, "groove", "A", "main"}, {16.0, "groove", "B", "lead"}, {32.0, "groove", "A", "main"}};
+    std::vector<SectionLabel> detected = {
+        {0.0, "groove", "X", "main"}, {16.0, "groove", "Y", "main"}, {32.0, "groove", "X", "main"}};
+    const std::vector<EventLabel> events = {{"fill", 14.4, 1.6}, {"break", 40.0, 3.2}};
+    const std::vector<EventLabel> found = {{"fill", 15.0, 1.6}, {"fill", 30.0, 1.6}};
+    DetailScore s = score_section_detail(labelled, detected, events, found, grid, 48.0);
+    CHECK(s.phase_agreement() == doctest::Approx(1.0));
+    CHECK(s.role_bars == 30);
+    CHECK(s.role_bars_agreeing == 20); // The lead is missed.
+    CHECK(s.matched_events == 1);      // The fill; the break is missed, a fill is extra.
+    CHECK(s.event_precision() == doctest::Approx(0.5));
+    CHECK(s.event_recall() == doctest::Approx(0.5));
+    // One phase for all: the A and B bars now agree wrongly.
+    detected[1].phase = "X";
+    s = score_section_detail(labelled, detected, events, found, grid, 48.0);
+    CHECK(s.phase_agreement() < 0.6);
+}
