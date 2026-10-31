@@ -480,6 +480,8 @@ int main() {
                     ImGui::SetItemTooltip("Show the analysis and bass roll instead of the stage, "
                                           "without leaving React or Show.");
                 }
+                ImGui::TextDisabled("|");
+                player.draw_menu_buttons(); // Library and Queue.
                 preview_view.draw_top_bar();
                 ImGui::EndMainMenuBar();
             }
@@ -536,7 +538,6 @@ int main() {
             scoring_view.draw();
             // The tabs' order (Log, Preflight, Rig, Show) is set by apply_default_layout.
             log_view.draw();
-            player.draw_library();
             preflight_view.draw();
             rig_view.draw();
             preview_view.draw(hide_editing);

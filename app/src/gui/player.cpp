@@ -359,11 +359,33 @@ void Player::play_next(const std::filesystem::path &path) {
 
 void Player::add(const std::filesystem::path &path) { queue_.push_back(path); }
 
-void Player::draw_library() {
-    if (!ImGui::Begin("Library")) {
-        ImGui::End();
-        return;
+void Player::draw_menu_buttons() {
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    const ImVec2 below(viewport->WorkPos.x + 0.075f * viewport->WorkSize.x, viewport->WorkPos.y);
+    if (ImGui::Button("Library")) {
+        ImGui::OpenPopup("##library popup");
     }
+    ImGui::SetItemTooltip("Your music folders and playlists, the tracks, and the queue.");
+    ImGui::SetNextWindowPos(below);
+    ImGui::SetNextWindowSize(ImVec2(0.85f * viewport->WorkSize.x, 0.75f * viewport->WorkSize.y));
+    if (ImGui::BeginPopup("##library popup")) {
+        draw_library_contents();
+        ImGui::EndPopup();
+    }
+    char queue_label[48];
+    std::snprintf(queue_label, sizeof(queue_label), "Queue (%d)###menu queue", queue_size());
+    if (ImGui::Button(queue_label)) {
+        ImGui::OpenPopup("##menu queue popup");
+    }
+    ImGui::SetItemTooltip("The queue: double-click to jump, drag to reorder.");
+    ImGui::SetNextWindowSize(ImVec2(30.0f * ImGui::GetFontSize(), 0.6f * viewport->WorkSize.y));
+    if (ImGui::BeginPopup("##menu queue popup")) {
+        draw_queue_contents();
+        ImGui::EndPopup();
+    }
+}
+
+void Player::draw_library_contents() {
     const float em = ImGui::GetFontSize();
     if (ImGui::Button(icon_text(kIconFolderAdd, "Add folder...").c_str())) {
         folder_requested_ = true;
@@ -434,7 +456,6 @@ void Player::draw_library() {
         ImGui::EndChild();
         ImGui::EndTable();
     }
-    ImGui::End();
 }
 
 void Player::after_frame(void *owner) {

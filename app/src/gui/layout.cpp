@@ -118,7 +118,6 @@ void apply_default_layout(ImGuiID dockspace_id) {
     dock_tab("Preflight", tabs, 1);
     dock_tab("Rig", tabs, 2);
     dock_tab("Show", tabs, 3);
-    dock_tab("Library", tabs, 4);
     ImGui::DockBuilderFinish(dockspace_id);
 }
 

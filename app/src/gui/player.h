@@ -1,12 +1,13 @@
-// The media player (SPEC 9.5): a Library tab to browse the library folders and rekordbox
-// playlists beside the queue, and previous, next and the queue for the transport.
+// The media player (SPEC 9.5): Library and Queue buttons on the menu bar drop down the library
+// (its folders and rekordbox playlists beside the queue) and the queue; previous, next and the
+// queue on the transport too.
 // - Library: folders (the operator's, scanned on a worker thread into io/media_library.h's index,
 //   psyight.library.json) and rekordbox playlists (io/rekordbox.h) in a tree; a searchable,
 //   sortable table of the tracks shown; double-click plays a track now, the context menu plays
 //   it next or adds it (or every track shown) to the queue.
-// - Queue (in the Library tab, and dropped down from the transport): the tracks in order, the
-// playing one marked; drag to reorder, double-click to jump,
-//   remove, clear, shuffle the rest. While a queued track plays, the next one is loaded and
+// - Queue (beside the library, and dropped down from the menu bar and the transport): the tracks
+//   in order, the playing one marked; drag to reorder, double-click to jump, remove, clear,
+//   shuffle the rest. While a queued track plays, the next one is loaded and
 //   analysed in the background (Session::preload) and the transport continues into it without
 //   a gap; when that is not ready in time, the next track opens and plays as soon as it loads.
 // The folders, the rekordbox file and the queue persist in the user settings.
@@ -37,9 +38,11 @@ class Player {
     void apply_settings(const UserSettings &settings); // Also loads the index and rescans.
     void store_settings(UserSettings &settings) const;
 
-    void update();       // Once a frame, before the panels: scans, the queue's advance, preloading.
-    void draw_library(); // The Library tab: folders and playlists, tracks, and the queue.
-    // The queue's buttons and list, for the Library tab and the transport's dropdown.
+    void update(); // Once a frame, before the panels: scans, the queue's advance, preloading.
+    // The menu bar's Library and Queue buttons, each dropping down its window: the library
+    // (folders and playlists, tracks, and the queue) sized to most of the app, or the queue.
+    void draw_menu_buttons();
+    // The queue's buttons and list, for the library and the queue dropdowns.
     void draw_queue_contents();
     int queue_size() const;
     void after_frame(void *owner); // Its file dialogs, outside the frame (owner: the window).
@@ -74,6 +77,7 @@ class Player {
     void load_playlist_files(); // Reads them and matches their tracks to the library.
     void rebuild_rows();
     Row row_for(const std::filesystem::path &path) const;
+    void draw_library_contents();
     void draw_tree();
     void draw_table();
     void play_now(const std::filesystem::path &path);
