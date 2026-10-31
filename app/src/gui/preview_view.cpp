@@ -774,6 +774,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     draw_macros();
     if (tier_at_least(Tier::tune)) {
         draw_library();
+        draw_automation();
         std::vector<Scene> &scenes = project_.edit().scenes;
         edit_scene_ = std::clamp(edit_scene_, 0, static_cast<int>(scenes.size()) - 1);
         const std::string scene_label =
@@ -2089,6 +2090,38 @@ const std::string &PreviewView::current_pack() {
         }
     }
     return pack_name_;
+}
+
+void PreviewView::draw_automation() {
+    if (!ImGui::TreeNode("Automation")) {
+        return;
+    }
+    const float em = ImGui::GetFontSize();
+    AutomationParams a = project_.project().automation;
+    bool changed = false;
+    const auto field = [&](bool edited, const char *tooltip) {
+        changed |= edited;
+        ImGui::SetItemTooltip("%s", tooltip);
+    };
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_double("Crossfade (beats)", &a.crossfade_beats, 0.05f, 0.0, 64.0, "%.1f"),
+          "Into intros, breakdowns, builds and outros (grooves and drops cut in).");
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_int("Palette every (phrases)", &a.palette_every_phrases, 0.05f, 0, 64, "%d"),
+          "The palette moves on by one this often; 0 keeps each scene's own.");
+    ImGui::SeparatorText("Long sections");
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_int("Next scene every (phrases)", &a.rotate_every_phrases, 0.05f, 0, 64, "%d"),
+          "Inside a long section, the next scene for it takes over this often, on the phrase's "
+          "downbeat (builds keep theirs). 0: one scene a section.");
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_double("Change fade (beats)", &a.rotate_fade_beats, 0.05f, 0.0, 16.0, "%.1f"),
+          "0: a cut on the downbeat.");
+    if (changed) {
+        project_.edit().automation = a;
+        project_.changed();
+    }
+    ImGui::TreePop();
 }
 
 void PreviewView::draw_library() {

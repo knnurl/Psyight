@@ -126,6 +126,7 @@ class PreviewView {
     void apply_pending_scene_preset();
     std::string source_label(ModSource source) const; // Macros by their project names.
     void draw_palettes();
+    void draw_automation(); // Crossfades, palette rotation and long sections.
     void draw_group_caps();
     void draw_rig(const ShowFrame &frame, bool tools = true);
     void draw_preview(const ShowFrame *frame, const char *message);

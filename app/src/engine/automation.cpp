@@ -1,6 +1,7 @@
 #include "engine/automation.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace psyight {
 
@@ -30,6 +31,52 @@ int palette_index(const Scene &scene, int shift, size_t palette_count) {
     return ((scene.palette + shift) % n + n) % n;
 }
 
+// The section whose scene section `index` shows: itself, or the one before a held blip.
+size_t own_section(const std::vector<DetectedSection> &sections, size_t index, double min_dwell_s) {
+    while (index > 0 && held(sections[index], min_dwell_s)) {
+        --index;
+    }
+    return index;
+}
+
+// Earlier sections with the same label (blips aside): the rotation between sections.
+size_t occurrence_of(const std::vector<DetectedSection> &sections, size_t index,
+                     double min_dwell_s) {
+    size_t occurrence = 0;
+    for (size_t j = 0; j < index; ++j) {
+        occurrence += sections[j].label == sections[index].label && !held(sections[j], min_dwell_s);
+    }
+    return occurrence;
+}
+
+constexpr double kPhraseToleranceS = 0.05;
+
+// Phrases a section starting at start_s has run by t_s: phrase starts after its own, up to t_s.
+long long phrases_run(const std::vector<double> &phrase_starts, double start_s, double t_s) {
+    const auto from =
+        std::upper_bound(phrase_starts.begin(), phrase_starts.end(), start_s + kPhraseToleranceS);
+    const auto to = std::upper_bound(phrase_starts.begin(), phrase_starts.end(), t_s);
+    return std::max<long long>(0, to - from);
+}
+
+// Rotations within a section after `phrases` phrases (none in builds).
+size_t rotation_step(const AutomationParams &params, const std::string &label, long long phrases) {
+    if (params.rotate_every_phrases <= 0 || label == "build" || phrases <= 0) {
+        return 0;
+    }
+    return static_cast<size_t>(phrases / params.rotate_every_phrases);
+}
+
+// A rotation that began `since_s` ago (at a phrase start) crossfades from the scene before it.
+void fade_rotation(SceneMix &mix, int before, double since_s, double beat_s,
+                   const AutomationParams &params) {
+    const double fade_s = params.rotate_fade_beats * beat_s;
+    if (before != mix.to && fade_s > 0.0 && since_s >= 0.0 && since_s < fade_s) {
+        mix.from = before;
+        mix.to_weight = since_s / fade_s;
+    }
+}
+
 void mix_into(Frame &frame, const Frame &other, double other_weight) {
     const auto w = static_cast<float>(std::clamp(other_weight, 0.0, 1.0));
     for (size_t i = 0; i < frame.size() && i < other.size(); ++i) {
@@ -40,7 +87,7 @@ void mix_into(Frame &frame, const Frame &other, double other_weight) {
 } // namespace
 
 int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence,
-                    int energy) {
+                    int energy, size_t step) {
     std::vector<int> candidates = tagged(scenes, label);
     if (candidates.empty() && label == "drop") {
         candidates = tagged(scenes, "groove");
@@ -69,7 +116,7 @@ int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, 
     if (candidates.empty()) {
         return 0;
     }
-    return candidates[occurrence % candidates.size()];
+    return candidates[(occurrence + step) % candidates.size()];
 }
 
 int scene_for_section(const std::vector<Scene> &scenes,
@@ -78,15 +125,9 @@ int scene_for_section(const std::vector<Scene> &scenes,
     if (scenes.empty() || index >= sections.size()) {
         return 0;
     }
-    while (index > 0 && held(sections[index], min_dwell_s)) {
-        --index;
-    }
-    const std::string &label = sections[index].label;
-    size_t occurrence = 0;
-    for (size_t j = 0; j < index; ++j) {
-        occurrence += sections[j].label == label && !held(sections[j], min_dwell_s);
-    }
-    return scene_for_label(scenes, label, occurrence, sections[index].energy);
+    index = own_section(sections, index, min_dwell_s);
+    return scene_for_label(scenes, sections[index].label,
+                           occurrence_of(sections, index, min_dwell_s), sections[index].energy);
 }
 
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
@@ -127,11 +168,43 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         return mix;
     }
     const auto index = static_cast<size_t>(inputs.section_index);
-    mix.to = scene_for_section(scenes, sections, index, phrase_s);
+    // The scene of section i at time t_s: its own (or the one before a blip), rotated by the
+    // phrases it has run.
+    const auto scene_at = [&](size_t i, double t_s, size_t *step_out) {
+        const size_t own = own_section(sections, i, phrase_s);
+        const DetectedSection &s = sections[own];
+        const size_t step =
+            rotation_step(params, s.label, phrases_run(phrase_starts, s.start_s, t_s));
+        if (step_out != nullptr) {
+            *step_out = step;
+        }
+        return scene_for_label(scenes, s.label, occurrence_of(sections, own, phrase_s), s.energy,
+                               step);
+    };
+    size_t step = 0;
+    mix.to = scene_at(index, inputs.t_s, &step);
+    if (step > 0 && inputs.phrase_index >= 0 &&
+        static_cast<size_t>(inputs.phrase_index) < phrase_starts.size()) {
+        const DetectedSection &own = sections[own_section(sections, index, phrase_s)];
+        const double phrase_start_s = phrase_starts[static_cast<size_t>(inputs.phrase_index)];
+        if (rotation_step(params, own.label,
+                          phrases_run(phrase_starts, own.start_s, phrase_start_s - 1e-3)) !=
+            step) { // This phrase began the rotation.
+            fade_rotation(
+                mix,
+                scene_for_label(
+                    scenes, own.label,
+                    occurrence_of(sections, own_section(sections, index, phrase_s), phrase_s),
+                    own.energy, step - 1),
+                inputs.t_s - phrase_start_s, beat_s, params);
+            return mix;
+        }
+    }
     if (index == 0 || cuts_into(inputs.section)) {
         return mix;
     }
-    const int previous = scene_for_section(scenes, sections, index - 1, phrase_s);
+    // The scene the section before ended on.
+    const int previous = scene_at(index - 1, sections[index].start_s - 1e-3, nullptr);
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
     if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
         mix.from = previous;
@@ -171,14 +244,29 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
         return static_cast<size_t>(
             std::max(0, state.section_occurrences[static_cast<size_t>(s)] - 1));
     };
-    mix.to =
-        scene_for_label(scenes, inputs.section, occurrence(state.section), state.section_energy);
+    // Phrases restart at each section (LiveBeat::set_section), phrase_bars bars each.
+    const double phrase_s = 4.0 * state.phrase_bars * beat_s;
+    const double into_s = std::max(0.0, inputs.t_s - state.section_start_s);
+    const auto phrases = static_cast<long long>(std::floor(into_s / phrase_s + 1e-9));
+    const size_t step = rotation_step(params, inputs.section, phrases);
+    mix.to = scene_for_label(scenes, inputs.section, occurrence(state.section),
+                             state.section_energy, step);
+    if (step > 0 && rotation_step(params, inputs.section, phrases - 1) != step) {
+        fade_rotation(mix,
+                      scene_for_label(scenes, inputs.section, occurrence(state.section),
+                                      state.section_energy, step - 1),
+                      into_s - static_cast<double>(phrases) * phrase_s, beat_s, params);
+        return mix;
+    }
     if (!state.has_previous || cuts_into(inputs.section)) {
         return mix;
     }
-    const int previous =
-        scene_for_label(scenes, live_section_name(state.previous_section),
-                        static_cast<size_t>(state.previous_occurrence), state.previous_energy);
+    const std::string previous_label = live_section_name(state.previous_section);
+    const auto previous_phrases = static_cast<long long>(
+        std::floor(std::max(0.0, state.previous_length_s / phrase_s - 1e-6)));
+    const int previous = scene_for_label(
+        scenes, previous_label, static_cast<size_t>(state.previous_occurrence),
+        state.previous_energy, rotation_step(params, previous_label, previous_phrases));
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
     if (previous != mix.to && fade_s > 0.0 && inputs.since_section_s < fade_s) {
         mix.from = previous;

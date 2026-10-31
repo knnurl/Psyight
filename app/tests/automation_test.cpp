@@ -229,10 +229,13 @@ TEST_CASE("automation: a section shorter than a phrase keeps the scene before it
     CHECK(scene_for_section(scenes, sections, 3, kPhraseS) == kAmbient); // The first breakdown.
     CHECK(scene_for_section(scenes, sections, 4, kPhraseS) == kBuild);
     CHECK(scene_for_section(scenes, sections, 5, kPhraseS) == kDrop);
-    // automate applies it: in the blip, the groove scene with no crossfade.
+    // automate applies it: in the blip, the groove scene with no crossfade (rotation off: the
+    // blip starts the groove's third phrase, where it would rotate anyway).
     TrackAnalysis a = arrangement();
     a.sections = sections;
-    const SceneMix mix = mix_at(scenes, a, 26.0);
+    AutomationParams no_rotation;
+    no_rotation.rotate_every_phrases = 0;
+    const SceneMix mix = automate(scenes, a, a.grid, inputs_at(a, a.grid, 26.0), no_rotation);
     CHECK(mix.to == kGroove);
     CHECK(mix.from == -1);
 }
@@ -262,4 +265,75 @@ TEST_CASE("automation: energy tags pick a section's scene by its energy") {
     sections[1].energy = 2;
     CHECK(scene_for_section(scenes, sections, 0) == 2);
     CHECK(scene_for_section(scenes, sections, 1) == 1);
+}
+
+namespace {
+
+// A groove of six phrases, then a breakdown.
+TrackAnalysis long_groove() {
+    TrackAnalysis a;
+    a.sample_rate_hz = kSampleRateHz;
+    a.duration_s = 90.0;
+    a.grid = {150.0, 0, kSampleRateHz};
+    a.sections = {{0.0, 76.8, "groove", 1.0}, {76.8, 90.0, "breakdown", 1.0}};
+    for (double t = 0.0; t < 90.0; t += kPhraseS) {
+        a.phrase_starts_s.push_back(t);
+    }
+    return a;
+}
+
+SceneMix rotated_at(const TrackAnalysis &a, double t_s, const AutomationParams &params) {
+    return automate(default_scenes(), a, a.grid, inputs_at(a, a.grid, t_s), params);
+}
+
+} // namespace
+
+TEST_CASE("automation: long sections rotate their scenes on phrase downbeats") {
+    const TrackAnalysis a = long_groove();
+    AutomationParams p; // The next scene every 2 phrases, cut.
+    CHECK(rotated_at(a, 5.0, p).to == kGroove);
+    CHECK(rotated_at(a, kPhraseS + 5.0, p).to == kGroove);
+    SceneMix m = rotated_at(a, 2 * kPhraseS + 0.01, p); // Phrase 2: the cut.
+    CHECK(m.to == kStaccato);
+    CHECK(m.from == -1);
+    CHECK(rotated_at(a, 4 * kPhraseS + 1.0, p).to == kGroove); // And round again.
+    // Crossfaded instead: halfway through 4 beats.
+    p.rotate_fade_beats = 4.0;
+    m = rotated_at(a, 2 * kPhraseS + 2 * kBeatS, p);
+    CHECK(m.from == kGroove);
+    CHECK(m.to == kStaccato);
+    CHECK(m.to_weight == doctest::Approx(0.5));
+    CHECK(rotated_at(a, 2 * kPhraseS + 5 * kBeatS, p).from == -1);
+    // The breakdown crossfades from the scene the groove ended on (every phrase: 6 rotations).
+    p.rotate_every_phrases = 1;
+    m = rotated_at(a, 76.8 + 2 * kBeatS, p);
+    CHECK(m.from == kStaccato);
+    CHECK(m.to == kAmbient);
+    // Off: one scene a section.
+    p.rotate_every_phrases = 0;
+    CHECK(rotated_at(a, 3 * kPhraseS, p).to == kGroove);
+    // Builds keep theirs.
+    TrackAnalysis build = a;
+    build.sections = {{0.0, 76.8, "build", 1.0}};
+    p.rotate_every_phrases = 1;
+    CHECK(rotated_at(build, 4 * kPhraseS + 1.0, p).to == kBuild);
+}
+
+TEST_CASE("automation: live mode rotates by phrase_bars phrases from the section's start") {
+    LiveState s;
+    s.tempo_known = true;
+    s.locked = true;
+    s.period_s = kBeatS;
+    s.phrase_bars = 8; // 12.8 s.
+    s.section = LiveSection::groove;
+    s.section_start_s = 10.0;
+    s.section_count = 1;
+    s.section_occurrences[static_cast<size_t>(LiveSection::groove)] = 1;
+    const std::vector<Scene> scenes = default_scenes();
+    const auto at = [&](double t) {
+        return automate_live(scenes, s, inputs_at(s, t), AutomationParams{});
+    };
+    CHECK(at(10.0 + kPhraseS + 1.0).to == kGroove);
+    CHECK(at(10.0 + 2 * kPhraseS + 0.01).to == kStaccato);
+    CHECK(at(10.0 + 4 * kPhraseS + 0.01).to == kGroove);
 }

@@ -143,6 +143,11 @@ Knobs: drag up or down (Shift for fine), double-click to type. Right-click a kno
 - **Scene presets** (the scene's Presets button): a look with its layers, modulation and palette. Replace the scene you are editing, or add it as a new one. "Save this scene as a preset" keeps yours.
 - **Palettes:** "Add from the library" for more palettes (none use white: it is kept for kicks and drops); "Save to the library" keeps one.
 
+**Automation** (Tune depth, Show tab): how the show moves by itself.
+
+- **Crossfade** into intros, breakdowns, builds and outros (grooves and drops cut in), and **Palette every** so many phrases.
+- **Long sections:** **Next scene every** so many phrases, the next scene for the section takes over on the phrase's downbeat (builds keep theirs; 0: one scene a section), cut or faded over **Change fade** beats. A pack with two groove scenes alternates them; more scenes give more variety.
+
 **Undo:** Ctrl+Z and Ctrl+Y undo and redo show edits (scenes, layers, modulation, macros, palettes, the rig, settings) while the Show, Rig or Preview panel has the focus, and label edits elsewhere. A knob drag undoes in one step. The Edit menu lists both.
 
 **Browser** (View > Browser, or Ctrl+B): search every preset; hover one (or click to select it) to see it on the rig preview while the lights keep the show, then load it from the bottom of the browser.

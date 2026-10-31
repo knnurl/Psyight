@@ -155,6 +155,7 @@ struct LiveState {
     LiveSection previous_section = LiveSection::intro;
     int previous_occurrence = 0;
     int previous_energy = 1;
+    double previous_length_s = 0.0; // Its phrases (the rotation it ended on).
 };
 
 // The beat, downbeat, phrase and section half of the live analysis, driven by kick times: the

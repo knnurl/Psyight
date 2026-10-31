@@ -179,6 +179,8 @@ AutomationParams parse_automation(const json &aut) {
     a.palette_slew_beats = number(aut, "palette_slew_beats", a.palette_slew_beats, 0.0, 64.0);
     const std::string launch = optional<std::string>(aut, "launch", scene_launch_id(a.launch));
     a.launch = from_id_or_throw(scene_launch_from_id(launch), "launch", launch);
+    a.rotate_every_phrases = integer(aut, "rotate_every_phrases", a.rotate_every_phrases, 0, 64);
+    a.rotate_fade_beats = number(aut, "rotate_fade_beats", a.rotate_fade_beats, 0.0, 64.0);
     return a;
 }
 
@@ -186,7 +188,9 @@ json automation_json(const AutomationParams &a) {
     return {{"crossfade_beats", finite(a.crossfade_beats, "crossfade_beats")},
             {"palette_every_phrases", a.palette_every_phrases},
             {"palette_slew_beats", finite(a.palette_slew_beats, "palette_slew_beats")},
-            {"launch", scene_launch_id(a.launch)}};
+            {"launch", scene_launch_id(a.launch)},
+            {"rotate_every_phrases", a.rotate_every_phrases},
+            {"rotate_fade_beats", finite(a.rotate_fade_beats, "rotate_fade_beats")}};
 }
 
 json scene_json(const Scene &s) {

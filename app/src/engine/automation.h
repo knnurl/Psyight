@@ -11,6 +11,10 @@
 //   (a groove that steps up gets its high-energy look).
 // - A section shorter than a phrase keeps the scene before it (it does not count in the
 //   rotation either), unless it is a build or a drop: a blip in the structure is no scene change.
+// - Long sections rotate: every rotate_every_phrases phrases into a section, the next scene with
+//   its tag (and energy) takes over, on the phrase's downbeat, cut or crossfaded over
+//   rotate_fade_beats. Builds do not rotate: their arc runs through. Phrases count from the
+//   section's start (file mode: the analysis's phrase starts; live: phrase_bars bars each).
 // - Entering a groove or drop cuts (sections start on downbeats, so the cut lands on one);
 //   entering anything else crossfades over crossfade_beats, at most half the section.
 // - The palette shifts by one every palette_every_phrases phrases (counted over the track),
@@ -46,6 +50,8 @@ struct AutomationParams {
     int palette_every_phrases = 2; // 0 keeps each scene's own palette.
     double palette_slew_beats = 4.0;
     SceneLaunch launch = SceneLaunch::bar;
+    int rotate_every_phrases = 2;   // Long sections: the next scene this often; 0: one a section.
+    double rotate_fade_beats = 0.0; // 0: a cut on the phrase's downbeat.
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
@@ -86,9 +92,10 @@ inline constexpr std::array<const char *, 3> kEnergyTags = {"low", "mid", "high"
 
 // The scene for the occurrence-th section (from 0) with this label: the scenes tagged with the
 // label in turn (a drop with no drop scene takes the groove scenes), narrowed by energy (0 to 2;
-// -1 ignores it) as above; scene 0 when none is tagged.
+// -1 ignores it) as above; scene 0 when none is tagged. step: rotations within the section, each
+// the next candidate on.
 int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, size_t occurrence,
-                    int energy = -1);
+                    int energy = -1, size_t step = 0);
 
 // The scene for section `index` of the analysis (rotation among tagged scenes). Sections shorter
 // than min_dwell_s, builds and drops aside, keep the scene of the section before them.
