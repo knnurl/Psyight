@@ -130,6 +130,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         out.queued_scene = launcher_.queued();
         inputs.macros = config.macros;
         out.section = inputs.section;
+        out.intensity = inputs.intensity;
         out.beat_in_bar = inputs.beat_in_bar;
         if (config.blackout) {
             out.frame.assign(config.rig.pixels.size(), Rgb{});

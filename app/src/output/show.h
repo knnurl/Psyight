@@ -79,6 +79,7 @@ struct ShowFrame {
     LimiterReport report;
     std::int64_t flashes_limited = 0; // Frames the flash limiter clipped so far.
     std::string section;
+    double intensity = 0.5; // EngineInputs::intensity.
     SceneMix mix;
     // The playing scene's (mix.to) route values this frame, held and smoothed, for the GUI's
     // modulation rings; empty during blackout and hold.

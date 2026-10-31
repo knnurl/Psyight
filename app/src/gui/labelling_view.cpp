@@ -1,5 +1,7 @@
 #include "gui/labelling_view.h"
 
+#include "analysis/intensity.h"
+
 #include "core/paths.h"
 #include "gui/file_dialog.h"
 #include "gui/icons.h"
@@ -829,7 +831,7 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
         draw_waveform(*draw, track, rest_y, wave_h, p0.x, width, t_of);
     }
     if (lanes && a != nullptr && !a->section_bars.empty()) {
-        // Kick (a row), level (bars), riser (a line).
+        // Kick (a row), level (bars), riser and intensity (lines).
         const float kick_h = 0.6f * em;
         const float level_y = rest_y + wave_h + kick_h + 3.0f;
         const float level_h = std::max(1.0f, rest_h - wave_h - kick_h - 3.0f);
@@ -854,6 +856,18 @@ void LabellingView::draw_timeline(const char *id, Span span, float height, bool 
             draw->AddRectFilled(ImVec2(x0, level_y + level_h * (1.0f - level)),
                                 ImVec2(x1, level_y + level_h),
                                 to_u32(with_alpha(theme().info, 0.35f)));
+        }
+        if (!a->intensity.empty()) {
+            ImVec2 previous(-1.0f, 0.0f);
+            for (float x = p0.x; x <= p0.x + width; x += 2.0f) {
+                const ImVec2 point(
+                    x, level_y + level_h * (1.0f - static_cast<float>(intensity_at(
+                                                       a->section_bars, a->intensity, t_of(x)))));
+                if (previous.x >= 0.0f) {
+                    draw->AddLine(previous, point, to_u32(theme().accent), 1.5f);
+                }
+                previous = point;
+            }
         }
         if (!a->riser.empty() && a->mix_features.sample_rate_hz > 0) {
             const double frame_s =

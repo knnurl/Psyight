@@ -53,6 +53,7 @@ struct TrackAnalysis {
     std::vector<double> phrase_starts_s;  // Restarting at section changes (SPEC 6.5).
     ResidualFeatures residual;            // Hats and the non-bass features.
     BassAggregates aggregates;            // Per bar and phrase of `grid`.
+    std::vector<float> intensity;         // Per section bar, 0 to 1 (analysis/intensity.h).
     double stems_lag_s = 0.0; // Stems against the mix before alignment; negative: ahead.
 };
 

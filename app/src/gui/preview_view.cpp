@@ -409,11 +409,12 @@ void PreviewView::draw_preview(const ShowFrame *frame, const char *message) {
         ImGui::TextColored(theme().accent, "Auditioning %s (the lights keep the show)",
                            audition_->name.c_str());
     } else if (frame != nullptr) {
-        mono_text("%s%s, beat %d of the bar, %.1f A estimated%s",
+        mono_text("%s%s (intensity %.2f), beat %d of the bar, %.1f A estimated%s",
                   config_.blackout ? "Blackout: "
                   : config_.hold   ? "Hold: "
                                    : "",
-                  frame->section.c_str(), frame->beat_in_bar + 1, frame->report.current_a,
+                  frame->section.c_str(), frame->intensity, frame->beat_in_bar + 1,
+                  frame->report.current_a,
                   frame->report.power_scale < 1.0 ? " (power limited)" : "");
     } else {
         ImGui::TextDisabled("%s", message);
@@ -2153,6 +2154,16 @@ void PreviewView::draw_automation() {
     field(ImGui::Checkbox("Mute a layer", &a.vary.mute),
           "One layer other than the first goes quiet (scenes of three layers or more).");
     ImGui::EndDisabled();
+    ImGui::SeparatorText("Follow the energy");
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_double("Dim when quieter", &a.energy_dim, 0.005f, 0.0, 1.0, "%.2f"),
+          "Where the music is thinner (intensity: loudness, hats, an opening filter, bass notes, "
+          "kicks), the show dims by up to this. 0: never.");
+    field(ImGui::Checkbox("Energy picks the scene each phrase", &a.energy_scenes),
+          "A long section picks each phrase's scene by that phrase's energy (scenes tagged low, "
+          "mid, high), so a groove that fills up or thins out changes with it. File mode; live "
+          "mode already judges a groove's energy each phrase.");
+    ImGui::TextDisabled("Scenes can also follow it: route the Intensity source.");
     if (changed) {
         project_.edit().automation = a;
         project_.changed();

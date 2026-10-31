@@ -1,5 +1,6 @@
 // Scene automation, the scene library and the build and drop effects.
 
+#include "analysis/intensity.h"
 #include "engine/automation.h"
 #include "engine/effect_spec.h"
 #include "engine/inputs.h"
@@ -483,4 +484,74 @@ TEST_CASE("automation: variations each phrase within a rotation, the scene itsel
                                                             1, nullptr, &variants)));
     }
     CHECK(most > 0.05f);
+}
+
+TEST_CASE("intensity: ranked bar features, smoothed; read between bar centres") {
+    std::vector<SectionBar> bars(8);
+    for (size_t i = 0; i < bars.size(); ++i) {
+        bars[i].start_s = 1.6 * static_cast<double>(i);
+        bars[i].level_db = -30.0 + 2.0 * static_cast<double>(i); // Filling up bar by bar.
+        bars[i].high_db = -40.0 + static_cast<double>(i);
+        bars[i].centroid_hz = 1000.0 + 100.0 * static_cast<double>(i);
+        bars[i].kick_beats = 4;
+    }
+    const std::vector<float> curve = intensity_curve(bars, {});
+    REQUIRE(curve.size() == bars.size());
+    for (size_t i = 1; i < curve.size(); ++i) {
+        CHECK(curve[i] >= curve[i - 1]);
+    }
+    CHECK(curve.front() < 0.3f);
+    CHECK(curve.back() > 0.6f);
+    for (const float v : curve) {
+        CHECK(v >= 0.0f);
+        CHECK(v <= 1.0f);
+    }
+    // Between bar centres, linear; before the first and after the last, the end values.
+    CHECK(intensity_at(bars, curve, 0.0) == doctest::Approx(curve[0]));
+    CHECK(intensity_at(bars, curve, 1.6) == doctest::Approx(0.5 * (curve[0] + curve[1])));
+    CHECK(intensity_at(bars, curve, 100.0) == doctest::Approx(curve.back()));
+    CHECK(intensity_at({}, {}, 3.0) == 0.5);
+}
+
+TEST_CASE("automation: following the energy: dims when quieter, phrases pick scenes by energy") {
+    TrackAnalysis a = long_groove();
+    // A groove thin for three phrases, then full.
+    for (double t = 0.0; t < 76.8; t += 4 * kBeatS) {
+        SectionBar bar;
+        bar.start_s = t;
+        a.section_bars.push_back(bar);
+        a.intensity.push_back(t < 3 * kPhraseS ? 0.1f : 0.9f);
+    }
+    std::vector<Scene> scenes(2);
+    scenes[0].sections = {"groove", "low"};
+    scenes[1].sections = {"groove", "high"};
+    AutomationParams p;
+    p.rotate_every_phrases = 0;
+    p.vary_every_phrases = 0;
+    const auto at = [&](double t) {
+        return automate(scenes, a, a.grid, inputs_at(a, a.grid, t), p);
+    };
+    CHECK(at(5.0).to == 0);
+    CHECK(at(2 * kPhraseS + 5.0).to == 0);
+    CHECK(at(3 * kPhraseS + 5.0).to == 1); // The phrase where it fills up.
+    CHECK(at(5.0).brightness == doctest::Approx(1.0 - 0.25 * 0.9));
+    CHECK(at(4 * kPhraseS + 5.0).brightness == doctest::Approx(1.0 - 0.25 * 0.1));
+    // Off: the section's energy (mid; neither tag matches, so the rotation over both).
+    p.energy_scenes = false;
+    CHECK(at(3 * kPhraseS + 5.0).to == at(5.0).to);
+    p.energy_dim = 0.0;
+    CHECK(at(5.0).brightness == 1.0);
+    // render_mix applies it.
+    const Rig rig = default_rig();
+    const std::vector<Scene> library = default_scenes();
+    const EngineInputs in = inputs_at(a, a.grid, 5.0);
+    SceneMix full;
+    full.to = kGroove;
+    SceneMix dim = full;
+    dim.brightness = 0.5;
+    const Frame bright = render_mix(library, full, rig, in, default_palettes(), 1);
+    const Frame half = render_mix(library, dim, rig, in, default_palettes(), 1);
+    for (size_t i = 0; i < bright.size(); ++i) {
+        CHECK(half[i].r == doctest::Approx(0.5f * bright[i].r).epsilon(1e-4));
+    }
 }

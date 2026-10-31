@@ -194,6 +194,8 @@ AutomationParams parse_automation(const json &aut) {
         a.vary.mirror = optional<bool>(v, "mirror", a.vary.mirror);
         a.vary.mute = optional<bool>(v, "mute", a.vary.mute);
     }
+    a.energy_dim = number(aut, "energy_dim", a.energy_dim, 0.0, 1.0);
+    a.energy_scenes = optional<bool>(aut, "energy_scenes", a.energy_scenes);
     return a;
 }
 
@@ -213,7 +215,9 @@ json automation_json(const AutomationParams &a) {
               {"remap", a.vary.remap},
               {"retime", a.vary.retime},
               {"mirror", a.vary.mirror},
-              {"mute", a.vary.mute}}}};
+              {"mute", a.vary.mute}}},
+            {"energy_dim", finite(a.energy_dim, "energy_dim")},
+            {"energy_scenes", a.energy_scenes}};
 }
 
 json scene_json(const Scene &s) {

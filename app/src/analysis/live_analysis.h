@@ -148,6 +148,9 @@ struct LiveState {
     bool silent = false;       // The music stopped (LiveParams::silence_s of silence).
     double silent_since_s = 0; // When it was found silent (the show fades from here).
     double riser = 0.0;        // 0 to 1 through a build (as file mode's riser curve).
+    // 0 to 1: the residual's activity against the grooves' mean, 0.5 at the mean and 0 or 1
+    // two energy steps below or above (as file mode's intensity, causally).
+    double intensity = 0.5;
     // For the scene rotation (engine/automation.h): starts of each kind so far, the current one
     // included, and the section before the current one.
     std::array<int, 5> section_occurrences{};

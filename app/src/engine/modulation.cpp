@@ -48,6 +48,9 @@ double source_value(ModSource source, const EngineInputs &in, std::uint64_t seed
     case ModSource::riser:
         v = in.riser;
         break;
+    case ModSource::intensity:
+        v = in.intensity;
+        break;
     case ModSource::kick:
         v = std::isfinite(in.since_kick_s) ? std::exp(-in.since_kick_s / kKickDecayS) : 0.0;
         break;
@@ -201,6 +204,8 @@ const char *mod_source_name(ModSource source) {
         return "Section energy";
     case ModSource::riser:
         return "Riser";
+    case ModSource::intensity:
+        return "Intensity";
     case ModSource::kick:
         return "Kick";
     case ModSource::bass_active:
@@ -315,6 +320,8 @@ const char *mod_source_id(ModSource source) {
         return "section_energy";
     case ModSource::riser:
         return "riser";
+    case ModSource::intensity:
+        return "intensity";
     case ModSource::kick:
         return "kick";
     case ModSource::bass_active:

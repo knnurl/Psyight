@@ -624,6 +624,10 @@ void LiveBeat::update(LiveState &s, double t_s) {
         }
     }
     last_update_s_ = t_s;
+    s.intensity =
+        groove_mean_ < 0.0 || params_.energy_step <= 0.0
+            ? 0.5
+            : std::clamp(0.5 + 0.25 * (level_slow_ - groove_mean_) / params_.energy_step, 0.0, 1.0);
     if (!s.tempo_known) {
         return;
     }

@@ -1,5 +1,7 @@
 #include "engine/automation.h"
 
+#include "analysis/intensity.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -284,6 +286,7 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         }
     }
 
+    mix.brightness = 1.0 - std::clamp(params.energy_dim, 0.0, 1.0) * (1.0 - inputs.intensity);
     if (scenes.empty()) {
         return mix;
     }
@@ -307,6 +310,34 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
                        static_cast<std::uint64_t>(std::llround(own.start_s * 1000.0)));
         }
     }
+    // The energy of a section's p-th phrase: its bars' mean intensity in thirds (energy_scenes),
+    // else the section's.
+    const auto phrase_energy = [&](const DetectedSection &s, long long p) {
+        if (!params.energy_scenes || analysis.intensity.empty()) {
+            return s.energy;
+        }
+        const auto first =
+            static_cast<size_t>(std::lower_bound(phrase_starts.begin(), phrase_starts.end(),
+                                                 s.start_s - kPhraseToleranceS) -
+                                phrase_starts.begin());
+        const size_t k = first + static_cast<size_t>(std::max(0LL, p));
+        const double from = k < phrase_starts.size() ? phrase_starts[k] : s.start_s;
+        const double to =
+            k + 1 < phrase_starts.size() ? std::min(phrase_starts[k + 1], s.end_s) : s.end_s;
+        double sum = 0.0;
+        int count = 0;
+        for (size_t b = 0; b < analysis.section_bars.size() && b < analysis.intensity.size(); ++b) {
+            const double start = analysis.section_bars[b].start_s;
+            if (start >= from - kPhraseToleranceS && start < to - kPhraseToleranceS) {
+                sum += analysis.intensity[b];
+                ++count;
+            }
+        }
+        const double mean =
+            count > 0 ? sum / count
+                      : intensity_at(analysis.section_bars, analysis.intensity, 0.5 * (from + to));
+        return mean < 1.0 / 3.0 ? 0 : mean < 2.0 / 3.0 ? 1 : 2;
+    };
     // The look of section i at time t_s: its own section's (or the one before a blip), rotated
     // and varied by the phrases it has run.
     const auto look_at = [&](size_t i, double t_s, long long *phrases_out) {
@@ -318,11 +349,12 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         }
         const auto key = static_cast<std::uint64_t>(std::llround(s.start_s * 1000.0));
         const size_t occurrence = occurrence_of(sections, own, phrase_s);
-        return std::pair{
-            look_in_section(scenes, params, s.label, occurrence, s.energy, phrases, key),
-            phrases > 0
-                ? look_in_section(scenes, params, s.label, occurrence, s.energy, phrases - 1, key)
-                : Look{-1, 0}};
+        return std::pair{look_in_section(scenes, params, s.label, occurrence,
+                                         phrase_energy(s, phrases), phrases, key),
+                         phrases > 0
+                             ? look_in_section(scenes, params, s.label, occurrence,
+                                               phrase_energy(s, phrases - 1), phrases - 1, key)
+                             : Look{-1, 0}};
     };
     long long phrases = 0;
     const auto [now, before] = look_at(index, inputs.t_s, &phrases);
@@ -366,6 +398,7 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
             mix.palette_weight = since_s / slew_s;
         }
     }
+    mix.brightness = 1.0 - std::clamp(params.energy_dim, 0.0, 1.0) * (1.0 - inputs.intensity);
     if (scenes.empty()) {
         return mix;
     }
@@ -574,6 +607,11 @@ Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Ri
         Frame old = render_scenes(mix.palette_shift_from);
         mix_into(old, frame, mix.palette_weight);
         frame = std::move(old);
+    }
+    if (mix.brightness < 1.0) {
+        for (Rgb &c : frame) {
+            c = scaled(c, std::max(0.0, mix.brightness));
+        }
     }
     if (mix.fill != PhraseFill::off) {
         apply_fill(frame, mix, rig, inputs);

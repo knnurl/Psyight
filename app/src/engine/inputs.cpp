@@ -1,5 +1,7 @@
 #include "engine/inputs.h"
 
+#include "analysis/intensity.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -125,6 +127,7 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
             in.riser = riser[frame];
         }
     }
+    in.intensity = intensity_at(a.section_bars, a.intensity, t_s);
     const long long hat = last_at_or_before(r.hats, t_s, [](const HatOnset &h) { return h.t_s; });
     in.hats_so_far = hat + 1;
     if (hat >= 0) {
@@ -199,6 +202,7 @@ EngineInputs inputs_at(const LiveState &s, double t_s) {
         in.section_length_s > 0.0 ? std::min(1.0, in.since_section_s / in.section_length_s) : 0.0;
     in.section_energy = s.section_energy;
     in.riser = s.riser;
+    in.intensity = s.intensity;
 
     in.residual_level = std::clamp(s.residual_level, 0.0, 1.0);
     in.residual_centroid_hz = s.residual_centroid_hz;

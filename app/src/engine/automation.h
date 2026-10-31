@@ -24,6 +24,11 @@
 // - Variations (engine/variations.h): every vary_every_phrases phrases within a rotation the
 //   scene plays one of its variants (the first period the scene itself, then seeded, never the
 //   same twice running); not in builds. A change cuts on the downbeat or fades as a rotation does.
+// - Following the energy: the scene dims by up to energy_dim where the music is quieter
+//   (EngineInputs::intensity: 1 - energy_dim * (1 - intensity)); with energy_scenes, file mode
+//   picks each phrase's scene by that phrase's mean intensity in thirds (low, mid, high) instead
+//   of the section's energy, so a groove that fills up or thins out changes scene with it. Live
+//   mode already judges a groove's energy each phrase.
 // - Entering a groove or drop cuts (sections start on downbeats, so the cut lands on one);
 //   entering anything else crossfades over crossfade_beats, at most half the section.
 // - The palette shifts by one every palette_every_phrases phrases (counted over the track),
@@ -76,6 +81,8 @@ struct AutomationParams {
     double fill_beats = 2.0;    // The fill's length, up to the phrase's end.
     int vary_every_phrases = 1; // A new variation of the scene this often; 0: none.
     VariationKinds vary;        // What variations may change.
+    double energy_dim = 0.25;   // Quieter passages dim by up to this; 0: never.
+    bool energy_scenes = true;  // File mode: each phrase's energy picks its scene.
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
@@ -109,6 +116,7 @@ struct SceneMix {
     int palette_shift = 0;  // Added to each scene's palette index.
     int palette_shift_from = 0;
     double palette_weight = 1.0;       // 1: palette_shift alone.
+    double brightness = 1.0;           // Following the energy (energy_dim).
     int variant = 0;                   // Of `to` (SceneVariants); 0: the scene itself.
     int variant_from = 0;              // Of `from`.
     PhraseFill fill = PhraseFill::off; // A phrase-end fill playing (never mix: the one picked).

@@ -1,6 +1,7 @@
 #include "analysis/track_analysis.h"
 
 #include "analysis/align.h"
+#include "analysis/intensity.h"
 #include "audio/audio_file.h"
 #include "core/paths.h"
 #include "io/stems.h"
@@ -188,6 +189,7 @@ Result<TrackAnalysis> analyse_track(std::span<const float> mix, int sample_rate_
         aggregate_bass(analysis.bass.notes, analysis.grid, analysis.duration_s,
                        static_cast<int>(std::lround(options.beats.bars_per_phrase)),
                        analysis.beats.phrase_bar_offset);
+    analysis.intensity = intensity_curve(analysis.section_bars, analysis.aggregates.bars);
     return analysis;
 }
 
