@@ -598,6 +598,13 @@ int main() {
                 show_style_editor = !show_style_editor; // Dev only (RESTYLE Phase 1).
             }
             psyight::draw_style_editor(&show_style_editor);
+            // A knob or drag field being dragged: the pointer back where the press began, and
+            // ImGui told, so the next frame's movement is measured from there.
+            if (const std::optional<ImVec2> hold = psyight::take_mouse_hold(); hold && !capture) {
+                glfwSetCursorPos(window, hold->x, hold->y);
+                io.MousePos = *hold;
+                io.MousePosPrev = *hold;
+            }
 
             ImGui::Render();
             int framebuffer_width_pixels = 0;

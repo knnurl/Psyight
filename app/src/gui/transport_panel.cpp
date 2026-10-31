@@ -110,9 +110,11 @@ void TransportPanel::draw() {
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(kVolumeWidthEm * em);
     if (mono_field("##volume", [&](const char *id) {
-            return ImGui::DragFloat(id, &volume_db_, 0.2f, kMinVolumeDb, kMaxVolumeDb,
-                                    volume_db_ <= kMinVolumeDb ? "Muted" : "%.1f dB",
-                                    ImGuiSliderFlags_AlwaysClamp);
+            const bool changed = ImGui::DragFloat(id, &volume_db_, 0.2f, kMinVolumeDb, kMaxVolumeDb,
+                                                  volume_db_ <= kMinVolumeDb ? "Muted" : "%.1f dB",
+                                                  ImGuiSliderFlags_AlwaysClamp);
+            hold_mouse_while_dragging();
+            return changed;
         })) {
         transport.set_gain(volume_to_gain(volume_db_));
     }

@@ -761,7 +761,10 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
     ImGui::SetNextItemWidth(7.0f * em);
     float latency_ms = static_cast<float>(project_.project().latency_offset_ms);
     if (mono_field("Latency offset", [&](const char *id) {
-            return ImGui::DragFloat(id, &latency_ms, 1.0f, -200.0f, 200.0f, "%+.0f ms");
+            const bool changed =
+                ImGui::DragFloat(id, &latency_ms, 1.0f, -200.0f, 200.0f, "%+.0f ms");
+            hold_mouse_while_dragging();
+            return changed;
         })) {
         project_.edit().latency_offset_ms = latency_ms;
         project_.changed();

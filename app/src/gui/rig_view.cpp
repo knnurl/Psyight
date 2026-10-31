@@ -1060,7 +1060,9 @@ void RigView::draw_strips() {
             ImGui::SetNextItemWidth(-1.0f);
             float density = static_cast<float>(s.spec.pixels_per_m);
             if (mono_field("##ppm", [&](const char *id) {
-                    return ImGui::DragFloat(id, &density, 1.0f, 1.0f, 1000.0f, "%.0f");
+                    const bool edited = ImGui::DragFloat(id, &density, 1.0f, 1.0f, 1000.0f, "%.0f");
+                    hold_mouse_while_dragging();
+                    return edited;
                 })) {
                 s.spec.pixels_per_m = std::clamp(static_cast<double>(density), 1.0, 1000.0);
                 changed = true;
@@ -1068,7 +1070,9 @@ void RigView::draw_strips() {
             ImGui::TableNextColumn();
             ImGui::SetNextItemWidth(-1.0f);
             if (mono_field("##count", [&](const char *id) {
-                    return ImGui::DragInt(id, &s.spec.count, 1.0f, 0, 10000);
+                    const bool edited = ImGui::DragInt(id, &s.spec.count, 1.0f, 0, 10000);
+                    hold_mouse_while_dragging();
+                    return edited;
                 })) {
                 s.spec.count = std::clamp(s.spec.count, 0, 10000);
                 // Set by hand, unless set to what fits: then it follows the path again.

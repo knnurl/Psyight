@@ -15,11 +15,15 @@
 //   the caller's items (set_knob_menu, just before the knob). With
 //   `modulated`, a thin outer ring runs from the value to where modulation moves it. The format
 //   prints a double ("%.2f", "%.0f px"), also for knob_int.
+// - hold_mouse_while_dragging: while a knob or drag field is dragged, the pointer stays where the
+//   press began (hidden meanwhile), so a long drag never runs into the screen's edge. Sliders,
+//   which follow the pointer, do not use it.
 #pragma once
 
 #include <imgui.h>
 
 #include <functional>
+#include <optional>
 
 namespace psyight {
 
@@ -58,6 +62,13 @@ template <typename Widget> bool mono_field(const char *label, Widget &&widget) {
 
 bool drag_double(const char *label, double *value, float speed, double min, double max,
                  const char *format);
+
+// Call just after a knob or drag widget (the last item): while it is being dragged, asks for the
+// pointer to go back to where the press began this frame, and hides it.
+void hold_mouse_while_dragging();
+// Called once a frame after the widgets, by main: where to put the pointer (window coordinates),
+// if a drag asked; main moves the system cursor there and tells ImGui. Clears the request.
+std::optional<ImVec2> take_mouse_hold();
 
 bool knob(const char *label, double *value, double min, double max, const char *format,
           double default_value, const double *modulated = nullptr);

@@ -10,6 +10,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 namespace psyight {
 
@@ -27,8 +28,9 @@ constexpr float kKnobRingMarginEm = 0.3f; // Above the knob, for the modulation 
 constexpr float kDeviceRounding = 4.0f;
 constexpr float kDeviceTitlePaddingY = 2.0f;
 
-std::function<void()> g_knob_menu; // The next knob's extra menu items (set_knob_menu).
-float g_knob_scale = 1.0f;         // push_knob_scale.
+std::function<void()> g_knob_menu;  // The next knob's extra menu items (set_knob_menu).
+float g_knob_scale = 1.0f;          // push_knob_scale.
+std::optional<ImVec2> g_mouse_hold; // hold_mouse_while_dragging, for take_mouse_hold.
 
 float knob_fraction(double value, double min, double max) {
     return max > min ? static_cast<float>(std::clamp((value - min) / (max - min), 0.0, 1.0)) : 0.0f;
@@ -77,6 +79,7 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
     ImGui::BeginGroup(); // One item for the caller, also while the text field is open.
     ImGui::PushID(label);
     ImGui::InvisibleButton("##knob", size);
+    hold_mouse_while_dragging();
     const ImGuiID id = ImGui::GetItemID();
     const bool hovered = ImGui::IsItemHovered();
     const bool active = ImGui::IsItemActive();
@@ -251,10 +254,25 @@ void pop_mono_field() {
 bool drag_double(const char *label, double *value, float speed, double min, double max,
                  const char *format) {
     return mono_field(label, [&](const char *id) {
-        return ImGui::DragScalar(id, ImGuiDataType_Double, value, speed, &min, &max, format,
-                                 ImGuiSliderFlags_AlwaysClamp);
+        const bool changed = ImGui::DragScalar(id, ImGuiDataType_Double, value, speed, &min, &max,
+                                               format, ImGuiSliderFlags_AlwaysClamp);
+        hold_mouse_while_dragging();
+        return changed;
     });
 }
+
+void hold_mouse_while_dragging() {
+    // Past the drag threshold, so a click (or a drag field's own threshold) is left alone; not
+    // while typing into the field, where dragging selects text.
+    if (!ImGui::IsItemActive() || !ImGui::IsMouseDragging(ImGuiMouseButton_Left) ||
+        ImGui::TempInputIsActive(ImGui::GetItemID())) {
+        return;
+    }
+    g_mouse_hold = ImGui::GetIO().MouseClickedPos[ImGuiMouseButton_Left];
+    ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+}
+
+std::optional<ImVec2> take_mouse_hold() { return std::exchange(g_mouse_hold, std::nullopt); }
 
 bool knob(const char *label, double *value, double min, double max, const char *format,
           double default_value, const double *modulated) {
@@ -336,7 +354,10 @@ float knob_height() {
 
 bool drag_int(const char *label, int *value, float speed, int min, int max, const char *format) {
     return mono_field(label, [&](const char *id) {
-        return ImGui::DragInt(id, value, speed, min, max, format, ImGuiSliderFlags_AlwaysClamp);
+        const bool changed =
+            ImGui::DragInt(id, value, speed, min, max, format, ImGuiSliderFlags_AlwaysClamp);
+        hold_mouse_while_dragging();
+        return changed;
     });
 }
 
