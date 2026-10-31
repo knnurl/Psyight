@@ -323,8 +323,9 @@ TEST_CASE("node firmware: signal loss runs the chosen policy") {
                 lit += lanes[0][i] > 0;
                 brightest = std::max(brightest, static_cast<int>(lanes[0][i]));
             }
-            CHECK(lit > 100);       // A visible plasma...
-            CHECK(brightest < 128); // ...that stays dim (brightness 0.25 before gamma).
+            CHECK(lit > 30); // An aurora, lit in places...
+            // ...and dim: brightness 0.1 before gamma is at most 0.1^2.2 of full drive.
+            CHECK(brightest <= static_cast<int>(std::pow(0.1, 2.2) * 255.0 + 1.0));
             CHECK(node_frame(node.get(), 1300, lanes)); // It animates.
             break;
         }
@@ -588,8 +589,8 @@ TEST_CASE("node firmware: the fallback show is an aurora: drifting waves with da
     node_init(node.get(), &s);
     auto a = std::make_unique<LaneBuffer>();
     auto b = std::make_unique<LaneBuffer>();
-    // Brightest drive the default brightness allows: 0.25 perceptual.
-    const auto most = static_cast<int>(std::pow(0.25, 2.2) * 255.0 + 1.0);
+    // Brightest drive the default brightness allows: 0.1 perceptual.
+    const auto most = static_cast<int>(std::pow(0.1, 2.2) * 255.0 + 1.0);
     int lit = 0;
     int pixels = 0;
     // From a minute up to 40 days of uptime (the clock's float precision).

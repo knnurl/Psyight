@@ -40,7 +40,7 @@ struct NodeFallback {
     NodeLossPolicy policy = NodeLossPolicy::fallback;
     int loss_ms = 2000;       // Without data this long: the signal is lost.
     int fade_ms = 3000;       // Fade: to black over this.
-    double brightness = 0.25; // Fallback show, 0 to 1 before gamma.
+    double brightness = 0.1; // Fallback show, 0 to 1 before gamma.
     double speed_hz = 0.05;   // Fallback show drift.
     // Each strip on its own data line (no chaining) when the strips fit the node's 8 lines;
     // otherwise strips chain, as many to a line as keep 60 fps.

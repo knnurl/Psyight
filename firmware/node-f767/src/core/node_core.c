@@ -29,7 +29,7 @@ node_settings node_default_settings(void) {
     s.loss_timeout_ms = 2000;
     s.loss_policy = NODE_LOSS_FALLBACK;
     s.fade_ms = 3000;
-    s.fallback_brightness = 0.25f;
+    s.fallback_brightness = 0.1f;
     s.fallback_speed_hz = 0.05f;
     /* The aurora's green, teal, blue and violet (the app's engine/aurora), as RGB. */
     const uint8_t palette[4][3] = {{0, 255, 89}, {0, 204, 178}, {25, 102, 255}, {140, 0, 255}};
