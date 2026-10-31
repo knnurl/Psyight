@@ -129,7 +129,14 @@ class FlashMeter {
     FlashTracker tracker_;
 };
 
-// Gamma-corrected 8-bit RGB triples, pixel by pixel.
+// A channel at least this bright (before gamma) is never sent as 0: below about 6 % the gamma
+// curve drives less than half a step, which rounded to black, so dim scenes (a low brightness
+// cap, a quiet passage) lost their faint pixels. They get the lowest step, 1, instead; dimmer
+// ones still fade to black, so trails end.
+inline constexpr double kVisibleFloor = 0.02;
+
+// Gamma-corrected 8-bit RGB triples, pixel by pixel, a channel at or above kVisibleFloor at
+// least 1.
 std::vector<std::uint8_t> to_bytes(const Frame &frame, double gamma);
 
 } // namespace psyight

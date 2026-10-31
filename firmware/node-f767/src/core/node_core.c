@@ -190,6 +190,9 @@ static void fill_from_latched(const node_state *n, float scale,
 #define AURORA_MAX_SPEED_PX_PER_S 4.5f
 #define AURORA_MIN_ALPHA 0.6f
 #define AURORA_PACE_HZ 0.05f /* fallback_speed at the aurora's own pace. */
+/* A channel at least this bright (before gamma) is sent as at least 1 (the app's kVisibleFloor):
+ * at low fallback brightness the faint parts of the waves would round to black. */
+#define NODE_VISIBLE_FLOOR 0.02f
 
 typedef struct {
     float centre_px;
@@ -289,8 +292,14 @@ static void fill_fallback(const node_state *n, uint32_t now_ms,
             peak = peak > sum[2] ? peak : sum[2];
             const float scale = s->fallback_brightness / (peak > 1.0f ? peak : 1.0f);
             for (int c = 0; c < 3; ++c) { /* R, G, B, each to its place in the lane's order. */
-                const float drive = powf(sum[c] * scale, 2.2f); /* Perceptual to LED drive. */
-                out[(uint32_t)i * 3u + at[c]] = (uint8_t)(drive * 255.0f + 0.5f);
+                const float level = sum[c] * scale;
+                const float drive = powf(level, 2.2f); /* Perceptual to LED drive. */
+                uint8_t byte = (uint8_t)(drive * 255.0f + 0.5f);
+                /* As the app's to_bytes: a visible level never rounds to black. */
+                if (byte == 0 && level >= NODE_VISIBLE_FLOOR) {
+                    byte = 1;
+                }
+                out[(uint32_t)i * 3u + at[c]] = byte;
             }
         }
     }

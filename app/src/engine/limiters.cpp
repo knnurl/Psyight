@@ -176,8 +176,9 @@ std::vector<std::uint8_t> to_bytes(const Frame &frame, double gamma) {
     std::vector<std::uint8_t> bytes;
     bytes.reserve(frame.size() * 3);
     const auto byte = [gamma](float v) {
-        return static_cast<std::uint8_t>(
-            std::lround(255.0 * std::pow(std::clamp(static_cast<double>(v), 0.0, 1.0), gamma)));
+        const double level = std::clamp(static_cast<double>(v), 0.0, 1.0);
+        const long out = std::lround(255.0 * std::pow(level, gamma));
+        return static_cast<std::uint8_t>(out == 0 && level >= kVisibleFloor ? 1 : out);
     };
     for (const Rgb &c : frame) {
         bytes.push_back(byte(c.r));

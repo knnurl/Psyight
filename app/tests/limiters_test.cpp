@@ -164,6 +164,14 @@ TEST_CASE("limiters: brightness cap and gamma to bytes") {
     CHECK(bytes[3] == 255); // Clamped.
     CHECK(bytes[4] == 0);
     CHECK(bytes[5] == 12); // 255 * 0.25^2.2 = 12.0.
+    // Dim but visible channels keep the lowest step instead of rounding to black; the faintest
+    // still fade to it.
+    const std::vector<std::uint8_t> dim =
+        to_bytes({Rgb{0.04f, 0.021f, 0.019f}, Rgb{0.0f, 0.0f, 0.0f}}, 2.2);
+    CHECK(dim[0] == 1); // 255 * 0.04^2.2 = 0.2: rounded to 0 before.
+    CHECK(dim[1] == 1);
+    CHECK(dim[2] == 0);
+    CHECK(dim[3] == 0); // Black stays black.
 }
 
 TEST_CASE("limiters: group caps dim the strips with that tag, the lowest cap winning") {
