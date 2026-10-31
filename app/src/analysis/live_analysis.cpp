@@ -288,6 +288,9 @@ void LiveAnalyser::decode_frame(long long j) {
             last_hat_frame_ = peak;
             state_.last_hat_s = static_cast<double>(peak) * frame_s_;
             ++state_.hats;
+            std::copy_backward(state_.recent_hats_s.begin(), state_.recent_hats_s.end() - 1,
+                               state_.recent_hats_s.end());
+            state_.recent_hats_s[0] = state_.last_hat_s;
         }
         if (is_peak(a.onset, b.onset, f.onset, d.onset_threshold) &&
             candidate_count_ < static_cast<int>(candidates_.size())) {
@@ -338,6 +341,9 @@ void LiveAnalyser::begin_note(long long frame, double onset_s) {
     std::fill(pitch_counts_.begin(), pitch_counts_.end(), 0);
     state_.bass_active = true;
     state_.bass_onset_s = onset_s;
+    std::copy_backward(state_.recent_bass_onsets_s.begin(), state_.recent_bass_onsets_s.end() - 1,
+                       state_.recent_bass_onsets_s.end());
+    state_.recent_bass_onsets_s[0] = onset_s;
     state_.bass_confidence = at(frame).onset;
     state_.bass_midi = model_->first_midi + at(frame).pitch_class;
     ++state_.bass_notes;

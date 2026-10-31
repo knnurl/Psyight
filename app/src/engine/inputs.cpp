@@ -95,6 +95,10 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
             n.offset_s > n.onset_s
                 ? std::clamp((t_s - n.onset_s) / (n.offset_s - n.onset_s), 0.0, 1.0)
                 : 1.0;
+        for (long long k = 0; k < kEventHistory && note - k >= 0; ++k) {
+            in.bass_onset_ages_s[static_cast<size_t>(k)] =
+                t_s - notes[static_cast<size_t>(note - k)].onset_s;
+        }
     }
 
     // Section.
@@ -132,6 +136,9 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
     in.hats_so_far = hat + 1;
     if (hat >= 0) {
         in.since_hat_s = t_s - r.hats[static_cast<size_t>(hat)].t_s;
+    }
+    for (long long k = 0; k < kEventHistory && hat - k >= 0; ++k) {
+        in.hat_ages_s[static_cast<size_t>(k)] = t_s - r.hats[static_cast<size_t>(hat - k)].t_s;
     }
     return in;
 }
@@ -210,6 +217,14 @@ EngineInputs inputs_at(const LiveState &s, double t_s) {
     in.hats_so_far = s.hats;
     if (s.last_hat_s > kLiveNever && t_s >= s.last_hat_s) {
         in.since_hat_s = t_s - s.last_hat_s;
+    }
+    for (size_t k = 0; k < kEventHistory; ++k) {
+        if (s.recent_hats_s[k] > kLiveNever && t_s >= s.recent_hats_s[k]) {
+            in.hat_ages_s[k] = t_s - s.recent_hats_s[k];
+        }
+        if (s.recent_bass_onsets_s[k] > kLiveNever && t_s >= s.recent_bass_onsets_s[k]) {
+            in.bass_onset_ages_s[k] = t_s - s.recent_bass_onsets_s[k];
+        }
     }
     return in;
 }

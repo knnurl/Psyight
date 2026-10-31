@@ -194,7 +194,7 @@ struct FireParams {
 struct BurstsParams {
     int trigger = 0; // Kick, hat, beat, bar, bass note.
     int every = 1;
-    int keep = 3; // Overlapping bursts (grid triggers and kicks; the others keep one).
+    int keep = 3; // Overlapping bursts (hats and bass notes: at most kEventHistory).
     double speed_m_per_s = 3.0;
     double width_m = 0.25;
     double decay_s = 0.3;
@@ -230,7 +230,7 @@ struct HexPulseParams {
     double travel_beats = 1.0; // From centre to edge.
     double width = 0.12;       // Of the centre-to-edge distance.
     double decay_s = 0.5;
-    int keep = 3; // Pulses alive at once (grid triggers and kicks; the others keep one).
+    int keep = 3; // Pulses alive at once (hats and bass notes: at most kEventHistory).
     double level = 1.0;
     int colours = 0; // A palette step per pulse, or the palette from centre to edge.
     int corners = 0; // Auto, up and down, sideways (engine/space.h hex_frame).

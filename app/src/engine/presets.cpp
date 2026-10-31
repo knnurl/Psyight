@@ -580,6 +580,39 @@ std::vector<ScenePreset> builtin_scene_presets() {
             route(ModSource::riser, ModTarget::setting, 4, 0.4, ModCurve::exponential, "density"));
         looks.push_back(std::move(p));
     }
+    { // Intros without a kick: the bassline as hexagons, each hat (and its echoes) as sparks.
+        ScenePreset p{"Hex echoes",
+                      "For kickless intros: a dim nebula; each bass note sends a hexagon out "
+                      "from the centre, each hat breaks into sparks that fade like an echo, "
+                      "repeats overlapping; the nebula lifts on the hats.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"intro"};
+        NoiseParams nebula;
+        nebula.scale_m = 1.0;
+        nebula.speed_hz = 0.05;
+        nebula.level = 0.25;
+        HexPulseParams bass;
+        bass.trigger = 3; // Bass note.
+        bass.travel_beats = 1.0;
+        bass.width = 0.08;
+        bass.decay_s = 0.6;
+        bass.keep = 4;
+        bass.level = 0.6;
+        BurstsParams echoes;
+        echoes.trigger = 1; // Hats.
+        echoes.keep = 4;
+        echoes.sparks = 0.7;
+        echoes.width_m = 0.12;
+        echoes.decay_s = 0.35;
+        echoes.level = 0.7;
+        p.scene.layers.push_back(make_layer({nebula}, BlendMode::alpha));
+        p.scene.layers.push_back(make_layer({bass}, BlendMode::screen));
+        p.scene.layers.push_back(make_layer({echoes}, BlendMode::screen));
+        p.scene.routes.push_back(route(ModSource::hat, ModTarget::opacity, 0, 0.4, ModCurve::linear,
+                                       "", ModQuantise::off, 0.0, 0.15));
+        looks.push_back(std::move(p));
+    }
     for (ScenePreset &p : looks) {
         p.scene.name = p.name;
         p.scene.palette = 0;
@@ -653,11 +686,18 @@ std::vector<ShowPack> builtin_show_packs() {
         "Hexagon",
         "For hexagonal rigs: hex tunnels and a radar sweep in grooves, comet rain at high energy, "
         "pressure building through builds as hexagons fall inwards and kicks push back, a "
-        "blooming drop, a nebula in breakdowns and deep space at the ends.",
+        "blooming drop, a nebula in breakdowns, hex echoes of the bass and hats in intros and "
+        "deep space at the end.",
         {find(looks, "Hex tunnel"), find(looks, "Hex radar"), find(looks, "Comet rain"),
          find(looks, "Nebula"), find(looks, "Hex pressure"), find(looks, "Drop bloom"),
-         find(looks, "Deep space")});
+         find(looks, "Hex echoes"), find(looks, "Deep space")});
     hexagon.automation.palette_every_phrases = 2;
+    // Here Hex echoes takes the intros; Deep space keeps the outros.
+    for (Scene &s : hexagon.scenes) {
+        if (s.name == "Deep space") {
+            s.sections = {"outro"};
+        }
+    }
     packs.push_back(std::move(hexagon));
     return packs;
 }

@@ -175,7 +175,7 @@ TEST_CASE("hexagon pack: ids, settings and every scene renders on the mandala") 
     const auto hexagon = std::find_if(packs.begin(), packs.end(),
                                       [](const ShowPack &p) { return p.name == "Hexagon"; });
     REQUIRE(hexagon != packs.end());
-    CHECK(hexagon->scenes.size() == 7);
+    CHECK(hexagon->scenes.size() == 8);
     const Rig rig = mandala();
     EngineInputs in = grid_at(13, 0.3);
     in.kicks_so_far = 14;
@@ -241,4 +241,61 @@ TEST_CASE("hex pressure: brighter as the riser rises, a kick pushes out, dark fo
     for (const Rgb &c : render_scene(*scene, rig, last, hexagon->palettes, 3)) {
         CHECK(level(c) < 0.01f); // The held breath before the drop.
     }
+}
+
+TEST_CASE("hex echoes: intros; each hat and bass note draws, recent repeats overlapping") {
+    const auto packs = builtin_show_packs();
+    const auto hexagon = std::find_if(packs.begin(), packs.end(),
+                                      [](const ShowPack &p) { return p.name == "Hexagon"; });
+    REQUIRE(hexagon != packs.end());
+    const Scene &intro =
+        hexagon->scenes[static_cast<size_t>(scene_for_label(hexagon->scenes, "intro", 0))];
+    CHECK(intro.name == "Hex echoes");
+    CHECK(hexagon->scenes[static_cast<size_t>(scene_for_label(hexagon->scenes, "outro", 0))].name ==
+          "Deep space");
+    // Bursts on hats: an echo's earlier repeats still show while they fade.
+    const Rig rig = mandala();
+    EngineInputs one = grid_at(8, 0.2);
+    one.hats_so_far = 3;
+    one.since_hat_s = 0.05;
+    one.hat_ages_s = {0.05, kNever, kNever, kNever};
+    EngineInputs echoed = one;
+    echoed.hat_ages_s = {0.05, 0.2, 0.35, kNever}; // Repeats 150 ms apart.
+    BurstsParams b;
+    b.trigger = 1;
+    b.keep = 4;
+    b.decay_s = 0.35;
+    const auto lit = [&](const EngineInputs &in) {
+        int n = 0;
+        for (const Rgb &c : render({b}, rig, in)) {
+            n += level(c) > 0.02f ? 1 : 0;
+        }
+        return n;
+    };
+    CHECK(lit(echoed) > lit(one));
+    // Hex pulses on bass notes likewise.
+    HexPulseParams h;
+    h.trigger = 3;
+    h.keep = 4;
+    h.travel_beats = 2.0;
+    EngineInputs note = grid_at(8, 0.2);
+    note.bass_notes_so_far = 4;
+    note.since_bass_onset_s = 0.05;
+    note.bass_onset_ages_s = {0.05, kNever, kNever, kNever};
+    EngineInputs notes = note;
+    notes.bass_onset_ages_s = {0.05, 0.15, 0.25, 0.35};
+    const auto pulses = [&](const EngineInputs &in) {
+        int n = 0;
+        for (const Rgb &c : render({h}, rig, in)) {
+            n += level(c) > 0.02f ? 1 : 0;
+        }
+        return n;
+    };
+    CHECK(pulses(notes) > pulses(note));
+    // The Hat source pulses on the latest hat.
+    ModRoute r;
+    r.source = ModSource::hat;
+    CHECK(route_value(r, one, 1) == doctest::Approx(std::exp(-0.05 / 0.08)));
+    EngineInputs none;
+    CHECK(route_value(r, none, 1) == 0.0);
 }

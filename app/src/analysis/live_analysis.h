@@ -129,6 +129,9 @@ struct LiveState {
     long long kicks = 0;
     double last_hat_s = kLiveNever;
     long long hats = 0;
+    // The last four hats and bass onsets, newest first (kLiveNever when fewer).
+    std::array<double, 4> recent_hats_s{kLiveNever, kLiveNever, kLiveNever, kLiveNever};
+    std::array<double, 4> recent_bass_onsets_s{kLiveNever, kLiveNever, kLiveNever, kLiveNever};
     double residual_level = 0.0; // 0 to 1, as file mode's residual level.
     double residual_centroid_hz = 0.0;
     double residual_flatness = 0.0;

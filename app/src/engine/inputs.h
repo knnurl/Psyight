@@ -16,7 +16,10 @@
 namespace psyight {
 
 inline constexpr double kNever = std::numeric_limits<double>::infinity();
-inline constexpr int kMacroCount = 8; // Macro knobs (Show tab, MIDI): modulation sources.
+inline constexpr int kMacroCount = 8;   // Macro knobs (Show tab, MIDI): modulation sources.
+inline constexpr int kEventHistory = 4; // Recent hats and bass onsets kept (EngineInputs).
+using EventAges = std::array<double, kEventHistory>;
+inline constexpr EventAges kNoEvents = {kNever, kNever, kNever, kNever};
 
 struct EngineInputs {
     double t_s = 0.0;
@@ -63,6 +66,10 @@ struct EngineInputs {
     double residual_flatness = 0.0;
     double since_hat_s = kNever;
     long long hats_so_far = 0;
+    // The ages of the last kEventHistory hats and bass onsets, newest first (kNever when fewer),
+    // so an effect can draw overlapping repeats (an echo's hats) rather than only the latest.
+    EventAges hat_ages_s = kNoEvents;
+    EventAges bass_onset_ages_s = kNoEvents;
     // The operator's macro knobs, 0 to 1: set by the show renderer from its config, not by
     // inputs_at (they are not music).
     std::array<double, kMacroCount> macros{};

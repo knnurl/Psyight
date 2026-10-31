@@ -9,6 +9,7 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kKickDecayS = 0.15;
+constexpr double kHatDecayS = 0.08;
 
 double lfo(double phase) { return 0.5 - 0.5 * std::cos(2.0 * kPi * phase); }
 
@@ -53,6 +54,9 @@ double source_value(ModSource source, const EngineInputs &in, std::uint64_t seed
         break;
     case ModSource::kick:
         v = std::isfinite(in.since_kick_s) ? std::exp(-in.since_kick_s / kKickDecayS) : 0.0;
+        break;
+    case ModSource::hat:
+        v = std::isfinite(in.since_hat_s) ? std::exp(-in.since_hat_s / kHatDecayS) : 0.0;
         break;
     case ModSource::bass_active:
         v = in.bass_active ? 1.0 : 0.0;
@@ -208,6 +212,8 @@ const char *mod_source_name(ModSource source) {
         return "Intensity";
     case ModSource::kick:
         return "Kick";
+    case ModSource::hat:
+        return "Hat";
     case ModSource::bass_active:
         return "Bass note on";
     case ModSource::bass_velocity:
@@ -324,6 +330,8 @@ const char *mod_source_id(ModSource source) {
         return "intensity";
     case ModSource::kick:
         return "kick";
+    case ModSource::hat:
+        return "hat";
     case ModSource::bass_active:
         return "bass_active";
     case ModSource::bass_velocity:

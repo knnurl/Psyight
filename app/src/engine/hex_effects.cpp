@@ -33,6 +33,7 @@ struct Trigger {
     long long index = -1;
     double since_s = 0.0;
     double spacing_s = 0.0;
+    const EventAges *ages = nullptr; // Hats and bass notes: their real recent times.
 };
 
 Trigger latest(const EngineInputs &in, int trigger) {
@@ -52,12 +53,12 @@ Trigger latest(const EngineInputs &in, int trigger) {
         break;
     case 3: // Bass note.
         if (in.bass_notes_so_far > 0 && std::isfinite(in.since_bass_onset_s)) {
-            t = {in.bass_notes_so_far - 1, in.since_bass_onset_s, 0.0};
+            t = {in.bass_notes_so_far - 1, in.since_bass_onset_s, 0.0, &in.bass_onset_ages_s};
         }
         break;
     default: // Hat.
         if (in.hats_so_far > 0 && std::isfinite(in.since_hat_s)) {
-            t = {in.hats_so_far - 1, in.since_hat_s, 0.0};
+            t = {in.hats_so_far - 1, in.since_hat_s, 0.0, &in.hat_ages_s};
         }
         break;
     }
@@ -83,19 +84,25 @@ class HexPulse final : public Effect {
         const double travel_s = std::max(1e-3, p_.travel_beats * beat_of(c.in));
         const double width = std::max(0.01, p_.width);
         const long long every = std::max(1, p_.every);
-        const int keep = t.spacing_s > 0.0 ? std::clamp(p_.keep, 1, 6) : 1;
+        const int keep = t.spacing_s > 0.0   ? std::clamp(p_.keep, 1, 6)
+                         : t.ages != nullptr ? std::clamp(p_.keep, 1, kEventHistory)
+                                             : 1;
         // Walk back over triggers until `keep` pulses (every nth trigger) are drawn.
         int drawn = 0;
         for (long long k = 0; drawn < keep && k < keep * every; ++k) {
             const long long event = t.index - k;
-            if (event < 0) {
+            if (event < 0 || (t.ages != nullptr && k >= kEventHistory)) {
                 break;
             }
             if (mod(event, every) != 0) {
                 continue;
             }
             ++drawn;
-            const double age = t.since_s + static_cast<double>(k) * t.spacing_s;
+            const double age = t.ages != nullptr ? (*t.ages)[static_cast<size_t>(k)]
+                                                 : t.since_s + static_cast<double>(k) * t.spacing_s;
+            if (!std::isfinite(age)) {
+                break;
+            }
             const double fade = std::exp(-age / std::max(1e-3, p_.decay_s));
             const double travelled = age / travel_s;
             if (fade < 0.01 || travelled > 1.0 + 3.0 * width) {

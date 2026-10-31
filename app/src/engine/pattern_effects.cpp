@@ -284,6 +284,7 @@ class Bursts final : public Effect {
         long long index = -1;
         double since = 0.0;
         double spacing = 0.0;
+        const EventAges *ages = nullptr; // Hats and bass notes: their real recent times.
         switch (p_.trigger) {
         case 0: // Kick: earlier kicks taken a beat apart.
             if (in.kicks_so_far > 0 && std::isfinite(in.since_kick_s)) {
@@ -296,6 +297,7 @@ class Bursts final : public Effect {
             if (in.hats_so_far > 0 && std::isfinite(in.since_hat_s)) {
                 index = in.hats_so_far - 1;
                 since = in.since_hat_s;
+                ages = &in.hat_ages_s;
             }
             break;
         case 2: // Beat.
@@ -312,6 +314,7 @@ class Bursts final : public Effect {
             if (in.bass_notes_so_far > 0 && std::isfinite(in.since_bass_onset_s)) {
                 index = in.bass_notes_so_far - 1;
                 since = in.since_bass_onset_s;
+                ages = &in.bass_onset_ages_s;
             }
             break;
         }
@@ -320,19 +323,25 @@ class Bursts final : public Effect {
             return;
         }
         const long long every = std::max(1, p_.every);
-        const int keep = spacing > 0.0 ? std::clamp(p_.keep, 1, 6) : 1;
+        const int keep = spacing > 0.0     ? std::clamp(p_.keep, 1, 6)
+                         : ages != nullptr ? std::clamp(p_.keep, 1, kEventHistory)
+                                           : 1;
         // Walk back over triggers until `keep` bursts (every nth trigger) are drawn.
         int drawn = 0;
         for (long long k = 0; drawn < keep && k < keep * every; ++k) {
             const long long event = index - k;
-            if (event < 0) {
+            if (event < 0 || (ages != nullptr && k >= kEventHistory)) {
                 break;
             }
             if (((event % every) + every) % every != 0) {
                 continue;
             }
             ++drawn;
-            const double age = since + static_cast<double>(k) * spacing;
+            const double age = ages != nullptr ? (*ages)[static_cast<size_t>(k)]
+                                               : since + static_cast<double>(k) * spacing;
+            if (!std::isfinite(age)) {
+                break;
+            }
             const double fade = std::exp(-age / std::max(1e-3, p_.decay_s));
             if (fade < 0.01) {
                 continue;
