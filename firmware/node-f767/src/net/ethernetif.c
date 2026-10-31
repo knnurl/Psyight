@@ -8,6 +8,7 @@
 #include "lwip/pbuf.h"
 #include "netif/ethernet.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #define RX_BUFFER_COUNT 24u /* Pool for in-flight receive pbufs (descriptors plus the stack's). */
@@ -133,8 +134,15 @@ static err_t low_level_output(struct netif *netif, struct pbuf *p) {
     s_tx_config.pData = p;
     pbuf_ref(p); /* Held until HAL_ETH_TxFreeCallback. */
     HAL_ETH_ReleaseTxPacket(&g_eth);
+    /* The descriptors record this address for the free callback. Only HAL_ETH_Transmit_IT sets
+     * it: left NULL, no sent frame was ever released, and after some minutes the heap was full
+     * and the node could not answer ARP, so the computer stopped sending to it. */
+    g_eth.TxDescList.CurrentPacketAddress = (uint32_t *)p;
+    const uint32_t first = g_eth.TxDescList.CurTxDesc;
     if (HAL_ETH_Transmit(&g_eth, &s_tx_config, TX_TIMEOUT_MS) != HAL_OK) {
-        pbuf_free(p);
+        if (g_eth.TxDescList.CurTxDesc == first) {
+            pbuf_free(p); /* No descriptor took it. Otherwise (a timeout) the HAL frees it. */
+        }
         return ERR_IF;
     }
     return ERR_OK;
@@ -227,15 +235,21 @@ void ethernetif_input(struct netif *netif) {
     }
 }
 
-ethernetif_stats ethernetif_get_stats(void) { return s_stats; }
+ethernetif_stats ethernetif_get_stats(void) {
+    ethernetif_stats s = s_stats;
+    s.tx_in_use = g_eth.TxDescList.BuffersInUse;
+    return s;
+}
 
 void ethernetif_link_poll(struct netif *netif) {
     const int32_t state = LAN8742_GetLinkState(&s_phy);
     const int up =
         state >= LAN8742_STATUS_100MBITS_FULLDUPLEX && state <= LAN8742_STATUS_10MBITS_HALFDUPLEX;
     if (up && !netif_is_link_up(netif)) {
+        printf("net: link up (PHY state %ld)\r\n", (long)state);
         start_with_link(netif, state);
     } else if (!up && netif_is_link_up(netif)) {
+        printf("net: link down (PHY state %ld)\r\n", (long)state);
         HAL_ETH_Stop(&g_eth);
         netif_set_down(netif);
         netif_set_link_down(netif);

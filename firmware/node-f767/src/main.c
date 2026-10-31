@@ -183,14 +183,16 @@ static void stage3_loop(void) {
             net_address(ip);
             const ethernetif_stats rx = ethernetif_get_stats();
             printf("node %u.%u.%u.%u: %lu fps out, %lu packets, %lu latches, %lu sequence gaps, "
-                   "%lu losses, %lu ignored, rx %lu frames %lu polls %lu starved %lu resumed%s\r\n",
+                   "%lu losses, %lu ignored, rx %lu frames %lu polls %lu starved %lu resumed, "
+                   "tx %lu in use%s\r\n",
                    ip[0], ip[1], ip[2], ip[3],
                    (unsigned long)(frames_since * 1000u / (now - last_stats)),
                    (unsigned long)s_node.packets, (unsigned long)s_node.latches,
                    (unsigned long)s_node.sequence_gaps, (unsigned long)s_node.losses,
                    (unsigned long)s_node.ignored, (unsigned long)rx.frames,
                    (unsigned long)net_polls(), (unsigned long)rx.starved,
-                   (unsigned long)rx.suspended, lost ? ", signal lost" : "");
+                   (unsigned long)rx.suspended, (unsigned long)rx.tx_in_use,
+                   lost ? ", signal lost" : "");
             frames_since = 0;
             last_stats = now;
         }
