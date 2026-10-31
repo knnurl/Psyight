@@ -163,7 +163,7 @@ Bindings are saved with the project, and the controller reconnects on the next s
 ## If something goes wrong
 
 - **No lights:** check that the ladder is on Ambient, React or Show, then the Preflight tab (Network and Nodes lines). The node's console shows whether packets arrive.
-- **The app crashed or the power went:** the lights do not go black at once. After 2 s without data the node runs its own loss policy (by default a dim violet fallback show). Restart Psyight: it reports the unclean exit in the Log tab. The labels and project are at most a minute old. The crash details are in `logs/` (`psyight.log` and any `crash-*.dmp`).
+- **The app crashed or the power went:** the lights do not go black at once. After 2 s without data the node runs its own loss policy (by default a dim aurora, as Ambient). Restart Psyight: it reports the unclean exit in the Log tab. The labels and project are at most a minute old. The crash details are in `logs/` (`psyight.log` and any `crash-*.dmp`).
 - **Live mode never locks:** check the input level on the status line. Loopback captures only what plays through the default output device. With an interface, check the input gain.
 - **Too bright, or flashing too much:** the flash limiter caps flashes at 3 a second (it can only be turned off in Engineer depth). Lower the brightness cap in the Limiters section, or bind it to a fader.
 

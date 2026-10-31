@@ -1,5 +1,6 @@
 #include "gui/preflight_view.h"
 
+#include "engine/aurora.h"
 #include "gui/theme.h"
 #include "gui/widgets.h"
 #include "output/discovery.h"
@@ -536,18 +537,18 @@ void PreflightView::draw_node_setup() {
     // The fallback show's colours.
     ImGui::Checkbox("Fallback show colours from", &node_send_palette_);
     ImGui::SetItemTooltip(
-        "The node's own show when the signal is lost takes the first four colours "
-        "of this palette.");
+        "The node's own show when the signal is lost (an aurora, as Ambient) takes the first "
+        "four colours of this palette: the aurora's own, or one of the show's.");
     ImGui::SameLine();
-    node_palette_ =
-        std::clamp(node_palette_, 0, std::max(0, static_cast<int>(project.palettes.size()) - 1));
-    ImGui::BeginDisabled(!node_send_palette_ || project.palettes.empty());
+    node_palette_ = std::clamp(node_palette_, -1, static_cast<int>(project.palettes.size()) - 1);
+    ImGui::BeginDisabled(!node_send_palette_);
     ImGui::SetNextItemWidth(10.0f * em);
-    const char *palette_name =
-        project.palettes.empty()
-            ? "(none)"
-            : project.palettes[static_cast<size_t>(node_palette_)].name.c_str();
-    if (ImGui::BeginCombo("##palette", palette_name)) {
+    const Palette &chosen_palette =
+        node_palette_ < 0 ? aurora_palette() : project.palettes[static_cast<size_t>(node_palette_)];
+    if (ImGui::BeginCombo("##palette", chosen_palette.name.c_str())) {
+        if (ImGui::Selectable(aurora_palette().name.c_str(), node_palette_ < 0)) {
+            node_palette_ = -1;
+        }
         for (size_t i = 0; i < project.palettes.size(); ++i) {
             if (ImGui::Selectable(project.palettes[i].name.c_str(),
                                   static_cast<int>(i) == node_palette_)) {
@@ -567,9 +568,7 @@ void PreflightView::draw_node_setup() {
     ImGui::SameLine();
     ImGui::BeginDisabled(!plan.problems.empty());
     if (primary_button("Set up the node")) {
-        const Palette *palette = node_send_palette_ && !project.palettes.empty()
-                                     ? &project.palettes[static_cast<size_t>(node_palette_)]
-                                     : nullptr;
+        const Palette *palette = node_send_palette_ ? &chosen_palette : nullptr;
         start_node_job(node_commands(plan, palette), "set up");
     }
     ImGui::EndDisabled();

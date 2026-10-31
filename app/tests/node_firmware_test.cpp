@@ -18,6 +18,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -559,13 +560,60 @@ TEST_CASE("node firmware: lane colour orders: set, reported, and used by the fal
     auto lane_buffer = std::make_unique<LaneBuffer>();
     auto &lanes = lane_buffer->lanes;
     REQUIRE(node_frame(node.get(), 1000, lanes));
-    CHECK(lanes[0][1] > 0);
-    CHECK(lanes[0][0] == 0);
-    CHECK(lanes[0][2] == 0);
-    CHECK(lanes[1][0] > 0);
-    CHECK(lanes[1][1] == 0);
-    CHECK(lanes[2][2] > 0);
-    CHECK(lanes[2][0] == 0);
+    // The aurora lights some pixels; red goes to the lane's red byte and nowhere else.
+    const auto red_at = [&](int lane, int place) {
+        bool lit = false;
+        for (int i = 0; i < 10; ++i) {
+            for (int c = 0; c < 3; ++c) {
+                const std::uint8_t v = lanes[lane][i * 3 + c];
+                CHECK((c == place || v == 0));
+                lit |= c == place && v > 0;
+            }
+        }
+        return lit;
+    };
+    CHECK(red_at(0, 1));
+    CHECK(red_at(1, 0));
+    CHECK(red_at(2, 2));
+}
+
+TEST_CASE("node firmware: the fallback show is an aurora: drifting waves with dark between") {
+    node_settings s = node_default_settings();
+    s.loss_timeout_ms = 100;
+    s.lanes[0] = {0, 408}; // The owner's hexagon on one line.
+    for (int l = 1; l < NODE_LANES; ++l) {
+        s.lanes[l] = {0, 0};
+    }
+    auto node = std::make_unique<node_state>();
+    node_init(node.get(), &s);
+    auto a = std::make_unique<LaneBuffer>();
+    auto b = std::make_unique<LaneBuffer>();
+    // Brightest drive the default brightness allows: 0.25 perceptual.
+    const auto most = static_cast<int>(std::pow(0.25, 2.2) * 255.0 + 1.0);
+    int lit = 0;
+    int pixels = 0;
+    // From a minute up to 40 days of uptime (the clock's float precision).
+    for (const std::uint32_t t : {60000u, 61000u, 3600000u, 3456000000u}) {
+        CAPTURE(t);
+        REQUIRE(node_frame(node.get(), t, a->lanes));
+        REQUIRE(node_frame(node.get(), t + 500, b->lanes));
+        CHECK(std::memcmp(a->lanes[0], b->lanes[0], 408 * 3) != 0); // Drifting.
+        for (int i = 0; i < 408; ++i) {
+            const std::uint8_t *p = &a->lanes[0][i * 3]; // GRB.
+            CHECK(std::max({p[0], p[1], p[2]}) <= most);
+            lit += std::max({p[0], p[1], p[2]}) > 0 ? 1 : 0;
+            ++pixels;
+        }
+    }
+    CAPTURE(lit);
+    CHECK(lit > pixels / 5);      // Waves...
+    CHECK(lit < pixels * 9 / 10); // ...with dark between them.
+    // Deterministic: the same time, the same frame.
+    auto again = std::make_unique<node_state>();
+    node_init(again.get(), &s);
+    REQUIRE(node_frame(again.get(), 3600000u, b->lanes));
+    REQUIRE(node_frame(node.get(), 3600000u, a->lanes));
+    CHECK(std::memcmp(a->lanes[0], b->lanes[0], 408 * 3) == 0);
 }
 
 namespace {

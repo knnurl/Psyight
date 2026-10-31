@@ -3,8 +3,6 @@
 #include <math.h>
 #include <string.h>
 
-#define PI_F 3.14159265f
-
 /* Milliseconds from `then` to `now`, 0 when `then` is later. The main loop reads the time once
  * and then polls the network, whose packets are stamped as they arrive, so a stamp can be a
  * millisecond past the loop's `now`; plain unsigned subtraction wrapped that round to 49 days,
@@ -33,8 +31,8 @@ node_settings node_default_settings(void) {
     s.fade_ms = 3000;
     s.fallback_brightness = 0.25f;
     s.fallback_speed_hz = 0.05f;
-    /* Violet and magenta, UV-friendly (SPEC 7.5), as RGB. */
-    const uint8_t palette[4][3] = {{90, 0, 255}, {200, 0, 120}, {120, 20, 255}, {255, 0, 60}};
+    /* The aurora's green, teal, blue and violet (the app's engine/aurora), as RGB. */
+    const uint8_t palette[4][3] = {{0, 255, 89}, {0, 204, 178}, {25, 102, 255}, {140, 0, 255}};
     memcpy(s.palette, palette, sizeof(palette));
     s.palette_size = 4;
     for (int l = 0; l < NODE_LANES; ++l) {
@@ -128,6 +126,7 @@ void node_on_packet(node_state *n, const psy_packet *p, bool art_net, uint32_t n
     uint16_t count = p->slot_count > PSY_MAX_SLOTS ? PSY_MAX_SLOTS : p->slot_count;
     memcpy(n->received[u], p->slots, count);
     n->have_data = true;
+    n->fresh = true;
     n->last_data_ms = now_ms;
     if (!art_net) {
         n->sacn_sync_universe = p->sync_universe;
@@ -145,6 +144,9 @@ void node_on_packet(node_state *n, const psy_packet *p, bool art_net, uint32_t n
 }
 
 bool node_signal_lost(const node_state *n, uint32_t now_ms) {
+    if (n->lost && !n->fresh) {
+        return true;
+    }
     const uint32_t since = n->have_data ? n->last_data_ms : 0u;
     return elapsed_ms(now_ms, since) > n->s.loss_timeout_ms;
 }
@@ -170,34 +172,125 @@ static void fill_from_latched(const node_state *n, float scale,
     }
 }
 
-/* Slow plasma along each lane (60 pixels per metre assumed: the node knows no geometry),
- * drifting through the palette. Dim, smooth, no flashes. */
+/* The fallback show: an aurora, as the app's Ambient step (app/src/engine/aurora.cpp, WLED's
+ * Aurora). Along each lane (the node knows no strips) waves of the palette's colours drift
+ * slowly, each fading in and out over 8 to 25 s, brightest at its centre and fading linearly to
+ * its edges; overlaps add, scaled back to keep their hue. A lane is taken as a loop, so a wave
+ * leaving its end comes back at its start. fallback_speed 0.05 is the aurora's own pace (twice
+ * it, twice as fast). Stateless: each wave's numbers are hashed from (lane, slot, generation). */
+#define AURORA_PIXELS_PER_WAVE 12
+#define AURORA_MIN_WAVES 2
+#define AURORA_MAX_WAVES 12
+#define AURORA_MIN_LIFE_S 8.0
+#define AURORA_MAX_LIFE_S 25.0
+#define AURORA_MIN_WIDTH_SHARE (1.0f / 20.0f)
+#define AURORA_MAX_WIDTH_SHARE (1.0f / 6.0f)
+#define AURORA_MIN_WIDTH_PIXELS 2.0f
+#define AURORA_MIN_SPEED_PX_PER_S 1.5f
+#define AURORA_MAX_SPEED_PX_PER_S 4.5f
+#define AURORA_MIN_ALPHA 0.6f
+#define AURORA_PACE_HZ 0.05f /* fallback_speed at the aurora's own pace. */
+
+typedef struct {
+    float centre_px;
+    float width_px;
+    float alpha;  /* Now, with the fade in and out. */
+    float rgb[3]; /* 0 to 1. */
+} aurora_wave;
+
+static uint32_t mix32(uint32_t x) { /* A 32-bit integer hash (lowbias32). */
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+/* 0 to 1, from the wave's identity and which of its numbers this is. */
+static float aurora_unit(int lane, int slot, int64_t generation, int which) {
+    uint32_t h = mix32(0x9e3779b9u ^ (uint32_t)lane);
+    h = mix32(h ^ (uint32_t)slot * 0x85ebca6bu);
+    h = mix32(h ^ (uint32_t)generation ^ (uint32_t)(generation >> 32) * 0xc2b2ae35u);
+    h = mix32(h ^ (uint32_t)which * 0x27d4eb2fu);
+    return (float)(h >> 8) * (1.0f / 16777216.0f);
+}
+
+static float aurora_between(float lo, float hi, float u) { return lo + (hi - lo) * u; }
+
 static void fill_fallback(const node_state *n, uint32_t now_ms,
                           uint8_t lanes[NODE_LANES][NODE_LANE_BYTES]) {
     const node_settings *s = &n->s;
-    const float t = (float)now_ms * 0.001f * s->fallback_speed_hz;
-    const int colours = s->palette_size > 0 ? s->palette_size : 1;
+    /* Seconds at the aurora's pace; double, so hours of uptime keep their milliseconds. */
+    const double t = (double)now_ms * 0.001 * (double)(s->fallback_speed_hz / AURORA_PACE_HZ);
+    const int colours = s->palette_size > 0 ? (s->palette_size < 4 ? s->palette_size : 4) : 1;
     for (int l = 0; l < NODE_LANES; ++l) {
         uint8_t *out = lanes[l];
         uint8_t at[3];
         node_order_positions(s->lane_order[l], at);
         memset(out, 0, NODE_LANE_BYTES);
-        for (uint32_t i = 0; i < s->lanes[l].pixels; ++i) {
-            const float x = (float)i / 60.0f;
-            const float a = sinf(2.0f * PI_F * (x / 1.4f + t));
-            const float b = sinf(2.0f * PI_F * (x / 0.9f - 1.7f * t) + (float)l);
-            const float v = 0.5f + 0.25f * (a + b); /* 0 to 1. */
-            float position = (0.5f * v + 0.1f * t) * (float)colours;
-            position -= floorf(position / (float)colours) * (float)colours;
+        const int count = s->lanes[l].pixels;
+        if (count == 0) {
+            continue;
+        }
+        int slots = count / AURORA_PIXELS_PER_WAVE;
+        slots = slots < AURORA_MIN_WAVES   ? AURORA_MIN_WAVES
+                : slots > AURORA_MAX_WAVES ? AURORA_MAX_WAVES
+                                           : slots;
+        aurora_wave waves[AURORA_MAX_WAVES];
+        for (int k = 0; k < slots; ++k) {
+            /* Each slot's waves follow one another, the slots out of step. */
+            const double life_s = AURORA_MIN_LIFE_S + (AURORA_MAX_LIFE_S - AURORA_MIN_LIFE_S) *
+                                                          (double)aurora_unit(l, k, -1, 0);
+            const double shifted = t + life_s * (double)aurora_unit(l, k, -1, 1);
+            const int64_t generation = (int64_t)floor(shifted / life_s);
+            const float age = (float)(shifted / life_s - (double)generation); /* 0 to 1. */
+            aurora_wave *w = &waves[k];
+            const float speed = aurora_between(AURORA_MIN_SPEED_PX_PER_S, AURORA_MAX_SPEED_PX_PER_S,
+                                               aurora_unit(l, k, generation, 0));
+            const float direction = aurora_unit(l, k, generation, 1) < 0.5f ? -1.0f : 1.0f;
+            w->centre_px = aurora_unit(l, k, generation, 2) * (float)count +
+                           direction * speed * age * (float)life_s;
+            w->width_px =
+                (float)count * aurora_between(AURORA_MIN_WIDTH_SHARE, AURORA_MAX_WIDTH_SHARE,
+                                              aurora_unit(l, k, generation, 3));
+            if (w->width_px < AURORA_MIN_WIDTH_PIXELS) {
+                w->width_px = AURORA_MIN_WIDTH_PIXELS;
+            }
+            /* Up over the first half of its life, down over the second. */
+            w->alpha = aurora_between(AURORA_MIN_ALPHA, 1.0f, aurora_unit(l, k, generation, 4)) *
+                       (1.0f - fabsf(2.0f * age - 1.0f));
+            /* A colour around the palette (cyclic, blended). */
+            const float position = aurora_unit(l, k, generation, 5) * (float)colours;
             const int c0 = (int)position % colours;
             const int c1 = (c0 + 1) % colours;
             const float f = position - floorf(position);
-            const float level = s->fallback_brightness * (0.4f + 0.6f * v);
-            const float drive = powf(level, 2.2f); /* Perceptual level to LED drive. */
+            for (int c = 0; c < 3; ++c) {
+                w->rgb[c] =
+                    ((1.0f - f) * (float)s->palette[c0][c] + f * (float)s->palette[c1][c]) / 255.0f;
+            }
+        }
+        for (int i = 0; i < count; ++i) {
+            float sum[3] = {0.0f, 0.0f, 0.0f};
+            for (int k = 0; k < slots; ++k) {
+                const aurora_wave *w = &waves[k];
+                float along = fmodf(fabsf((float)i - w->centre_px), (float)count);
+                const float off = along < (float)count - along ? along : (float)count - along;
+                if (off >= w->width_px) {
+                    continue;
+                }
+                const float a = w->alpha * (1.0f - off / w->width_px);
+                for (int c = 0; c < 3; ++c) {
+                    sum[c] += a * w->rgb[c];
+                }
+            }
+            /* Overlaps keep their hue: scaled down, not clipped towards white. */
+            float peak = sum[0] > sum[1] ? sum[0] : sum[1];
+            peak = peak > sum[2] ? peak : sum[2];
+            const float scale = s->fallback_brightness / (peak > 1.0f ? peak : 1.0f);
             for (int c = 0; c < 3; ++c) { /* R, G, B, each to its place in the lane's order. */
-                const float colour =
-                    (1.0f - f) * (float)s->palette[c0][c] + f * (float)s->palette[c1][c];
-                out[i * 3u + at[c]] = (uint8_t)(colour * drive + 0.5f);
+                const float drive = powf(sum[c] * scale, 2.2f); /* Perceptual to LED drive. */
+                out[(uint32_t)i * 3u + at[c]] = (uint8_t)(drive * 255.0f + 0.5f);
             }
         }
     }
@@ -218,6 +311,7 @@ bool node_frame(node_state *n, uint32_t now_ms, uint8_t lanes[NODE_LANES][NODE_L
     if (node_signal_lost(n, now_ms)) {
         if (!n->lost) {
             n->lost = true;
+            n->fresh = false;
             ++n->losses;
             n->lost_since_ms = now_ms;
             n->loss_shown = false;

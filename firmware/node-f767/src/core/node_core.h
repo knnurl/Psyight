@@ -53,7 +53,8 @@ typedef struct {
     uint32_t loss_timeout_ms;
     node_loss_policy loss_policy;
     uint32_t fade_ms;
-    /* Fallback show: a slow plasma drifting through the palette, dim by default. */
+    /* Fallback show: an aurora of the palette's colours (as the app's Ambient), dim by
+     * default. Speed 0.05 is the aurora's own pace. */
     float fallback_brightness; /* 0 to 1, before gamma. */
     float fallback_speed_hz;
     uint8_t palette[4][3]; /* RGB; the fallback show writes it in each lane's order. */
@@ -86,6 +87,8 @@ typedef struct {
     uint32_t last_data_ms;
     bool latch_dirty; /* The latched data changed since the last frame. */
     bool lost;        /* In signal loss. */
+    bool fresh;       /* Data arrived since the loss began (until then the loss stands, however
+                         long: elapsed_ms reads gaps over 24.8 days as 0). */
     bool loss_shown;  /* Hold or blackout already output once. */
     uint32_t lost_since_ms;
     /* Statistics. */

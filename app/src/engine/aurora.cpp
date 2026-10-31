@@ -53,6 +53,8 @@ struct Wave {
 
 } // namespace
 
+const Palette &aurora_palette() { return kAurora; }
+
 Frame render_aurora(const Rig &rig, double clock_s, std::uint64_t seed) {
     Frame frame(rig.pixels.size());
     const double t = std::max(0.0, clock_s);

@@ -69,7 +69,7 @@ class PreflightView {
     void start_node_job(std::vector<std::string> commands, const char *what);
     std::string node_address_;
     bool node_send_palette_ = true;
-    int node_palette_ = 0;
+    int node_palette_ = -1; // The aurora's colours (as Ambient), or a project palette.
     std::future<NodeExchange> node_job_;
     std::optional<NodeExchange> node_result_;
     std::string node_job_what_; // "read", "set up" or "save".

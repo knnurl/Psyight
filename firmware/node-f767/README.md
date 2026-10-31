@@ -71,7 +71,7 @@ In the app, use the Preview's Output section: sACN multicast, or unicast or Art-
 Flash F3. Frames from the app reach the strips, and the console reports output frames per second, packets, latches, sequence gaps and ignored universes every 5 s. Then check:
 
 - **Sync:** sACN sync universe 1000, or ArtSync. Every strip changes on the same frame.
-- **Signal loss:** stop sending, and after `loss_ms` (default 2 s) the policy runs. The default is `fallback`, a dim violet plasma.
+- **Signal loss:** stop sending, and after `loss_ms` (default 2 s) the policy runs. The default is `fallback`, a dim aurora (as the app's Ambient: waves of the palette's colours drifting along each lane, fading in and out; the default palette is the aurora's green, teal, blue and violet). A loss stands until data arrives again, however long.
 - **Watchdog:** the console says "after a watchdog reset" if the node ever reset itself.
 
 ## Configuration (UDP port 6455)

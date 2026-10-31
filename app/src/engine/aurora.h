@@ -18,5 +18,7 @@
 namespace psyight {
 
 Frame render_aurora(const Rig &rig, double clock_s, std::uint64_t seed);
+// Its colours: green, teal, blue and violet (also the node's fallback show's, Node setup).
+const Palette &aurora_palette();
 
 } // namespace psyight
