@@ -113,7 +113,8 @@ class ShowRenderer {
     // The test pattern's clock: frames since it started (it runs while the transport is stopped).
     TestPatternKind test_kind_ = TestPatternKind::off;
     std::int64_t test_frames_ = 0;
-    double candy_clock_s_ = 0.0;      // Eye candy's clock: advanced by its speed each frame.
+    double candy_clock_s_ = 0.0; // Eye candy's clock: advanced by its speed each frame.
+    double chase_pixels_ = 0.0;  // How far the chase has run: advanced by its speed each frame.
     std::int64_t ambient_frames_ = 0; // The aurora's clock: frames since Ambient began.
     OutputSender sender_;
     VirtualNode node_;

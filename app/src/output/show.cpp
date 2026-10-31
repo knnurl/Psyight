@@ -68,6 +68,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         test_kind_ = config.test.kind;
         test_frames_ = 0;
         candy_clock_s_ = 0.0;
+        chase_pixels_ = 0.0;
     }
     const bool network = config.send_to_network || (testing && config.test.send);
     if (network && socket_ != nullptr && socket_interface_ != config.output_interface) {
@@ -93,14 +94,21 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
         // Eye candy's clock runs at its speed, advanced a frame at a time so a new speed does
         // not jump the show.
         double clock_s = out.test_clock_s;
-        if (config.test.kind == TestPatternKind::eye_candy) {
+        TestPattern pattern = config.test;
+        if (config.test.kind == TestPatternKind::chase) {
+            // The distance run so far at one pixel a second: a new speed carries on from there.
+            clock_s = chase_pixels_;
+            pattern.chase_pixels_per_s = 1.0;
+            chase_pixels_ +=
+                std::max(0.0, config.test.chase_pixels_per_s) / kTestPatternFrameRateHz;
+        } else if (config.test.kind == TestPatternKind::eye_candy) {
             clock_s = candy_clock_s_;
             candy_clock_s_ +=
                 std::clamp(config.test.candy_speed, 0.0, 10.0) / kTestPatternFrameRateHz;
         }
         out.frame = config.blackout
                         ? Frame(config.rig.pixels.size())
-                        : render_test_pattern(config.test, config.rig, config.patch, clock_s);
+                        : render_test_pattern(pattern, config.rig, config.patch, clock_s);
     } else if (config.hold && !config.blackout && held_.frame.size() == config.rig.pixels.size()) {
         out = held_; // The look, frozen; the limiters and automation are skipped.
     } else if (config.ambient) {

@@ -226,3 +226,34 @@ TEST_CASE("show renderer: a track's first second fades up from black") {
     CHECK(brightest(0.5) > 0.0f);
     CHECK(brightest(0.5) < brightest(1.5));
 }
+
+TEST_CASE("show renderer: the chase carries on from where it is when its speed changes") {
+    ShowConfig config;
+    config.rig = two_strips();
+    config.patch = build_patch(config.rig);
+    config.limiter.flash_limiter = false;
+    config.test.kind = TestPatternKind::chase;
+    config.test.chase_length = 1;
+    config.test.chase_pixels_per_s = 60.0; // A pixel a frame.
+    const auto head = [](const Frame &f) { // The lit pixel of strip 0.
+        for (size_t i = 0; i < 10; ++i) {
+            if (f[i].r + f[i].g + f[i].b > 0.0f) {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    };
+    ShowRenderer renderer;
+    ShowFrame f;
+    for (int k = 0; k < 5; ++k) { // Frames at 0, 1, 2, 3, 4 pixels.
+        f = renderer.render(config, 0.0);
+    }
+    CHECK(head(f.frame) == 4);
+    config.test.chase_pixels_per_s = 30.0; // Half speed: on from 5, half a pixel a frame.
+    f = renderer.render(config, 0.0);
+    CHECK(head(f.frame) == 5);
+    f = renderer.render(config, 0.0);
+    CHECK(head(f.frame) == 5);
+    f = renderer.render(config, 0.0);
+    CHECK(head(f.frame) == 6);
+}
