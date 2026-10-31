@@ -236,6 +236,17 @@ Built per bar of the beat grid (`app/src/analysis/sections.*`). The kick state p
 - **Riser curve:** 0 to 1 per frame. Through each build it follows the residual's flatness (1 s average) from the build's start to its peak, never falling, and holds to the build's end (a build without a flatness rise ramps linearly); 0 elsewhere. Live: 0 when the build is declared, 1 at the riser ratio squared, never falling within the build. It is an engine input and a modulation source ("some parts follow the risers").
 - Outputs carry a label, an energy, a confidence and a timestamp. Scene automation (section 7.6) consumes them. `psyight_analyse --sections-report <audio or folder>` measures fragmentation: sections per minute, median length, short sections, boundaries on the phrase grid and kick flips per minute.
 
+### 6.6.1 Finer sections for psytrance (proposed 2026-10-31, not built)
+
+The six kinds stay; sections gain attributes and short events get their own list (owner: "more detailed phase names for this genre"; chosen: groove phases, roles, pre-drop and climax, breaks and fills).
+- **Phase (A, B, C...):** grooves (and drops, see the open decision) whose bassline (notes per 16th slot and pitch range, from the bass aggregates) and texture (the section bars' band levels, bass and hats density) are close share a letter, in order of first appearance: groove A, groove B, groove A again. Greedy in time: a section joins the nearest earlier phase within a distance on z-scored features, else opens a new letter. The threshold is set on the owner's labels, after the view exists.
+- **Role:** main (the bassline carries it), lead (a tonal, bright residual over most of the section: centroid above and flatness below the grooves' medians), peak (the groove phrases of the track's highest intensity, analysis/intensity.h), climax (the drop's strongest phrase).
+- **Pre-drop:** the last 1 to 4 bars before a drop where the kick is out or the residual collapses (today inside the build).
+- **Events:** break (the kick out for 1 to 4 bars inside a groove; today a held blip) and fill (a phrase's last bar whose texture or kick pattern departs from the phrase), each with a start and a length.
+- **Labels (6.10):** sections get optional "phase" and "role"; a new "events" array; older files read unchanged. The labelling view shows them on the section band and an event lane, with keys to set them.
+- **Lights (7.6):** scenes may be tagged with phases, roles and pre-drop; fills (option D) can follow detected fills and breaks as well as phrase ends.
+- **Verification first:** the synthetic generator gains two alternating bassline patterns (A B A), a lead, breaks and fills, with tests asserting their detection; the labelling view shows the detected attributes; the scoring panel reports phase agreement (pairs of sections sharing a letter), role accuracy and event precision and recall within a bar, on 2 or 3 tracks the owner labels, before any threshold is tuned.
+
 ### 6.7 Confidence and fallback
 
 Every detector outputs confidence. When confidence drops below a threshold for a configurable time, the engine applies the selected policy: **hold** the last confident state, or **fall back to ambient**. The owner wants both available.
