@@ -116,6 +116,7 @@ static void on_ddp(node_state *n, const psy_packet *p, uint32_t now_ms) {
         }
     }
     n->have_data = true;
+    n->fresh = true; /* Ends a loss, as sACN and Art-Net data do. */
     n->last_data_ms = now_ms;
     if (p->push) {
         latch_all(n);

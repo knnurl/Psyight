@@ -339,6 +339,35 @@ TEST_CASE("node firmware: signal loss runs the chosen policy") {
     }
 }
 
+TEST_CASE("node firmware: DDP data ends a signal loss, as sACN and Art-Net do") {
+    // The loss stands until data arrives (node_state.fresh); DDP data must count, or a pause in
+    // a DDP show left the node on its fallback until a reset.
+    const node_settings settings = node_default_settings(); // Fallback on loss.
+    auto node = std::make_unique<node_state>();
+    node_init(node.get(), &settings);
+    auto lane_buffer = std::make_unique<LaneBuffer>();
+    auto &lanes = lane_buffer->lanes;
+    const std::vector<std::uint8_t> bytes(3 * 150, 160);
+    std::vector<std::uint8_t> p;
+    psy_packet in{};
+    build_ddp(1, 0, bytes, true, p);
+    REQUIRE(psy_parse_ddp(p.data(), p.size(), &in));
+    node_on_packet(node.get(), &in, false, 100);
+    REQUIRE(node_frame(node.get(), 101, lanes));
+    CHECK(lanes[0][0] == 160);
+
+    const std::uint32_t lost_ms = 100 + settings.loss_timeout_ms + 500;
+    REQUIRE(node_frame(node.get(), lost_ms, lanes)); // The fallback.
+    CHECK(node_signal_lost(node.get(), lost_ms));
+
+    build_ddp(2, 0, bytes, true, p);
+    REQUIRE(psy_parse_ddp(p.data(), p.size(), &in));
+    node_on_packet(node.get(), &in, false, lost_ms + 1000);
+    CHECK_FALSE(node_signal_lost(node.get(), lost_ms + 1001));
+    REQUIRE(node_frame(node.get(), lost_ms + 1001, lanes));
+    CHECK(lanes[0][0] == 160); // The data again, not the fallback.
+}
+
 TEST_CASE("node firmware: the 8-lane transpose matches a bit-by-bit reference") {
     auto lane_buffer = std::make_unique<LaneBuffer>();
     auto &lanes = lane_buffer->lanes;
