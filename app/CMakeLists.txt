@@ -220,3 +220,21 @@ target_include_directories(psyight_tests PRIVATE ../firmware/node-f767/src/core)
 set_source_files_properties(../firmware/node-f767/src/core/node_config.c
                             PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 add_test(NAME psyight_tests COMMAND psyight_tests)
+
+# The node firmware's network-facing code under AddressSanitizer, fed mutated packets and config
+# commands (tests/node_fuzz.cpp). Its own target: ASan objects must not mix with the others'.
+add_executable(node_fuzz tests/node_fuzz.cpp
+                         ../firmware/node-f767/src/core/protocol.c
+                         ../firmware/node-f767/src/core/node_core.c
+                         ../firmware/node-f767/src/core/node_config.c)
+target_link_libraries(node_fuzz PRIVATE psyight_options)
+target_include_directories(node_fuzz PRIVATE ../firmware/node-f767/src/core)
+target_compile_options(node_fuzz PRIVATE /fsanitize=address /Zi)
+target_link_options(node_fuzz PRIVATE /INCREMENTAL:NO /DEBUG)
+# The ASan runtime beside the exe, so it runs outside a developer shell too.
+get_filename_component(PSYIGHT_MSVC_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+add_custom_command(TARGET node_fuzz POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                           "${PSYIGHT_MSVC_BIN}/clang_rt.asan_dynamic-x86_64.dll"
+                           $<TARGET_FILE_DIR:node_fuzz>)
+add_test(NAME node_fuzz COMMAND node_fuzz)
