@@ -83,7 +83,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/audio/capture.cpp src/audio/live_input.cpp
                                src/io/midi_map.cpp src/io/png.cpp src/io/recent_files.cpp src/io/recovery.cpp
                                src/output/node_setup.cpp
-                               src/io/user_settings.cpp src/io/presets.cpp src/output/test_patterns.cpp src/output/eye_candy.cpp
+                               src/io/user_settings.cpp src/io/presets.cpp src/io/audio_tags.cpp src/io/media_library.cpp src/io/rekordbox.cpp src/output/test_patterns.cpp src/output/eye_candy.cpp
                                src/io/svg_rig.cpp src/io/dxf_rig.cpp
                                src/io/rig_export.cpp src/io/build_kit.cpp)
 target_include_directories(psyight_lib PUBLIC src)
@@ -198,7 +198,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/midi_test.cpp tests/png_test.cpp
                              tests/recent_files_test.cpp tests/user_settings_test.cpp
                              tests/rig_templates_test.cpp tests/presets_test.cpp
-                             tests/test_patterns_test.cpp tests/aurora_test.cpp tests/scene_launch_test.cpp
+                             tests/test_patterns_test.cpp tests/aurora_test.cpp tests/media_library_test.cpp tests/scene_launch_test.cpp
                              tests/undo_history_test.cpp tests/sections_edit_test.cpp
                              tests/pattern_effects_test.cpp tests/labelling_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp
