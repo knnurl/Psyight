@@ -537,7 +537,6 @@ int main() {
             // The tabs' order (Log, Preflight, Rig, Show) is set by apply_default_layout.
             log_view.draw();
             player.draw_library();
-            player.draw_queue();
             preflight_view.draw();
             rig_view.draw();
             preview_view.draw(hide_editing);

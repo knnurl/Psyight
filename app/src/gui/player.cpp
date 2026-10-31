@@ -339,10 +339,12 @@ void Player::draw_library() {
             rekordbox_status_.empty() ? "" : ", rekordbox: ", rekordbox_status_.c_str());
     }
 
-    if (ImGui::BeginTable("##library", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV,
+    // Folders and playlists, the tracks, and the queue beside them.
+    if (ImGui::BeginTable("##library", 3, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV,
                           ImGui::GetContentRegionAvail())) {
         ImGui::TableSetupColumn("tree", ImGuiTableColumnFlags_WidthFixed, 14.0f * em);
         ImGui::TableSetupColumn("tracks", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("queue", ImGuiTableColumnFlags_WidthFixed, 22.0f * em);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::BeginChild("##tree");
@@ -367,6 +369,11 @@ void Player::draw_library() {
         ImGui::TextDisabled("%zu shown. Double-click plays now; right-click for more.",
                             rows_.size());
         draw_table();
+        ImGui::TableNextColumn();
+        ImGui::BeginChild("##queue column");
+        ImGui::SeparatorText("Queue");
+        draw_queue_contents();
+        ImGui::EndChild();
         ImGui::EndTable();
     }
     ImGui::End();
@@ -609,13 +616,6 @@ void Player::draw_table() {
         }
     }
     ImGui::EndTable();
-}
-
-void Player::draw_queue() {
-    if (ImGui::Begin("Queue")) {
-        draw_queue_contents();
-    }
-    ImGui::End();
 }
 
 int Player::queue_size() const { return static_cast<int>(queue_.size()); }

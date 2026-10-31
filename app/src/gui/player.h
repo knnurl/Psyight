@@ -1,10 +1,11 @@
 // The media player (SPEC 9.5): a Library tab to browse the library folders and rekordbox
-// playlists, a Queue panel, and previous and next for the transport.
+// playlists beside the queue, and previous, next and the queue for the transport.
 // - Library: folders (the operator's, scanned on a worker thread into io/media_library.h's index,
 //   psyight.library.json) and rekordbox playlists (io/rekordbox.h) in a tree; a searchable,
 //   sortable table of the tracks shown; double-click plays a track now, the context menu plays
 //   it next or adds it (or every track shown) to the queue.
-// - Queue: the tracks in order, the playing one marked; drag to reorder, double-click to jump,
+// - Queue (in the Library tab, and dropped down from the transport): the tracks in order, the
+// playing one marked; drag to reorder, double-click to jump,
 //   remove, clear, shuffle the rest. While a queued track plays, the next one is loaded and
 //   analysed in the background (Session::preload) and the transport continues into it without
 //   a gap; when that is not ready in time, the next track opens and plays as soon as it loads.
@@ -35,10 +36,9 @@ class Player {
     void apply_settings(const UserSettings &settings); // Also loads the index and rescans.
     void store_settings(UserSettings &settings) const;
 
-    void update(); // Once a frame, before the panels: scans, the queue's advance, preloading.
-    void draw_library();
-    void draw_queue();
-    // The queue's buttons and list, for the Queue panel and the transport's dropdown.
+    void update();       // Once a frame, before the panels: scans, the queue's advance, preloading.
+    void draw_library(); // The Library tab: folders and playlists, tracks, and the queue.
+    // The queue's buttons and list, for the Library tab and the transport's dropdown.
     void draw_queue_contents();
     int queue_size() const;
     void after_frame(void *owner); // Its file dialogs, outside the frame (owner: the window).

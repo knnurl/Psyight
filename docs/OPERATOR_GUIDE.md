@@ -175,10 +175,10 @@ Bindings are saved with the project, and the controller reconnects on the next s
 - **Live mode never locks:** check the input level on the status line. Loopback captures only what plays through the default output device. With an interface, check the input gain.
 - **Too bright, or flashing too much:** the flash limiter caps flashes at 3 a second (it can only be turned off in Engineer depth). Lower the brightness cap in the Limiters section, or bind it to a fader.
 
-## Playing music: Library and Queue
+## Playing music: the Library tab
 
 - **Library tab:** **Add folder...** for your music folders (subfolders included; scanned in the background, then kept in psyight.library.json so the app starts with them), **Rescan** after adding files. **rekordbox XML...** reads your rekordbox playlists from an XML export (rekordbox: File > Export Collection in xml format; choose it again after a new export). The tree on the left picks what the table shows: all tracks, a folder, or a playlist. Search by title, artist or folder; click a column to sort. Double-click a track to play it now; right-click to play it next or add it to the queue, or drag it onto the queue. **Add all shown to the queue** queues the whole list.
-- **Queue:** the tracks in order, the playing one in the accent. Drag to reorder, double-click to jump, the cross removes, **Shuffle** mixes the tracks after the playing one, **Clear** empties it. The transport's previous and next buttons step through it, and its queue button (the list icon and the count) drops the queue down from the transport, whatever tab is open.
+- **Queue** (the Library tab's right-hand column): the tracks in order, the playing one in the accent. Drag to reorder, double-click to jump, the cross removes, **Shuffle** mixes the tracks after the playing one, **Clear** empties it. The transport's previous and next buttons step through it, and its queue button (the list icon and the count) drops the queue down from the transport, whatever tab is open.
 - **No gaps:** while a track plays, the next one in the queue is analysed in the background ("Next: ready, no gap" above the queue), and the music runs straight on into it; the lights follow the new track's analysis at once. If it is not ready in time, it starts as soon as it has loaded.
 
 ## Recording a show
