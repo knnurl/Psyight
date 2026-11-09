@@ -328,6 +328,40 @@ TEST_CASE("live input: capture and analysis threads run at real-time pace (null 
     CHECK_FALSE(live.running());
 }
 
+TEST_CASE("live: the input gain brings a quiet input to the trained level, holds through silence") {
+    const Result<StudentModel> loaded =
+        load_student(std::filesystem::path(PSYIGHT_TESTS_DIR) / "data" / "student_fixture");
+    REQUIRE(loaded.ok());
+    const std::vector<float> signal = test_signal(kRate * 30);
+    const auto run = [&](double gain_db, int silence_s) {
+        LiveAnalyser live;
+        REQUIRE(live.prepare(kRate, loaded.value()).ok());
+        std::vector<float> scaled = signal;
+        for (float &s : scaled) {
+            s *= static_cast<float>(std::pow(10.0, gain_db / 20.0));
+        }
+        scaled.resize(scaled.size() + static_cast<size_t>(kRate * silence_s), 0.0f);
+        for (size_t at = 0; at < scaled.size(); at += 480) {
+            live.process(std::span(scaled).subspan(at, std::min<size_t>(480, scaled.size() - at)));
+        }
+        return live.state().input_gain_db;
+    };
+    double power = 0.0;
+    for (const float s : signal) {
+        power += static_cast<double>(s) * s;
+    }
+    const double level_db = 10.0 * std::log10(power / static_cast<double>(signal.size()));
+    REQUIRE(level_db > LiveParams{}.agc_low_db);
+    REQUIRE(level_db < LiveParams{}.agc_high_db);
+    CHECK(run(0.0, 0) == 0.0); // In the trained range: untouched.
+    const double quiet = run(-18.0, 0);
+    // Lifted to the trained range's lower edge.
+    CHECK(level_db - 18.0 + quiet == doctest::Approx(LiveParams{}.agc_low_db).epsilon(0.05));
+    CHECK(run(-18.0, 3) == doctest::Approx(quiet).epsilon(0.01));     // Silence holds it.
+    CHECK(run(-40.0, 0) == doctest::Approx(LiveParams{}.agc_max_db)); // Capped.
+    CHECK(run(-60.0, 0) == doctest::Approx(0.0)); // Below the silence level: no music, no gain.
+}
+
 TEST_CASE("capture: a chosen pair of a device's channels is mixed to mono") {
     const std::array<float, 6> frame{0.1f, 0.3f, 0.5f, 0.7f, 0.2f, -0.2f};
     CHECK(mix_frame(frame.data(), 0, 6) == doctest::Approx(1.6f / 6.0f));

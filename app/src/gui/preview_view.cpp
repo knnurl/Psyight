@@ -591,9 +591,12 @@ void PreviewView::draw_live() {
     }
     const float level = live->level();
     mono_text("Analysis delay %.0f ms (decisions %.0f ms after the audio), load %.1f%%, "
-              "level %.0f dBFS, dropped %lld samples",
+              "level %.0f dBFS (gain %+.0f dB), dropped %lld samples",
               live->analysis_delay_ms(), 1e3 * s.latency_s, 100.0 * live->load(),
-              level > 0.0f ? 20.0 * std::log10(level) : -120.0, live->dropped());
+              level > 0.0f ? 20.0 * std::log10(level) : -120.0, s.input_gain_db, live->dropped());
+    ImGui::SetItemTooltip("The analysis scales the input so the grooves sit at the level the "
+                          "model was trained on; a gain above +12 dB means the input is low: "
+                          "raise it at the mixer or interface if you can.");
     if (live->channels() > 1) { // Each channel's peak, to find the pair that carries the master.
         std::string levels = "Channels (dBFS):";
         const int shown = std::min(live->channels(), Capture::kMeteredChannels);

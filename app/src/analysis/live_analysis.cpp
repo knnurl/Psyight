@@ -68,6 +68,10 @@ Result<void> LiveAnalyser::prepare(int sample_rate_hz, const StudentModel &model
 
 void LiveAnalyser::reset() {
     quiet_frames_ = 0;
+    short_power_ = std::pow(10.0, params_.agc_start_db / 10.0);
+    level_db_ = params_.agc_start_db;
+    music_frames_ = 0;
+    gain_db_ = 0.0;
     features_.reset();
     student_->reset();
     pending_count_ = 0;
@@ -94,7 +98,7 @@ void LiveAnalyser::reset() {
     phase_novelty_ = {};
     novelty_mean_ = 0.0;
     novelty_count_ = 0;
-    run_frame(); // Frame 0 describes the silence before the first sample, as in file mode.
+    run_frame(0.0); // Frame 0 describes the silence before the first sample, as in file mode.
 }
 
 void LiveAnalyser::apply(const LiveCommand &c) {
@@ -115,20 +119,47 @@ void LiveAnalyser::process(std::span<const float> samples) {
     for (const float s : samples) {
         pending_[pending_count_++] = s;
         if (pending_count_ == pending_.size()) {
+            double energy = 0.0;
+            for (const float x : pending_) {
+                energy += static_cast<double>(x) * x;
+            }
+            const double raw_rms = std::sqrt(energy / static_cast<double>(pending_.size()));
+            update_gain(raw_rms);
+            if (gain_db_ != 0.0) {
+                const auto gain = static_cast<float>(std::pow(10.0, gain_db_ / 20.0));
+                for (float &x : pending_) {
+                    x *= gain;
+                }
+            }
             features_.push(pending_);
             pending_count_ = 0;
-            run_frame();
+            run_frame(raw_rms);
         }
     }
 }
 
-void LiveAnalyser::run_frame() {
-    // Silence (the music stopped): the hop's RMS below the silence level for silence_s.
-    double energy = 0.0;
-    for (const float x : pending_) {
-        energy += static_cast<double>(x) * x;
+void LiveAnalyser::update_gain(double raw_rms) {
+    if (raw_rms >= params_.silence_rms) { // Silence holds everything.
+        short_power_ += (1.0 - std::exp(-frame_s_ / 1.0)) * (raw_rms * raw_rms - short_power_);
+        const double short_db = 10.0 * std::log10(std::max(short_power_, 1e-12));
+        // Learning the input's level at first (as fast down as up), then slow to fall.
+        const bool learning = static_cast<double>(music_frames_++) * frame_s_ < params_.agc_learn_s;
+        const double time_s =
+            short_db > level_db_ || learning ? params_.agc_attack_s : params_.agc_release_s;
+        level_db_ += (1.0 - std::exp(-frame_s_ / time_s)) * (short_db - level_db_);
     }
-    const double rms = pending_.empty() ? 0.0 : std::sqrt(energy / pending_.size());
+    const double wanted = std::clamp(std::max(0.0, params_.agc_low_db - level_db_) -
+                                         std::max(0.0, level_db_ - params_.agc_high_db),
+                                     params_.agc_min_db, params_.agc_max_db);
+    const double step = params_.agc_slew_db_per_s * frame_s_;
+    gain_db_ += std::clamp(wanted - gain_db_, -step, step);
+    state_.input_gain_db = gain_db_;
+}
+
+void LiveAnalyser::run_frame(double raw_rms) {
+    // Silence (the music stopped): the hop's RMS, before the input gain, below the silence level
+    // for silence_s.
+    const double rms = raw_rms;
     if (rms < params_.silence_rms) {
         ++quiet_frames_;
     } else {

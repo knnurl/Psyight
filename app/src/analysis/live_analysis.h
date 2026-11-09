@@ -92,6 +92,23 @@ struct LiveParams {
     // beat lets go (tempo unknown, acquiring again) and the section returns to the intro.
     double silence_rms = 0.0018;
     double silence_s = 1.5;
+    // Input gain: a mixer's level is not a mastered file's, and the student's features are
+    // absolute levels (at -18 dB its kicks fell from F 0.93 to 0.52 on a labelled track). A
+    // follower tracks the loud parts (the level of 1 s averages, rising with agc_attack_s and
+    // falling with agc_release_s, so breakdowns barely lower it; held through silence; starting
+    // at agc_start_db). Inside the trained range, agc_low_db to agc_high_db (the labelled tracks'
+    // grooves), the gain is 0 dB and the analysis is untouched; outside it, the gain brings the
+    // level to the nearer edge, within agc_min_db to agc_max_db, moving at most agc_slew_db_per_s.
+    // Silence is judged before it.
+    double agc_low_db = -12.0;
+    double agc_high_db = -6.0;
+    double agc_start_db = -9.0;
+    double agc_attack_s = 1.0;
+    double agc_release_s = 20.0;
+    double agc_learn_s = 10.0; // The first music: falling as fast as rising, to learn the level.
+    double agc_min_db = -6.0;
+    double agc_max_db = 24.0;
+    double agc_slew_db_per_s = 3.0;
 };
 
 inline constexpr double kLiveNever = -std::numeric_limits<double>::infinity();
@@ -150,6 +167,7 @@ struct LiveState {
     int section_energy = 1;    // 0 low, 1 mid, 2 high (as file mode's DetectedSection::energy).
     bool silent = false;       // The music stopped (LiveParams::silence_s of silence).
     double silent_since_s = 0; // When it was found silent (the show fades from here).
+    double input_gain_db = 0;  // Applied to the input (LiveParams::agc_target_db).
     double riser = 0.0;        // 0 to 1 through a build (as file mode's riser curve).
     // 0 to 1: the residual's activity against the grooves' mean, 0.5 at the mean and 0 or 1
     // two energy steps below or above (as file mode's intensity, causally).
@@ -232,10 +250,11 @@ class LiveAnalyser {
         float centroid_hz = 0, flatness = 0; // From the features of this input frame.
     };
     Frame &at(long long frame) { return ring_[static_cast<size_t>(frame & (kRing - 1))]; }
-    void run_frame();               // Features, student, decoding for the next input frame.
-    void decode_frame(long long j); // j: the input frame the newest outputs describe.
-    void scan_note(long long j);    // Gate and pitch of the sounding note up to frame j.
-    void add_beat_features();       // Bar-level novelty for the downbeat (see above).
+    void run_frame(double raw_rms);   // Features, student, decoding for the next input frame.
+    void update_gain(double raw_rms); // The input gain for the hop just filled.
+    void decode_frame(long long j);   // j: the input frame the newest outputs describe.
+    void scan_note(long long j);      // Gate and pitch of the sounding note up to frame j.
+    void add_beat_features();         // Bar-level novelty for the downbeat (see above).
 
     void on_kick(double t_s);
     void finish_note(double end_s);
@@ -249,6 +268,10 @@ class LiveAnalyser {
     std::unique_ptr<StudentStream> student_;
     std::vector<float> pending_; // Samples of the hop being filled.
     long long quiet_frames_ = 0; // Consecutive input hops below the silence level.
+    double short_power_ = 0.0;   // The input's 1 s mean power, raw (input gain).
+    double level_db_ = 0.0;      // The follower: the loud parts' level.
+    long long music_frames_ = 0; // Hops of input above the silence level.
+    double gain_db_ = 0.0;
     size_t pending_count_ = 0;
     std::vector<float> feature_frame_, binary_, pitch_;
     long long input_frames_ = 0; // Feature frames computed.
