@@ -326,6 +326,109 @@ void set_report(const LiveAnalyser &live) {
         }
         std::printf("%s s\n", missed_s.size() > 16 ? " ..." : "");
     }
+
+    // Live drops matching no hindsight drop, by what hindsight saw there: a drop declared late
+    // (1 to 6 s after one), inside a run (the kicks never stopped), before a run after a gap
+    // too short for a drop, or something else.
+    int late = 0, in_run = 0, short_gap = 0, other = 0;
+    std::string listed;
+    for (const Declared &d : declared) {
+        if (d.section != LiveSection::drop ||
+            std::any_of(drops_s.begin(), drops_s.end(),
+                        [&](double t) { return std::abs(d.start_s - t) <= kMatchS; })) {
+            continue;
+        }
+        const double s = d.start_s;
+        char what[64];
+        if (std::any_of(drops_s.begin(), drops_s.end(),
+                        [&](double t) { return s - t > kMatchS && s - t <= 6.0; })) {
+            ++late;
+            std::snprintf(what, sizeof(what), " %.0f:late", s);
+        } else if (const auto r = std::find_if(runs.begin(), runs.end(),
+                                               [&](const KickRun &k) {
+                                                   return s >= k.times_s.front() + kMatchS &&
+                                                          s <= k.times_s.back();
+                                               });
+                   r != runs.end()) {
+            ++in_run;
+            std::snprintf(what, sizeof(what), " %.0f:in-run", s);
+        } else if (const auto n = std::find_if(runs.begin(), runs.end(),
+                                               [&](const KickRun &k) {
+                                                   return k.times_s.front() >= s - kMatchS &&
+                                                          k.times_s.front() <= s + 4.0;
+                                               });
+                   n != runs.end() && n != runs.begin()) {
+            ++short_gap;
+            const double gap_beats = (n->times_s.front() - (n - 1)->times_s.back()) / n->period_s;
+            std::snprintf(what, sizeof(what), " %.0f:gap%.0f", s, gap_beats);
+        } else {
+            ++other;
+            std::snprintf(what, sizeof(what), " %.0f:other", s);
+        }
+        listed += what;
+    }
+    if (!listed.empty()) {
+        std::printf("  false drops: late %d, in a run %d, after a short gap %d, other %d:%s\n",
+                    late, in_run, short_gap, other, listed.c_str());
+    }
+
+    // A faster drop rule: kick fragments (2 or 3 steady kicks, not a run) inside the gaps that
+    // end in a drop would fire it falsely.
+    const std::vector<KickRun> all = kick_runs(live.recorded_kicks());
+    int twos = 0, threes = 0, gaps_with_fragment = 0;
+    for (size_t i = 1; i < runs.size(); ++i) {
+        const double from = runs[i - 1].times_s.back();
+        const double to = runs[i].times_s.front();
+        if ((to - from) / runs[i].period_s < 4.0 * params.drop_after_bars - 0.5) {
+            continue;
+        }
+        bool any = false;
+        for (const KickRun &k : all) {
+            if (k.times_s.front() > from && k.times_s.back() < to) {
+                twos += k.times_s.size() == 2;
+                threes += k.times_s.size() == 3;
+                any |= k.times_s.size() >= 2;
+            }
+        }
+        gaps_with_fragment += any;
+    }
+    std::printf(
+        "  inside the %zu drop gaps: %d fragments of 2 kicks, %d of 3; %d gaps hold at least "
+        "one (a drop on the 2nd kick would fire falsely in them)\n",
+        drops_s.size(), twos, threes, gaps_with_fragment);
+
+    // Builds: how long, and when the riser reached its top.
+    std::vector<double> build_s, to_full_s;
+    double full_time_s = 0.0, build_time_s = 0.0;
+    for (size_t i = 0; i < states.size();) {
+        if (states[i].section != LiveSection::build) {
+            ++i;
+            continue;
+        }
+        const int section = states[i].section_count;
+        const double start = states[i].section_start_s;
+        double full_at = -1.0, last = start;
+        for (; i < states.size() && states[i].section_count == section; ++i) {
+            if (full_at < 0.0 && states[i].riser >= 0.99) {
+                full_at = states[i].analysed_s;
+            }
+            last = states[i].analysed_s;
+        }
+        build_s.push_back(last - start);
+        build_time_s += last - start;
+        if (full_at >= 0.0) {
+            to_full_s.push_back(full_at - start);
+            full_time_s += last - full_at;
+        }
+    }
+    if (!build_s.empty()) {
+        std::printf(
+            "  builds: %zu, median %.0f s (longest %.0f s); riser at its top in %zu of them, "
+            "median %.0f s in; %.0f%% of build time spent at the top\n",
+            build_s.size(), percentile(build_s, 0.5), percentile(build_s, 1.0), to_full_s.size(),
+            to_full_s.empty() ? 0.0 : percentile(to_full_s, 0.5),
+            build_time_s > 0.0 ? 100.0 * full_time_s / build_time_s : 0.0);
+    }
 }
 
 } // namespace
