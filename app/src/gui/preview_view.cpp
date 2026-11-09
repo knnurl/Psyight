@@ -512,9 +512,23 @@ void PreviewView::draw_live() {
                        ? std::to_string(first + 1)
                        : std::to_string(first + 1) + " and " + std::to_string(first + 2);
         };
-        if (live_source_ > 0 && input_channels_ > 2) {
+        if (live_source_ > 0) { // Shown for every input device; a choice only with more than 2.
             ImGui::SetNextItemWidth(10.0f * em);
-            if (ImGui::BeginCombo("Channels", pair_name(first_channel_).c_str())) {
+            ImGui::BeginDisabled(input_channels_ <= 2);
+            const bool open = ImGui::BeginCombo("Channels", pair_name(first_channel_).c_str());
+            ImGui::EndDisabled();
+            if (input_channels_ <= 2) {
+                ImGui::SetItemTooltip("This device has %d channels, all used. A DJ mixer's USB "
+                                      "sound card has more: then pick the pair with the master.",
+                                      std::max(1, input_channels_));
+            } else {
+                ImGui::SetItemTooltip("The device has %d channels. Start with all, find the pair "
+                                      "that carries the master in the levels below, then stop and "
+                                      "choose it (on a Pioneer DJM: the pair set to MIX (REC OUT) "
+                                      "in its settings utility).",
+                                      input_channels_);
+            }
+            if (open) {
                 for (int first = -1; first < input_channels_; first += first < 0 ? 1 : 2) {
                     if (ImGui::Selectable(pair_name(first).c_str(), first_channel_ == first)) {
                         first_channel_ = first;
@@ -522,11 +536,6 @@ void PreviewView::draw_live() {
                 }
                 ImGui::EndCombo();
             }
-            ImGui::SetItemTooltip("The device has %d channels. Start with all, find the pair that "
-                                  "carries the master in the levels below, then stop and choose "
-                                  "it (on a Pioneer DJM: the pair set to MIX (REC OUT) in its "
-                                  "settings utility).",
-                                  input_channels_);
             ImGui::SameLine();
         }
         ImGui::Checkbox("Record", &record_live_);
@@ -879,7 +888,7 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
         ImGui::SetItemTooltip("Brightness cap: every pixel at most this.");
         if (tier_at_least(Tier::tune)) {
             ImGui::SameLine();
-            changed |= knob("Power##budget", &p.budget_a, 0.0, 100.0,
+            changed |= knob("Power##budget", &p.budget_a, 0.0, 20.0,
                             p.budget_a <= 0.0 ? "off" : "%.1f A", defaults.budget_a);
             ImGui::SetItemTooltip("Power budget: the frame is scaled to stay under it (0: off).");
             draw_group_caps();
