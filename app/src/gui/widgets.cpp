@@ -78,9 +78,17 @@ bool knob_impl(const char *label, double *value, double min, double max, const c
 
     ImGui::BeginGroup(); // One item for the caller, also while the text field is open.
     ImGui::PushID(label);
-    ImGui::InvisibleButton("##knob", size);
-    hold_mouse_while_dragging();
-    const ImGuiID id = ImGui::GetItemID();
+    // While typing, the text field holds the knob's id: a button submitted under it would close
+    // the field as the mouse button comes up after the double-click (ImGui's ButtonBehavior
+    // clears an active id on release), so the knob only takes its space then.
+    const ImGuiID id = ImGui::GetID("##knob");
+    if (ImGui::TempInputIsActive(id)) {
+        ImGui::ItemSize(size);
+        ImGui::ItemAdd(ImRect(origin, ImVec2(origin.x + size.x, origin.y + size.y)), id);
+    } else {
+        ImGui::InvisibleButton("##knob", size);
+        hold_mouse_while_dragging();
+    }
     const bool hovered = ImGui::IsItemHovered();
     const bool active = ImGui::IsItemActive();
     ImGuiStorage *storage = ImGui::GetStateStorage();
