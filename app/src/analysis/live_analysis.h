@@ -85,6 +85,10 @@ struct LiveParams {
     double hat_threshold = 0.5;
     int event_min_gap_frames = 4; // Kicks and hats, as the offline decoder's kick peaks.
     int run_kicks = 4; // Kicks on consecutive beats that make a run (sections, downbeats).
+    // A run may bridge one beat without a kick once it has two (a missed detection, a fill, a
+    // kick-kick-kick-gap pattern): without it such grooves never made a run, the last run went
+    // stale and a later run was taken for a drop (21 of 44 false drops on 20 DJ sets).
+    bool run_bridges_a_beat = true;
     double novelty_memory_bars = 32.0;
     int novelty_min_bars = 8;     // Bars of novelty before it may decide.
     double downbeat_margin = 0.1; // Of the best phase's mean.
@@ -136,7 +140,8 @@ struct LiveState {
     int phrase_bars = 8;
     double last_error_ms = 0.0; // The last steering kick's phase error.
     long long last_kick_beat = std::numeric_limits<long long>::min();
-    int kick_streak = 0; // Consecutive beats with a kick, up to the last kick.
+    int kick_streak = 0;             // Consecutive beats with a kick, up to the last kick.
+    long long streak_start_beat = 0; // The streak's first kick.
     long long last_run_beat = std::numeric_limits<long long>::min(); // Last kick in a run.
     long long last_break_beat =
         std::numeric_limits<long long>::min(); // Last downbeat from a break.

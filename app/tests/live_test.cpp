@@ -254,6 +254,35 @@ TEST_CASE("live beat: breakdowns, drops, downbeats and the run rule") {
     CHECK(rig.state.section_start_s == doctest::Approx(beat_s(132)).epsilon(1e-3));
 }
 
+TEST_CASE("live beat: a kick-kick-kick-gap groove is still a groove, not a breakdown then a drop") {
+    for (const bool bridges : {true, false}) {
+        CAPTURE(bridges);
+        BeatRig rig;
+        rig.params.run_bridges_a_beat = bridges;
+        rig.beat.prepare(rig.params);
+        const auto beat_s = [](int b) { return 1.0 + b * 0.4; };
+        for (int b = 0; b < 32; ++b) {
+            rig.kick(beat_s(b));
+        }
+        REQUIRE(rig.state.section == LiveSection::groove);
+        int sections = rig.state.section_count;
+        for (int b = 32; b < 72; ++b) { // Three kicks and a gap, ten bars.
+            if (b % 4 != 3) {
+                rig.kick(beat_s(b));
+            }
+        }
+        for (int b = 72; b < 88; ++b) {
+            rig.kick(beat_s(b));
+        }
+        if (bridges) {
+            CHECK(rig.state.section == LiveSection::groove);
+            CHECK(rig.state.section_count == sections); // No breakdown, no drop.
+        } else {
+            CHECK(rig.state.section_count > sections); // The old rule: a breakdown, then more.
+        }
+    }
+}
+
 TEST_CASE("live beat: a flatness riser in a breakdown is a build; flat texture is not") {
     const double period = 0.4;
     const auto beat_s = [&](int b) { return 1.0 + b * period; };

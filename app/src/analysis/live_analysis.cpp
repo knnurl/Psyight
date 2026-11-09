@@ -576,6 +576,7 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
         s.last_kick_beat = beat;
         s.last_run_beat = beat;
         s.kick_streak = 1;
+        s.streak_start_beat = beat;
         acquiring_ = false;
         acquire_kicks_s_.clear();
         off_grid_kicks_ = 0;
@@ -618,10 +619,17 @@ void LiveBeat::on_kick(LiveState &s, double t_s) {
     // free through breakdowns); only a reacquisition unlocks it.
     s.locked = s.locked || in_lock_kicks_ >= params_.lock_kicks;
 
-    s.kick_streak = beat - s.last_kick_beat == 1 ? s.kick_streak + 1 : 1;
+    const long long step = beat - s.last_kick_beat;
+    const bool bridged = params_.run_bridges_a_beat && step == 2 && s.kick_streak >= 2;
+    if (step == 1 || bridged) {
+        ++s.kick_streak;
+    } else {
+        s.kick_streak = 1;
+        s.streak_start_beat = beat;
+    }
     s.last_kick_beat = beat;
-    if (s.kick_streak == params_.run_kicks) { // A run started run_kicks - 1 beats ago.
-        const long long start = beat - (params_.run_kicks - 1);
+    if (s.kick_streak == params_.run_kicks) { // A run that started at the streak's first kick.
+        const long long start = s.streak_start_beat;
         const long long gap = start - s.last_run_beat;
         const double start_s = time_of(s, start);
         if (gap >= 4) {
