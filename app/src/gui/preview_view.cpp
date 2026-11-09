@@ -1985,20 +1985,97 @@ void PreviewView::draw_output(const ShowFrame &frame) {
                               "multicast floods the network (SPEC 8).");
     }
     if (o.protocol != OutputProtocol::sacn || !o.multicast) {
-        ImGui::SetNextItemWidth(8.0f * em);
-        if (!address_active_ && parse_ipv4(address_text_) != o.address) {
-            address_text_ = ipv4_text(o.address); // Loaded or reset elsewhere.
+        // The destinations: nodes that answered discovery (Preflight), any number at once, and
+        // addresses typed in (a node that does not answer polls). 127.0.0.1 alone: none.
+        using Address = std::array<std::uint8_t, 4>;
+        std::vector<Address> chosen = unicast_destinations(o);
+        if (chosen.size() == 1 && chosen.front()[0] == 127) {
+            chosen.clear();
         }
-        if (ImGui::InputText("Node address", &address_text_)) {
-            if (const auto address = parse_ipv4(address_text_)) {
-                o.address = *address;
-                changed = true;
+        const auto node_at = [&](const Address &a) -> const ArtNode * {
+            if (discovered_ != nullptr && discovered_->has_value()) {
+                for (const ArtNode &n : **discovered_) {
+                    if (n.ip == a) {
+                        return &n;
+                    }
+                }
             }
-        }
-        address_active_ = ImGui::IsItemActive();
-        if (!parse_ipv4(address_text_)) {
+            return nullptr;
+        };
+        const auto label_of = [&](const Address &a) {
+            const ArtNode *n = node_at(a);
+            return n != nullptr ? n->short_name + " (" + ipv4_text(a) + ")"
+                                : ipv4_text(a) + " (not answering)";
+        };
+        bool toggled = false;
+        const auto toggle = [&](const Address &a) {
+            const auto at = std::find(chosen.begin(), chosen.end(), a);
+            if (at == chosen.end()) {
+                chosen.push_back(a);
+            } else {
+                chosen.erase(at);
+            }
+            toggled = true;
+        };
+        const std::string preview = chosen.empty()       ? std::string("None (this machine only)")
+                                    : chosen.size() == 1 ? label_of(chosen.front())
+                                                         : std::to_string(chosen.size()) + " nodes";
+        ImGui::SetNextItemWidth(18.0f * em);
+        if (ImGui::BeginCombo("Nodes", preview.c_str())) {
+            bool any = false;
+            if (discovered_ != nullptr && discovered_->has_value()) {
+                for (const ArtNode &n : **discovered_) {
+                    any = true;
+                    bool on = std::find(chosen.begin(), chosen.end(), n.ip) != chosen.end();
+                    const auto [low, high] =
+                        std::minmax_element(n.output_universes.begin(), n.output_universes.end());
+                    const std::string text =
+                        n.short_name + "  " + ipv4_text(n.ip) +
+                        (n.output_universes.empty() ? std::string()
+                                                    : "  universes " + std::to_string(*low) +
+                                                          " to " + std::to_string(*high));
+                    ImGui::PushID(ipv4_text(n.ip).c_str());
+                    if (ImGui::Checkbox(text.c_str(), &on)) {
+                        toggle(n.ip);
+                    }
+                    ImGui::PopID();
+                }
+            }
+            if (!any) {
+                ImGui::TextDisabled("No node answered yet (Preflight > Discover Art-Net nodes).");
+            }
+            for (const Address &a : std::vector<Address>(chosen)) { // Chosen, not answering.
+                if (node_at(a) == nullptr) {
+                    bool on = true;
+                    ImGui::PushID(ipv4_text(a).c_str());
+                    if (ImGui::Checkbox(label_of(a).c_str(), &on)) {
+                        toggle(a);
+                    }
+                    ImGui::PopID();
+                }
+            }
+            ImGui::Separator();
+            ImGui::SetNextItemWidth(9.0f * em);
+            ImGui::InputTextWithHint("##other address", "Other address", &other_address_text_);
             ImGui::SameLine();
-            ImGui::TextColored(theme().danger, "not an IPv4 address");
+            const std::optional<Address> typed = parse_ipv4(other_address_text_);
+            ImGui::BeginDisabled(!typed.has_value());
+            if (ImGui::Button("Add") && typed &&
+                std::find(chosen.begin(), chosen.end(), *typed) == chosen.end()) {
+                chosen.push_back(*typed);
+                toggled = true;
+                other_address_text_.clear();
+            }
+            ImGui::EndDisabled();
+            ImGui::EndCombo();
+        }
+        ImGui::SetItemTooltip("Tick every node the show should go to: each gets every frame and "
+                              "shows the universes it is set up for. Other address adds a node "
+                              "that does not answer discovery.");
+        if (toggled) {
+            o.address = chosen.empty() ? Address{127, 0, 0, 1} : chosen.front();
+            o.more_addresses.assign(chosen.begin() + (chosen.empty() ? 0 : 1), chosen.end());
+            changed = true;
         }
     }
     ImGui::SetNextItemWidth(6.0f * em);

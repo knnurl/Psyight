@@ -276,6 +276,7 @@ int main() {
         psyight::LabellingView labelling_view(session);
         psyight::RigView rig_view(project);
         psyight::PreflightView preflight_view(session, project, preview_view);
+        preview_view.set_discovered_nodes(&preflight_view.nodes());
         psyight::SettingsView settings_view(project);
         psyight::SetupAssistant assistant(project, rig_view, preview_view, preflight_view);
         // The last project (or the working directory's psyight.psyproj); nothing: a first run.

@@ -179,21 +179,22 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
                        in.interfaces.size()));
         }
     } else {
-        const auto &address = p.output.address;
-        const std::string text = ipv4_text(address);
-        const auto on =
-            std::find_if(in.interfaces.begin(), in.interfaces.end(),
-                         [&](const NetworkInterface &i) { return i.contains(address); });
-        if (address[0] == 127) {
-            add("Network", CheckLevel::info,
-                format("Sending to %s, this machine: no node will receive it.", text.c_str()));
-        } else if (on != in.interfaces.end()) {
-            add("Network", CheckLevel::ok,
-                format("Node address %s is on %s (%s).", text.c_str(), on->name.c_str(),
-                       ipv4_text(on->address).c_str()));
-        } else {
-            add("Network", CheckLevel::warn,
-                format("Node address %s is not on any local subnet.", text.c_str()));
+        for (const auto &address : unicast_destinations(p.output)) {
+            const std::string text = ipv4_text(address);
+            const auto on =
+                std::find_if(in.interfaces.begin(), in.interfaces.end(),
+                             [&](const NetworkInterface &i) { return i.contains(address); });
+            if (address[0] == 127) {
+                add("Network", CheckLevel::info,
+                    format("Sending to %s, this machine: no node will receive it.", text.c_str()));
+            } else if (on != in.interfaces.end()) {
+                add("Network", CheckLevel::ok,
+                    format("Node address %s is on %s (%s).", text.c_str(), on->name.c_str(),
+                           ipv4_text(on->address).c_str()));
+            } else {
+                add("Network", CheckLevel::warn,
+                    format("Node address %s is not on any local subnet.", text.c_str()));
+            }
         }
     }
 
@@ -222,25 +223,27 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
                 format("No node reported an output on universes %s.",
                        universe_list(missing).c_str()));
         }
-        // The show going to one address where no node answered (a node switched off, or the
-        // address of another node): the found nodes get nothing.
-        const auto &address = p.output.address;
-        const bool broadcast =
-            std::any_of(in.interfaces.begin(), in.interfaces.end(),
-                        [&](const NetworkInterface &i) { return i.broadcast() == address; }) ||
-            address == std::array<std::uint8_t, 4>{255, 255, 255, 255};
-        const bool answered = std::any_of(in.nodes->begin(), in.nodes->end(),
-                                          [&](const ArtNode &n) { return n.ip == address; });
-        if (!multicast && address[0] != 127 && !broadcast && !answered) {
-            std::string found;
-            for (const ArtNode &n : *in.nodes) {
-                found += (found.empty() ? "" : ", ") + ipv4_text(n.ip);
+        // The show going to an address where no node answered (a node switched off, or the
+        // address of another node): that node gets nothing.
+        std::string found;
+        for (const ArtNode &n : *in.nodes) {
+            found += (found.empty() ? "" : ", ") + ipv4_text(n.ip);
+        }
+        for (const auto &address : multicast ? std::vector<std::array<std::uint8_t, 4>>{}
+                                             : unicast_destinations(p.output)) {
+            const bool broadcast =
+                std::any_of(in.interfaces.begin(), in.interfaces.end(),
+                            [&](const NetworkInterface &i) { return i.broadcast() == address; }) ||
+                address == std::array<std::uint8_t, 4>{255, 255, 255, 255};
+            const bool answered = std::any_of(in.nodes->begin(), in.nodes->end(),
+                                              [&](const ArtNode &n) { return n.ip == address; });
+            if (address[0] != 127 && !broadcast && !answered) {
+                add("Nodes", CheckLevel::warn,
+                    format("The show goes to %s, but no node answered there; nodes answered at "
+                           "%s. Choose the nodes in Show > Output (ignore this if that node does "
+                           "not answer Art-Net polls).",
+                           ipv4_text(address).c_str(), found.c_str()));
             }
-            add("Nodes", CheckLevel::warn,
-                format("The show goes to %s, but no node answered there; nodes answered at %s. "
-                       "Set Show > Output to a node's address (ignore this if that node does not "
-                       "answer Art-Net polls).",
-                       ipv4_text(address).c_str(), found.c_str()));
         }
     }
     return out;

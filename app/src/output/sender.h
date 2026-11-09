@@ -19,8 +19,11 @@ enum class OutputProtocol { sacn, art_net, ddp };
 
 struct OutputSettings {
     OutputProtocol protocol = OutputProtocol::sacn;
-    bool multicast = true; // sACN only; otherwise unicast to `address`.
+    bool multicast = true; // sACN only; otherwise unicast to `address` and `more_addresses`.
+    // Unicast destinations: every packet goes to each (each node keeps the universes it is set
+    // up for). 127.0.0.1 alone: none.
     std::array<std::uint8_t, 4> address = {127, 0, 0, 1};
+    std::vector<std::array<std::uint8_t, 4>> more_addresses;
     bool sync = true;
     std::uint16_t sync_universe = 1000; // sACN; must not carry data.
     std::uint8_t priority = 100;        // sACN, 0 to 200.
@@ -46,6 +49,9 @@ class OutputSender {
     std::vector<std::uint8_t> ddp_frame_;
     std::uint8_t ddp_sequence_ = 0; // 1 to 15, a packet each.
 };
+
+// Every unicast destination, `address` first, without repeats.
+std::vector<std::array<std::uint8_t, 4>> unicast_destinations(const OutputSettings &settings);
 
 // Fixed per-installation sACN CID derived from a name (a name-based id, not an RFC 4122 UUID
 // generator; good enough to tell sources apart).

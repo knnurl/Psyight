@@ -20,6 +20,7 @@
 #include "io/midi_input.h"
 #include "io/presets.h"
 #include "io/user_settings.h"
+#include "output/art_poll.h"
 #include "output/show.h"
 
 #include <chrono>
@@ -61,6 +62,10 @@ class PreviewView {
         }
     }
     bool sending() const { return config_.send_to_network; }
+    // The nodes Preflight's discovery found (Show > Output lists them); must outlive the view.
+    void set_discovered_nodes(const std::optional<std::vector<ArtNode>> *nodes) {
+        discovered_ = nodes;
+    }
     double measured_fps() const { return measured_fps_; }
     bool recording() const { return recorder_ != nullptr; }
     // React or Show on the top bar: the app may switch to its show look (main.cpp).
@@ -198,8 +203,8 @@ class PreviewView {
     std::vector<std::string> midi_ports_;
     std::string midi_error_;
     std::vector<MidiMessage> midi_messages_; // Reused each frame.
-    std::string address_text_ = "127.0.0.1";
-    bool address_active_ = false;
+    const std::optional<std::vector<ArtNode>> *discovered_ = nullptr;
+    std::string other_address_text_; // Show > Output: an address typed in to add.
     // Measured frame rate, from the frame index over about a second.
     std::chrono::steady_clock::time_point rate_since_ = std::chrono::steady_clock::now();
     std::int64_t rate_index_ = -1;

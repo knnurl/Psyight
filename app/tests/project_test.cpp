@@ -56,6 +56,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.output.protocol = OutputProtocol::art_net;
     p.output.multicast = false;
     p.output.address = {192, 168, 1, 77};
+    p.output.more_addresses = {{192, 168, 1, 78}, {10, 0, 0, 9}};
     p.output.sync = false;
     p.output.sync_universe = 500;
     p.output.priority = 150;
@@ -103,6 +104,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.output.protocol == OutputProtocol::art_net);
     CHECK_FALSE(q.output.multicast);
     CHECK(q.output.address == std::array<std::uint8_t, 4>{192, 168, 1, 77});
+    CHECK(q.output.more_addresses == p.output.more_addresses);
     CHECK_FALSE(q.output.sync);
     CHECK(q.output.sync_universe == 500);
     CHECK(q.output.priority == 150);
@@ -211,6 +213,8 @@ TEST_CASE("project: missing sections take defaults; bad input is rejected") {
         R"({"schema": 1, "rig": {"strips": [{"polyline": [[0,0,0],[1,0,0]],
              "colour_order": "xyz"}]}})",
         R"({"schema": 1, "output": {"address": "1.2.3"}})",
+        R"({"schema": 1, "output": {"more_addresses": ["1.2.3.4", "node"]}})",
+        R"({"schema": 1, "output": {"more_addresses": "1.2.3.4"}})",
         R"({"schema": 1, "output": {"protocol": "dmx"}})",
         R"({"schema": 1, "patch": {"pixels_per_universe": 171}})",
         R"({"schema": 1, "limiter": {"brightness_cap": 2.0}})",

@@ -1,6 +1,18 @@
 #include "output/sender.h"
 
+#include <algorithm>
+
 namespace psyight {
+
+std::vector<std::array<std::uint8_t, 4>> unicast_destinations(const OutputSettings &settings) {
+    std::vector<std::array<std::uint8_t, 4>> out{settings.address};
+    for (const auto &a : settings.more_addresses) {
+        if (std::find(out.begin(), out.end(), a) == out.end()) {
+            out.push_back(a);
+        }
+    }
+    return out;
+}
 
 int OutputSender::send_frame(const OutputSettings &settings,
                              const std::vector<UniverseData> &universes, PacketSink &sink) {
@@ -8,6 +20,14 @@ int OutputSender::send_frame(const OutputSettings &settings,
     const auto art_sequence = static_cast<std::uint8_t>(1 + frame_ % 255);
     ++frame_;
     int sent = 0;
+    const std::vector<std::array<std::uint8_t, 4>> destinations = unicast_destinations(settings);
+    // The packet in buffer_ to each unicast destination on `port`.
+    const auto send_unicast = [&](std::uint16_t port) {
+        for (const auto &address : destinations) {
+            sink.send(buffer_, {address, port});
+            ++sent;
+        }
+    };
     if (settings.protocol == OutputProtocol::sacn) {
         SacnSource source;
         source.cid = settings.cid;
@@ -18,18 +38,21 @@ int OutputSender::send_frame(const OutputSettings &settings,
             if (build_sacn_data(source, universe, sacn_sequence, u.channels, buffer_) == 0) {
                 continue;
             }
-            const Ipv4Endpoint to{
-                settings.multicast ? sacn_multicast_group(universe) : settings.address, kSacnPort};
-            sink.send(buffer_, to);
-            ++sent;
+            if (settings.multicast) {
+                sink.send(buffer_, {sacn_multicast_group(universe), kSacnPort});
+                ++sent;
+            } else {
+                send_unicast(kSacnPort);
+            }
         }
         if (settings.sync &&
             build_sacn_sync(settings.cid, settings.sync_universe, sacn_sequence, buffer_) != 0) {
-            const Ipv4Endpoint to{settings.multicast ? sacn_multicast_group(settings.sync_universe)
-                                                     : settings.address,
-                                  kSacnPort};
-            sink.send(buffer_, to);
-            ++sent;
+            if (settings.multicast) {
+                sink.send(buffer_, {sacn_multicast_group(settings.sync_universe), kSacnPort});
+                ++sent;
+            } else {
+                send_unicast(kSacnPort);
+            }
         }
         return sent;
     }
@@ -51,31 +74,26 @@ int OutputSender::send_frame(const OutputSettings &settings,
             std::copy(u.channels.begin(), u.channels.end(),
                       frame.begin() + static_cast<std::ptrdiff_t>(at));
         }
-        const Ipv4Endpoint to{settings.address, kDdpPort};
         for (size_t at = 0; at < frame.size(); at += kDdpMaxData) {
             const size_t n = std::min(kDdpMaxData, frame.size() - at);
             ddp_sequence_ = static_cast<std::uint8_t>(ddp_sequence_ % 15 + 1);
             build_ddp(ddp_sequence_, static_cast<std::uint32_t>(at),
                       std::span<const std::uint8_t>(frame).subspan(at, n), at + n >= frame.size(),
                       buffer_);
-            sink.send(buffer_, to);
-            ++sent;
+            send_unicast(kDdpPort);
         }
         return sent;
     }
-    const Ipv4Endpoint to{settings.address, kArtNetPort};
     for (const UniverseData &u : universes) {
         if (u.universe < 1 || build_art_dmx(static_cast<std::uint16_t>(u.universe - 1),
                                             art_sequence, u.channels, buffer_) == 0) {
             continue;
         }
-        sink.send(buffer_, to);
-        ++sent;
+        send_unicast(kArtNetPort);
     }
     if (settings.sync) {
         build_art_sync(buffer_);
-        sink.send(buffer_, to);
-        ++sent;
+        send_unicast(kArtNetPort);
     }
     return sent;
 }

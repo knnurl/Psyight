@@ -241,6 +241,45 @@ TEST_CASE("DDP: a frame in packets of 480 pixels, pushed on the last; the virtua
     CHECK(first->slots[510] == 2); // Universe 2 starts at 510.
     CHECK(second->sequence == first->sequence % 15 + 1);
 
+    // Several unicast destinations (Show > Output's nodes): every packet goes to each, in order,
+    // for every protocol; repeats are sent once; multicast ignores them.
+    struct ByAddress final : PacketSink {
+        std::vector<Ipv4Endpoint> to_all;
+        void send(std::span<const std::uint8_t>, const Ipv4Endpoint &to) override {
+            to_all.push_back(to);
+        }
+    };
+    const std::array<std::uint8_t, 4> a{192, 168, 0, 220}, b{192, 168, 0, 83};
+    for (const OutputProtocol protocol :
+         {OutputProtocol::sacn, OutputProtocol::art_net, OutputProtocol::ddp}) {
+        CAPTURE(static_cast<int>(protocol));
+        OutputSettings two;
+        two.protocol = protocol;
+        two.multicast = false;
+        two.address = a;
+        two.more_addresses = {b, a}; // The repeat of `a` is dropped.
+        ByAddress single_sink, double_sink;
+        OutputSettings one = two;
+        one.more_addresses.clear();
+        const int single = OutputSender().send_frame(one, universes, single_sink);
+        const int doubled = OutputSender().send_frame(two, universes, double_sink);
+        CHECK(doubled == 2 * single);
+        REQUIRE(double_sink.to_all.size() == static_cast<size_t>(doubled));
+        for (size_t i = 0; i < double_sink.to_all.size(); i += 2) {
+            CHECK(double_sink.to_all[i].address == a);
+            CHECK(double_sink.to_all[i + 1].address == b);
+            CHECK(double_sink.to_all[i].port == double_sink.to_all[i + 1].port);
+        }
+    }
+    OutputSettings multicast;
+    multicast.multicast = true;
+    multicast.more_addresses = {b};
+    ByAddress group_sink;
+    OutputSender().send_frame(multicast, universes, group_sink);
+    for (const Ipv4Endpoint &to : group_sink.to_all) {
+        CHECK(to.address[0] == 239); // 239.255.hi.lo, never the unicast list.
+    }
+
     // The virtual node puts a DDP frame back on the rig.
     const Rig rig = default_rig();
     const Patch patch = build_patch(rig);

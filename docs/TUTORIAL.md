@@ -80,7 +80,7 @@ Hover the rig preview: each strip shows its name and an arrow at its first pixel
 
 The node turns network packets into the strips' data signal. Psyight sends sACN, Art-Net or DDP to it.
 
-1. In **Show > Output**, choose the protocol and the node's address (unicast to the node's IP address is the most reliable).
+1. In **Show > Output**, choose the protocol, then open **Nodes** and tick the nodes that answered discovery: one, or several at once (each gets every frame and shows the universes it is set up for). **Other address** adds a node that does not answer discovery.
 2. Open **Preflight**. Run the test patterns with **Send to the lights**: **Chase** (each strip should start at the end you expect), **Colour order** (red, green, blue in turn; a wrong colour means that strip's Order needs changing in the Rig tab), **Identify universe**, **All on** (mind the supply).
 3. Read every check line. All should be green; read each amber one: audio, analysis, rig and patch, power, limiter, timing, network, nodes.
 4. Open **Node setup**, press **Set up the node**, then **Save on the node** so it keeps the settings after a restart.

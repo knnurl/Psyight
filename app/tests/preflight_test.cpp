@@ -203,4 +203,12 @@ TEST_CASE("preflight: failures and warnings that matter") {
     CHECK_FALSE(has(art.run(), "Nodes", CheckLevel::warn, "no node answered there"));
     art.project.output.address = lan.broadcast(); // Broadcast reaches them all.
     CHECK_FALSE(has(art.run(), "Nodes", CheckLevel::warn, "no node answered there"));
+    // Several nodes at once: each destination is checked, and only the silent one warned of.
+    art.project.output.address = node.ip;
+    art.project.output.more_addresses = {esp32.ip, {192, 168, 1, 83}};
+    checks = art.run();
+    CHECK(has(checks, "Network", CheckLevel::ok, "192.168.1.60 is on Ethernet"));
+    CHECK(has(checks, "Nodes", CheckLevel::warn, "The show goes to 192.168.1.83, but no node"));
+    CHECK_FALSE(has(checks, "Nodes", CheckLevel::warn, "The show goes to 192.168.1.60"));
+    CHECK_FALSE(has(checks, "Nodes", CheckLevel::warn, "The show goes to 192.168.1.50"));
 }

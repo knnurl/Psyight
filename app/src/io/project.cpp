@@ -522,6 +522,22 @@ Result<Project> parse_project_json(std::string_view json_text) {
             throw FieldError{"address " + address + " is not an IPv4 address"};
         }
         p.output.address = *parsed;
+        p.output.more_addresses.clear();
+        if (out.contains("more_addresses")) {
+            const json &more = out.at("more_addresses");
+            if (!more.is_array()) {
+                throw FieldError{"more_addresses is not a list"};
+            }
+            for (const json &item : more) {
+                const auto a = item.is_string() ? parse_ipv4(item.get<std::string>())
+                                                : std::optional<std::array<std::uint8_t, 4>>{};
+                if (!a) {
+                    throw FieldError{"more_addresses holds " + item.dump() +
+                                     ", not an IPv4 address"};
+                }
+                p.output.more_addresses.push_back(*a);
+            }
+        }
         p.output.sync = optional(out, "sync", true);
         p.output.sync_universe =
             static_cast<std::uint16_t>(integer(out, "sync_universe", 1000, 1, 63999));
@@ -665,6 +681,14 @@ Result<std::string> to_project_json(const Project &p) {
                                                                           : "ddp"},
               {"multicast", p.output.multicast},
               {"address", ipv4_text(p.output.address)},
+              {"more_addresses",
+               [&] {
+                   json more = json::array();
+                   for (const auto &a : p.output.more_addresses) {
+                       more.push_back(ipv4_text(a));
+                   }
+                   return more;
+               }()},
               {"sync", p.output.sync},
               {"sync_universe", p.output.sync_universe},
               {"priority", p.output.priority},
