@@ -1,22 +1,29 @@
 // psyight_live_check: runs the live analysis (analysis/live_analysis.h) over a file as if it were
 // arriving live, and measures it against the file-mode analysis of the same audio.
 //
-//   psyight_live_check <audio> [--block <samples>] [--student <weights>]
+//   psyight_live_check <audio> [--block <samples>] [--student <weights>] [--trace <from s> <to s>]
+//                      [--show <project.psyproj>]
 //
 // Feeds the decoded mono mix in blocks (default 480 samples, a 10 ms WASAPI period) and reports:
 // kicks against the file analysis's (stems when they exist) at +-20 ms; when the tempo was
 // measured and the loop locked; the tempo and beat phase against the file grid (the labelled one
 // when the track has labels) once locked, and how often the bar position agrees; the live bass
 // notes against the labels' complete regions and against the file-mode student; the live section
-// changes beside the file sections; and the processing cost per hop. Local tracks only.
+// changes beside the file sections; and the processing cost per hop. --trace prints the beat state
+// at each kick between two times; --show renders the project's show from the live state as live
+// mode does and prints a timeline (between --trace's times when given). Local tracks only.
 
 #include "analysis/live_analysis.h"
 #include "analysis/scoring.h"
 #include "analysis/track_analysis.h"
 #include "audio/audio_file.h"
 #include "core/paths.h"
+#include "engine/automation.h"
 #include "engine/inputs.h"
+#include "engine/limiters.h"
+#include "engine/variations.h"
 #include "io/labels.h"
+#include "io/project.h"
 #include "io/stems.h"
 #include "ml/student.h"
 
@@ -50,11 +57,106 @@ void print_notes(const char *name, const NoteScore &s) {
                 s.gate_ratio_mae);
 }
 
+// The lit share of a frame: pixels at or above luminance 0.05.
+double lit_share(const Frame &frame) {
+    size_t lit = 0;
+    for (const Rgb &c : frame) {
+        lit += luminance(c) >= 0.05;
+    }
+    return frame.empty() ? 0.0 : static_cast<double>(lit) / static_cast<double>(frame.size());
+}
+
+double mean_luminance(const Frame &frame) {
+    double sum = 0.0;
+    for (const Rgb &c : frame) {
+        sum += luminance(c);
+    }
+    return frame.empty() ? 0.0 : sum / static_cast<double>(frame.size());
+}
+
+// --show: the project's show rendered from the live states as live mode renders it (automation,
+// the scene mix and the fade on silence; no limiters), at 60 fps. Prints a line every 2 s (only
+// between --trace's times when given): the section, the scene, the automation's brightness, the
+// intensity and riser, the mean luminance and lit share, and each of the scene's layers alone.
+int show_timeline(const std::vector<LiveState> &states, const std::filesystem::path &path,
+                  double from_s, double to_s, double duration_s) {
+    const Result<Project> loaded = load_project(path);
+    if (!loaded) {
+        std::fprintf(stderr, "%s\n", loaded.error().message.c_str());
+        return 1;
+    }
+    const Project &project = loaded.value();
+    const Rig rig = rig_of(project);
+    constexpr std::uint64_t kSeed = 1; // ShowConfig's.
+    const SceneVariants variants = all_variations(project.scenes, project.automation.vary, kSeed);
+    constexpr double kSilenceFadeS = 2.0; // As output/show.cpp.
+    constexpr double kFps = 60.0;
+    constexpr double kEveryS = 2.0;
+    if (from_s < 0.0) {
+        from_s = 0.0;
+        to_s = duration_s;
+    }
+    std::printf("  show from the live state (%s), every %.0f s from %.0f to %.0f s:\n",
+                path_to_utf8(path.filename()).c_str(), kEveryS, from_s, to_s);
+    std::printf("    time  section    scene (weight)        bright intens riser  lum   lit  "
+                "layers alone (lum)\n");
+    ModMemory memory;
+    size_t k = 0;
+    double next_print_s = from_s;
+    for (long long f = 0; static_cast<double>(f) / kFps <= std::min(to_s, duration_s); ++f) {
+        const double t_s = static_cast<double>(f) / kFps;
+        while (k + 1 < states.size() && states[k + 1].analysed_s <= t_s) {
+            ++k;
+        }
+        const LiveState &s = states[k];
+        EngineInputs inputs = inputs_at(s, t_s);
+        inputs.macros = project.macro_values;
+        const SceneMix mix = automate_live(project.scenes, s, inputs, project.automation, -1);
+        Frame frame = render_mix(project.scenes, mix, rig, inputs, project.palettes, kSeed, &memory,
+                                 &variants);
+        if (s.silent) {
+            const double fade =
+                std::clamp(1.0 - (t_s - s.silent_since_s) / kSilenceFadeS, 0.0, 1.0);
+            for (Rgb &c : frame) {
+                c = scaled(c, fade);
+            }
+        }
+        if (t_s + 1e-9 < next_print_s) {
+            continue;
+        }
+        next_print_s += kEveryS;
+        const bool in_scene = mix.to >= 0 && mix.to < static_cast<int>(project.scenes.size());
+        char scene[40];
+        std::snprintf(scene, sizeof(scene), "%s (%.2f)",
+                      in_scene ? project.scenes[static_cast<size_t>(mix.to)].name.c_str() : "none",
+                      mix.from >= 0 ? mix.to_weight : 1.0);
+        std::printf("    %5.0f  %-9s  %-20s  %5.2f  %5.2f  %4.2f  %5.3f  %3.0f%% ", t_s,
+                    s.silent ? "silent" : live_section_name(s.section), scene, mix.brightness,
+                    inputs.intensity, inputs.riser, mean_luminance(frame),
+                    100.0 * lit_share(frame));
+        if (in_scene) {
+            const Scene &whole = project.scenes[static_cast<size_t>(mix.to)];
+            for (const Layer &layer : whole.layers) {
+                Scene one;
+                one.palette = whole.palette;
+                one.layers.push_back(layer);
+                one.layers.back().blend = BlendMode::add;
+                std::printf(
+                    " %s %.3f", layer.effect->name(),
+                    mean_luminance(render_scene(one, rig, inputs, project.palettes, kSeed)));
+            }
+        }
+        std::printf("\n");
+    }
+    return 0;
+}
+
 } // namespace
 
 int wmain(int argc, wchar_t **argv) {
     std::filesystem::path audio_path;
     std::filesystem::path weights = "data/m4/student.weights";
+    std::filesystem::path project_path;
     int block = 480;
     double trace_from_s = -1.0, trace_to_s = -1.0;
     for (int i = 1; i < argc; ++i) {
@@ -65,13 +167,16 @@ int wmain(int argc, wchar_t **argv) {
             trace_to_s = _wtof(argv[++i]);
         } else if (std::wcscmp(argv[i], L"--student") == 0 && i + 1 < argc) {
             weights = argv[++i];
+        } else if (std::wcscmp(argv[i], L"--show") == 0 && i + 1 < argc) {
+            project_path = argv[++i];
         } else {
             audio_path = argv[i];
         }
     }
     if (audio_path.empty()) {
         std::fprintf(stderr, "usage: psyight_live_check <audio> [--block <samples>] "
-                             "[--student <weights>]\n");
+                             "[--student <weights>] [--trace <from s> <to s>] [--show "
+                             "<project>]\n");
         return 2;
     }
     const Result<StudentModel> model = load_student(weights);
@@ -256,5 +361,9 @@ int wmain(int argc, wchar_t **argv) {
         }
     }
     std::printf("\n  (live: start@time(+seconds until it was known))\n");
+    if (!project_path.empty()) {
+        return show_timeline(live.recorded_states(), project_path, trace_from_s, trace_to_s,
+                             duration_s);
+    }
     return 0;
 }
