@@ -76,6 +76,10 @@ Every check line should be green; read every amber line:
 - **An input device:** the mixer's booth output into an audio interface. A virtual cable (for example "Line 1 (Virtual Audio Cable)") also works: route the DJ software to it.
 - **The loaded track, as if live (silent):** plays nothing. Use it to rehearse live mode, or to check the show without sound.
 
+**Channels** (beside the source, for an input device): a DJ mixer's USB sound card (a Pioneer DJM, for example) carries each channel's signal beside the master mix. Start with "All, mixed", watch the per-channel levels while running to find the pair that carries the master (on a DJM, the pair set to MIX (REC OUT) in its settings utility), then stop and choose that pair. It is greyed out for devices with 2 channels or fewer. Serato with a controller plays through ASIO, which Psyight cannot read: tick "Make Audio Available to Other Applications" in Serato and choose "Line 1 (Virtual Audio Cable)" as the source.
+
+**Record** (beside Start): saves exactly what the analysis hears to `data/recordings/live-<time>.wav` (mono, 32-bit float) with a `.clock.csv` beside it (the live clock, the system's steady clock and UTC, once a second). `psyight_live_check <recording>` replays the run; the clock file lines it up with a `tools/python/djlink_log.py` log.
+
 Live mode needs the trained model in `data/m4/` and pauses the file. Its status line reads:
 
 - "Listening for a steady kick": no tempo yet.

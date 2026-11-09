@@ -335,6 +335,7 @@ int wmain(int argc, wchar_t **argv) {
     std::filesystem::path weights = "data/m4/student.weights";
     std::filesystem::path project_path;
     bool set_mode = false;
+    double gain_db = 0.0; // Applied to the live input only (a mixer's master level knob).
     int block = 480;
     double trace_from_s = -1.0, trace_to_s = -1.0;
     for (int i = 1; i < argc; ++i) {
@@ -349,6 +350,8 @@ int wmain(int argc, wchar_t **argv) {
             project_path = argv[++i];
         } else if (std::wcscmp(argv[i], L"--set") == 0) {
             set_mode = true;
+        } else if (std::wcscmp(argv[i], L"--gain-db") == 0 && i + 1 < argc) {
+            gain_db = _wtof(argv[++i]);
         } else {
             audio_path = argv[i];
         }
@@ -356,7 +359,7 @@ int wmain(int argc, wchar_t **argv) {
     if (audio_path.empty()) {
         std::fprintf(stderr, "usage: psyight_live_check <audio> [--block <samples>] "
                              "[--student <weights>] [--trace <from s> <to s>] [--show "
-                             "<project>] [--set]\n");
+                             "<project>] [--set] [--gain-db <dB>]\n");
         return 2;
     }
     const Result<StudentModel> model = load_student(weights);
@@ -366,7 +369,7 @@ int wmain(int argc, wchar_t **argv) {
         return 1;
     }
     const int sr = audio.value().sample_rate_hz;
-    const std::vector<float> mono = mono_mix(audio.value());
+    std::vector<float> mono = mono_mix(audio.value());
 
     // The file-mode reference: stems when they exist, the labelled grid when there are labels.
     TrackAnalysisOptions options;
@@ -389,6 +392,12 @@ int wmain(int argc, wchar_t **argv) {
             return 1;
         }
         file = std::move(analysed.value());
+    }
+    if (gain_db != 0.0) { // After the file-mode reference, which keeps the file's level.
+        const auto gain = static_cast<float>(std::pow(10.0, gain_db / 20.0));
+        for (float &s : mono) {
+            s *= gain;
+        }
     }
 
     LiveAnalyser live;
@@ -413,13 +422,13 @@ int wmain(int argc, wchar_t **argv) {
         total_us += us;
     }
     if (set_mode) {
-        std::printf("%s: %.1f s, live analysis in blocks of %d samples; reference: its own kicks "
-                    "in hindsight (--set)\n",
-                    path_to_utf8(audio_path.filename()).c_str(), duration_s, block);
+        std::printf("%s: %.1f s, live analysis in blocks of %d samples at %+.0f dB; reference: "
+                    "its own kicks in hindsight (--set)\n",
+                    path_to_utf8(audio_path.filename()).c_str(), duration_s, block, gain_db);
     } else {
-        std::printf("%s: %.1f s, live analysis in blocks of %d samples; reference: file mode from "
-                    "the %s%s\n",
-                    path_to_utf8(audio_path.filename()).c_str(), duration_s, block,
+        std::printf("%s: %.1f s, live analysis in blocks of %d samples at %+.0f dB; reference: "
+                    "file mode from the %s%s\n",
+                    path_to_utf8(audio_path.filename()).c_str(), duration_s, block, gain_db,
                     options.source == AnalysisSource::stems ? "stems" : "mix",
                     labelled ? ", labelled grid" : ", detected grid");
     }
