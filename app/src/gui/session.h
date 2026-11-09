@@ -134,8 +134,10 @@ class Session {
     bool student_available() const { return has_track() && track_->student != nullptr; }
 
     // Live mode (M5): capture and causal analysis, with the student. Starting pauses the file.
-    // live_input() is null while live mode is off; any thread may call it.
-    Result<void> start_live(const CaptureOptions &options);
+    // live_input() is null while live mode is off; any thread may call it. record: a WAV of the
+    // analysed input (audio/live_input.h); empty: none.
+    Result<void> start_live(const CaptureOptions &options,
+                            const std::filesystem::path &record = {});
     void stop_live();
     std::shared_ptr<const LiveInput> live_input() const { return live_.load(); }
     bool live_available() const { return student_model_ != nullptr; }

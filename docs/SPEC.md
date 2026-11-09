@@ -136,7 +136,7 @@ The owner wants an audio-reactive LED system for psytrance. It starts as a home-
 |---|---|---|
 | File player (WAV, FLAC, MP3) | M1 | Transport, loop region, seek. Decoded and resampled to 48 kHz |
 | WASAPI loopback (laptop audio) | M5 | Captures whatever the laptop plays (DJ software, browser) |
-| WASAPI capture from an audio interface | M5 | Mixer booth output, line level. Exclusive mode is optional for lower latency |
+| WASAPI capture from an audio interface | M5 | Mixer booth output, line level, or a DJ mixer's USB sound card (one channel pair chosen). Exclusive mode is optional for lower latency |
 | ASIO | Later, optional | Only if WASAPI latency proves insufficient. Check SDK licensing first [Verify] |
 
 - Stereo is summed to mono for analysis by default; per-channel analysis is optional later.
@@ -795,6 +795,7 @@ Initial metric targets are placeholders, marked **[Guessing]**. Replace them wit
 | 2026-10-18 | Restyle phase 2: magma spectrogram by default (inferno and viridis selectable; the CC0 tables compiled in); the bass roll's pitch background becomes a neutral ramp so accent-filled notes stand out (plasma's yellow top hid them); phase 4 layout: compact transport over the left column, rig preview pinned top right | Owner's restyle plan; the layout is the owner's choice of three |
 | 2026-10-17 | Node firmware: D-cache off (I-cache on) instead of DTCM placement; lwIP without an RTOS, UDP only; DHCP falling back after 10 s to a MAC-derived 2.x.y.z/8 address (or a fixed address with `dhcp 0`), not "static with DHCP fallback"; lanes mapped by global pixel index; config as text commands on UDP 6455 | Uncached RAM keeps every DMA buffer coherent with no MPU setup, and the node's load is far below the core's; a poll loop needs no locking; DHCP-first finds the node on any network while the fallback keeps it reachable without one; global pixel indices match the app's patch, which runs strips across universe boundaries; a text protocol needs no tool to configure |
 | 2026-10-15 | Labelling audition at 0.5x with pitch kept, using Signalsmith Stretch 1.4.0 and Signalsmith Linear 0.6.4 (MIT, header-only, vendored in `app/third_party`) | Owner chose it over writing WSOLA: much cleaner transients and sustained bass. Rubber Band (GPL) and SoundTouch (LGPL) are excluded by the licensing rule. Measured latency at 0.5x: 90 ms of input, compensated in the displayed playhead |
+| 2026-11-09 | Live input: an input device opens with its own channels and one pair can be chosen; the analysed input can be recorded (`data/recordings/`: a mono 32-bit float WAV and a clock file) | A DJ mixer's USB sound card (DJM-900NXS2) carries each channel's signal beside the master mix, so the master must be picked out. A recording of a real mixer feed replays the live run exactly (`psyight_live_check`) and lines up with a Pro DJ Link log |
 
 Superseded during the conversation: an early suggestion to use JUCE for the C++ engine (replaced by the permissive stack) and an early "prototype in Python first" plan (replaced by the owner's choice of C++ from the start).
 

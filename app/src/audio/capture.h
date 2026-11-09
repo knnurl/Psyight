@@ -1,6 +1,8 @@
 // Live audio input (SPEC section 5, M5): WASAPI loopback (whatever the laptop plays) or an input
 // device (an interface carrying the mixer's booth output), through miniaudio, as mono 48 kHz
-// float. miniaudio converts the device's format, channels and rate.
+// float. miniaudio converts the device's format and rate. An input device opens with its own
+// channels, mixed down here: all of them, or one pair (a mixer's USB sound card carries several
+// channels' signals besides the master mix). The channels' peaks are published, to find the pair.
 //
 // Threads: the audio callback pushes samples into a lock-free ring and publishes the capture
 // clock; one consumer thread reads them. The callback never allocates, locks or logs; when the
@@ -12,6 +14,7 @@
 #include "core/spsc_queue.h"
 #include "core/timebase.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -30,11 +33,23 @@ enum class CaptureSource { loopback, input, file };
 
 struct CaptureOptions {
     CaptureSource source = CaptureSource::loopback;
-    std::string device_name;    // Input devices: empty for the default.
+    std::string device_name; // Input devices: empty for the default.
+    // Input devices: -1 mixes all the device's channels; n mixes channels n and n + 1 (from 0;
+    // n alone when it is the last).
+    int first_channel = -1;
     std::filesystem::path file; // CaptureSource::file.
     int sample_rate_hz = 48000;
     bool null_backend = false; // Silence at real-time pace (tests).
 };
+
+// One frame of interleaved samples mixed to mono: the mean of `count` channels from `first`.
+inline float mix_frame(const float *frame, int first, int count) {
+    float sum = 0.0f;
+    for (int c = first; c < first + count; ++c) {
+        sum += frame[c];
+    }
+    return count > 0 ? sum / static_cast<float>(count) : 0.0f;
+}
 
 class Capture {
   public:
@@ -49,6 +64,18 @@ class Capture {
 
     // Input device names (for CaptureSource::input). Loopback uses the default output device.
     static Result<std::vector<std::string>> input_devices();
+    // The channels an input device delivers (its native format; empty name: the default).
+    static Result<int> input_channels(const std::string &device_name);
+
+    static constexpr int kMeteredChannels = 16;
+    // The open device's channels (1 for loopback and files, mixed by miniaudio), and the peak of
+    // channel c in the last callback's block (0 to 1; channels from kMeteredChannels on read 0).
+    int channels() const { return channels_; }
+    float channel_peak(int c) const {
+        return c >= 0 && c < kMeteredChannels
+                   ? channel_peaks_[static_cast<size_t>(c)].load(std::memory_order_acquire)
+                   : 0.0f;
+    }
 
     // Consumer thread: up to out.size() captured samples, oldest first.
     size_t read(std::span<float> out);
@@ -71,6 +98,11 @@ class Capture {
     std::unique_ptr<Impl> impl_;
     SpscQueue<float> ring_{1 << 17}; // 2.7 s at 48 kHz.
     int sample_rate_hz_ = 48000;
+    // Set before the device starts, read by its callback.
+    int channels_ = 1;
+    int first_channel_ = 0; // The first channel mixed, and how many.
+    int mixed_channels_ = 1;
+    std::array<std::atomic<float>, kMeteredChannels> channel_peaks_{};
     std::atomic<SampleIndex> captured_{0};
     std::atomic<long long> dropped_{0};
     std::atomic<float> peak_{0.0f};

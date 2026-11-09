@@ -187,6 +187,9 @@ class PreviewView {
     std::string record_status_;
     int live_source_ = 0; // 0: loopback; 1 and on: input_devices_[i - 1].
     std::vector<std::string> input_devices_;
+    int input_channels_ = 0;   // The chosen input device's channels (0: not known).
+    int first_channel_ = -1;   // CaptureOptions::first_channel: -1 all, else a pair from it.
+    bool record_live_ = false; // Record the analysed input to data/recordings.
     std::string live_error_;
     std::vector<double> tap_errors_s_; // Tap test: taps minus the nearest predicted beat.
     MidiInput midi_in_;

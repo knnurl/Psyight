@@ -3,16 +3,21 @@
 // by exact kick times.
 
 #include "analysis/live_analysis.h"
+#include "audio/audio_file.h"
 #include "audio/live_input.h"
 #include "engine/inputs.h"
 
 #include <doctest/doctest.h>
+#include <miniaudio.h>
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <random>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -321,6 +326,68 @@ TEST_CASE("live input: capture and analysis threads run at real-time pace (null 
     CHECK_FALSE(state.tempo_known); // Silence: no kicks.
     live.stop();
     CHECK_FALSE(live.running());
+}
+
+TEST_CASE("capture: a chosen pair of a device's channels is mixed to mono") {
+    const std::array<float, 6> frame{0.1f, 0.3f, 0.5f, 0.7f, 0.2f, -0.2f};
+    CHECK(mix_frame(frame.data(), 0, 6) == doctest::Approx(1.6f / 6.0f));
+    CHECK(mix_frame(frame.data(), 2, 2) == doctest::Approx(0.6f)); // Channels 3 and 4.
+    CHECK(mix_frame(frame.data(), 4, 2) == doctest::Approx(0.0f));
+    CHECK(mix_frame(frame.data(), 5, 1) == doctest::Approx(-0.2f)); // The last alone.
+}
+
+TEST_CASE("live input: the recording is the analysed input, sample for sample, with its clock") {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "psyight_live_record_test";
+    std::error_code error;
+    std::filesystem::remove_all(dir, error);
+    std::filesystem::create_directories(dir);
+    const std::vector<float> signal = test_signal(kRate * 3);
+    const std::filesystem::path source = dir / "source.wav";
+    {
+        const ma_encoder_config config =
+            ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 1, kRate);
+        ma_encoder encoder;
+        REQUIRE(ma_encoder_init_file_w(source.c_str(), &config, &encoder) == MA_SUCCESS);
+        ma_uint64 written = 0;
+        ma_encoder_write_pcm_frames(&encoder, signal.data(), signal.size(), &written);
+        ma_encoder_uninit(&encoder);
+    }
+    const Result<StudentModel> loaded =
+        load_student(std::filesystem::path(PSYIGHT_TESTS_DIR) / "data" / "student_fixture");
+    REQUIRE(loaded.ok());
+    LiveInput live(std::make_shared<const StudentModel>(loaded.value()));
+    CaptureOptions options;
+    options.source = CaptureSource::file;
+    options.file = source;
+    const std::filesystem::path record = dir / "recordings" / "take.wav";
+    REQUIRE(live.start(options, {}, record).ok());
+    CHECK(live.recording() == record);
+    std::this_thread::sleep_for(std::chrono::milliseconds(700));
+    live.stop();
+    CHECK(live.record_dropped() == 0);
+
+    Result<AudioBuffer> taken = decode_audio_file(record);
+    REQUIRE(taken.ok());
+    CHECK(taken.value().sample_rate_hz == kRate);
+    const std::vector<float> mono = mono_mix(taken.value());
+    CHECK(mono.size() == static_cast<size_t>(std::llround(live.recorded_s() * kRate)));
+    REQUIRE(mono.size() > static_cast<size_t>(kRate / 2));
+    size_t differ = 0;
+    for (size_t i = 0; i < mono.size(); ++i) {
+        differ += mono[i] != signal[i % signal.size()];
+    }
+    CHECK(differ == 0);
+
+    std::ifstream clock(dir / "recordings" / "take.clock.csv");
+    std::string line;
+    int lines = 0;
+    while (std::getline(clock, line)) {
+        ++lines;
+    }
+    CHECK(lines >= 2); // The header, then a line at least at the end.
+    clock.close();
+    std::filesystem::remove_all(dir, error);
 }
 
 TEST_CASE("live beat: the operator sets the downbeat and nudges the beat") {

@@ -486,19 +486,53 @@ void PreviewView::draw_live() {
             }
             if (ImGui::Selectable("Loopback (what this computer plays)", live_source_ == 0)) {
                 live_source_ = 0;
+                input_channels_ = 0;
             }
             if (session_.has_track() &&
                 ImGui::Selectable("The loaded track, as if live (silent)", live_source_ == -1)) {
                 live_source_ = -1;
+                input_channels_ = 0;
             }
             for (size_t i = 0; i < input_devices_.size(); ++i) {
                 if (ImGui::Selectable(input_devices_[i].c_str(),
                                       live_source_ == static_cast<int>(i) + 1)) {
                     live_source_ = static_cast<int>(i) + 1;
+                    const Result<int> channels = Capture::input_channels(input_devices_[i]);
+                    input_channels_ = channels ? channels.value() : 0;
+                    first_channel_ = -1;
                 }
             }
             ImGui::EndCombo();
         }
+        // Which of an input device's channels to analyse: a DJ mixer's USB sound card carries
+        // each channel's signal beside the master mix.
+        const auto pair_name = [&](int first) {
+            return first < 0 ? std::string("All, mixed")
+                   : first + 1 >= input_channels_
+                       ? std::to_string(first + 1)
+                       : std::to_string(first + 1) + " and " + std::to_string(first + 2);
+        };
+        if (live_source_ > 0 && input_channels_ > 2) {
+            ImGui::SetNextItemWidth(10.0f * em);
+            if (ImGui::BeginCombo("Channels", pair_name(first_channel_).c_str())) {
+                for (int first = -1; first < input_channels_; first += first < 0 ? 1 : 2) {
+                    if (ImGui::Selectable(pair_name(first).c_str(), first_channel_ == first)) {
+                        first_channel_ = first;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SetItemTooltip("The device has %d channels. Start with all, find the pair that "
+                                  "carries the master in the levels below, then stop and choose "
+                                  "it (on a Pioneer DJM: the pair set to MIX (REC OUT) in its "
+                                  "settings utility).",
+                                  input_channels_);
+            ImGui::SameLine();
+        }
+        ImGui::Checkbox("Record", &record_live_);
+        ImGui::SetItemTooltip("Saves what the analysis hears to data/recordings/ as a WAV, with a "
+                              "clock file to line it up with other logs. Replay it with "
+                              "psyight_live_check.");
         ImGui::SameLine();
         if (ImGui::Button("Start")) {
             CaptureOptions options;
@@ -507,10 +541,20 @@ void PreviewView::draw_live() {
                                                 : CaptureSource::input;
             if (live_source_ > 0) {
                 options.device_name = input_devices_[static_cast<size_t>(live_source_ - 1)];
+                options.first_channel = first_channel_;
             } else if (live_source_ < 0 && session_.has_track()) {
                 options.file = session_.track().path;
             }
-            const Result<void> started = session_.start_live(options);
+            std::filesystem::path record;
+            if (record_live_) {
+                const std::time_t t = std::time(nullptr);
+                std::tm tm{};
+                localtime_s(&tm, &t);
+                char name[48];
+                std::strftime(name, sizeof(name), "live-%Y%m%d-%H%M%S.wav", &tm);
+                record = std::filesystem::path("data") / "recordings" / name;
+            }
+            const Result<void> started = session_.start_live(options, record);
             live_error_ = started ? "" : started.error().message;
             tap_errors_s_.clear();
         }
@@ -541,6 +585,24 @@ void PreviewView::draw_live() {
               "level %.0f dBFS, dropped %lld samples",
               live->analysis_delay_ms(), 1e3 * s.latency_s, 100.0 * live->load(),
               level > 0.0f ? 20.0 * std::log10(level) : -120.0, live->dropped());
+    if (live->channels() > 1) { // Each channel's peak, to find the pair that carries the master.
+        std::string levels = "Channels (dBFS):";
+        const int shown = std::min(live->channels(), Capture::kMeteredChannels);
+        for (int c = 0; c < shown; ++c) {
+            const float peak = live->channel_level(c);
+            char one[24];
+            std::snprintf(one, sizeof(one), "%s%d %.0f", c % 2 == 0 && c > 0 ? " |  " : "  ", c + 1,
+                          peak > 0.0f ? 20.0 * std::log10(peak) : -120.0);
+            levels += one;
+        }
+        mono_text("%s", levels.c_str());
+    }
+    if (!live->recording().empty()) {
+        const double s_rec = live->recorded_s();
+        mono_text("Recording %s: %d:%02d%s", path_to_utf8(live->recording()).c_str(),
+                  static_cast<int>(s_rec) / 60, static_cast<int>(s_rec) % 60,
+                  live->record_dropped() > 0 ? " (samples lost: the disk is too slow)" : "");
+    }
 
     // Operator controls: downbeat now, nudge, relock.
     const auto now_s = [&] { return static_cast<double>(live->now()) / live->sample_rate_hz(); };

@@ -57,10 +57,50 @@ Result<std::vector<std::string>> Capture::input_devices() {
     return names;
 }
 
+Result<int> Capture::input_channels(const std::string &device_name) {
+    ma_context context;
+    if (const ma_result r = ma_context_init(nullptr, 0, nullptr, &context); r != MA_SUCCESS) {
+        return Error{std::string("audio context: ") + ma_result_description(r)};
+    }
+    ma_device_info *playback = nullptr;
+    ma_device_info *capture = nullptr;
+    ma_uint32 playback_count = 0;
+    ma_uint32 capture_count = 0;
+    int channels = -1;
+    if (ma_context_get_devices(&context, &playback, &playback_count, &capture, &capture_count) ==
+        MA_SUCCESS) {
+        for (ma_uint32 i = 0; i < capture_count; ++i) {
+            const bool wanted =
+                device_name.empty() ? capture[i].isDefault != 0 : device_name == capture[i].name;
+            ma_device_info info;
+            if (!wanted || ma_context_get_device_info(&context, ma_device_type_capture,
+                                                      &capture[i].id, &info) != MA_SUCCESS) {
+                continue;
+            }
+            channels = 0;
+            for (ma_uint32 k = 0; k < info.nativeDataFormatCount; ++k) {
+                channels = std::max(channels, static_cast<int>(info.nativeDataFormats[k].channels));
+            }
+            break;
+        }
+    }
+    ma_context_uninit(&context);
+    if (channels < 0) {
+        return Error{"no input device named \"" + device_name + "\""};
+    }
+    return channels > 0 ? channels : 2; // 0: any count (miniaudio's convention).
+}
+
 Result<void> Capture::open(const CaptureOptions &options) {
     close();
     impl_ = std::make_unique<Impl>();
     sample_rate_hz_ = options.sample_rate_hz;
+    channels_ = 1;
+    first_channel_ = 0;
+    mixed_channels_ = 1;
+    for (std::atomic<float> &p : channel_peaks_) {
+        p.store(0.0f, std::memory_order_release);
+    }
     captured_.store(0, std::memory_order_release);
     dropped_.store(0, std::memory_order_release);
     stamp_time_ns_.store(0, std::memory_order_release);
@@ -117,7 +157,10 @@ Result<void> Capture::open(const CaptureOptions &options) {
     ma_device_config config =
         ma_device_config_init(loopback ? ma_device_type_loopback : ma_device_type_capture);
     config.capture.format = ma_format_f32;
-    config.capture.channels = 1; // miniaudio mixes the device's channels down.
+    // An input device delivers its own channels (mixed in on_audio, so a pair can be chosen);
+    // miniaudio mixes loopback down.
+    const bool own_channels = options.source == CaptureSource::input && !options.null_backend;
+    config.capture.channels = own_channels ? 0 : 1;
     config.sampleRate = static_cast<ma_uint32>(options.sample_rate_hz);
     config.dataCallback = &Capture::audio_callback;
     config.pUserData = this;
@@ -151,6 +194,20 @@ Result<void> Capture::open(const CaptureOptions &options) {
                      ma_result_description(device_result)};
     }
     impl_->device_ready = true;
+    channels_ = std::max(1, static_cast<int>(impl_->device.capture.channels));
+    if (own_channels && options.first_channel >= 0) {
+        if (options.first_channel >= channels_) {
+            const int channels = channels_;
+            close();
+            return Error{"audio input: channel " + std::to_string(options.first_channel + 1) +
+                         " chosen, the device has " + std::to_string(channels)};
+        }
+        first_channel_ = options.first_channel;
+        mixed_channels_ = std::min(2, channels_ - first_channel_);
+    } else {
+        first_channel_ = 0;
+        mixed_channels_ = channels_;
+    }
     if (const ma_result r = ma_device_start(&impl_->device); r != MA_SUCCESS) {
         close();
         return Error{std::string("audio start: ") + ma_result_description(r)};
@@ -227,8 +284,17 @@ void Capture::audio_callback(ma_device *device, void * /*out*/, const void *in,
 void Capture::on_audio(const float *in, unsigned int frame_count) {
     long long lost = 0;
     float peak = 0.0f;
+    std::array<float, kMeteredChannels> peaks{};
+    const auto metered = static_cast<size_t>(std::min(channels_, kMeteredChannels));
     for (unsigned int i = 0; i < frame_count; ++i) {
-        const float s = in != nullptr ? in[i] : 0.0f;
+        float s = 0.0f;
+        if (in != nullptr) {
+            const float *frame = in + static_cast<size_t>(i) * static_cast<size_t>(channels_);
+            s = mix_frame(frame, first_channel_, mixed_channels_);
+            for (size_t c = 0; c < metered; ++c) {
+                peaks[c] = std::max(peaks[c], std::abs(frame[c]));
+            }
+        }
         peak = std::max(peak, std::abs(s));
         if (!ring_.try_push(s)) {
             ++lost;
@@ -238,6 +304,9 @@ void Capture::on_audio(const float *in, unsigned int frame_count) {
         dropped_.fetch_add(lost, std::memory_order_acq_rel);
     }
     peak_.store(peak, std::memory_order_release);
+    for (size_t c = 0; c < metered; ++c) {
+        channel_peaks_[c].store(peaks[c], std::memory_order_release);
+    }
     const SampleIndex total = captured_.load(std::memory_order_relaxed) + frame_count;
     captured_.store(total, std::memory_order_release);
     const std::uint32_t sequence = stamp_sequence_.load(std::memory_order_relaxed);

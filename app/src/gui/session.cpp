@@ -233,20 +233,25 @@ Session::~Session() {
     write_labels_recovery("on exit");
 }
 
-Result<void> Session::start_live(const CaptureOptions &options) {
+Result<void> Session::start_live(const CaptureOptions &options,
+                                 const std::filesystem::path &record) {
     stop_live();
     auto live = std::make_shared<LiveInput>(student_model_);
-    if (Result<void> r = live->start(options); !r) {
+    if (Result<void> r = live->start(options, {}, record); !r) {
         return r;
     }
     transport_.pause();
     live_owner_ = live;
     live_.store(live);
-    spdlog::info("Live input started ({})",
+    spdlog::info("Live input started ({}{}){}",
                  options.source == CaptureSource::loopback ? std::string("loopback")
                  : options.source == CaptureSource::file
                      ? "file " + path_to_utf8(options.file.filename()) + ", silent"
-                     : options.device_name);
+                     : options.device_name,
+                 options.source == CaptureSource::input && options.first_channel >= 0
+                     ? ", channels from " + std::to_string(options.first_channel + 1)
+                     : std::string(),
+                 record.empty() ? std::string() : ", recording to " + path_to_utf8(record));
     return {};
 }
 
