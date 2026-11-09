@@ -100,11 +100,13 @@ struct LiveParams {
     // absolute levels (at -18 dB its kicks fell from F 0.93 to 0.52 on a labelled track). A
     // follower tracks the loud parts (the level of 1 s averages, rising with agc_attack_s and
     // falling with agc_release_s, so breakdowns barely lower it; held through silence; starting
-    // at agc_start_db). Inside the trained range, agc_low_db to agc_high_db (the labelled tracks'
-    // grooves), the gain is 0 dB and the analysis is untouched; outside it, the gain brings the
-    // level to the nearer edge, within agc_min_db to agc_max_db, moving at most agc_slew_db_per_s.
-    // Silence is judged before it.
-    double agc_low_db = -12.0;
+    // at agc_start_db). Inside the range the student handles, agc_low_db to agc_high_db, the gain
+    // is 0 dB and the analysis is untouched; outside it, the gain brings the level to the nearer
+    // edge, within agc_min_db to agc_max_db, moving at most agc_slew_db_per_s. Silence is judged
+    // before it. The low edge: the labelled tracks' grooves sit at -11 to -7 dBFS and 6 dB lower
+    // costs nothing measurable (kick F -0.003); an edge at -12 kept nudging DJ sets recorded at
+    // -12 dBFS, and lost the lock more often (143 times on 20 sets against 123).
+    double agc_low_db = -16.0;
     double agc_high_db = -6.0;
     double agc_start_db = -9.0;
     double agc_attack_s = 1.0;
