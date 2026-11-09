@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cwchar>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -151,12 +152,189 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
     return 0;
 }
 
+void print_live_sections(const LiveAnalyser &live) {
+    int count = 0;
+    for (const LiveState &s : live.recorded_states()) {
+        if (s.section_count != count) {
+            count = s.section_count;
+            std::printf(" %s@%.0f(+%.0f)", live_section_name(s.section), s.section_start_s,
+                        s.analysed_s - s.section_start_s);
+        }
+    }
+    std::printf("\n  (live: start@time(+seconds until it was known))\n");
+}
+
+// A run of kicks a steady interval apart, as found in hindsight.
+struct KickRun {
+    std::vector<double> times_s;
+    double period_s = 0.0;
+};
+
+// The whole set's kicks in runs: each kick one period after the last (or two: a missed one);
+// kicks between beats (off-beat percussion, double triggers) are skipped.
+std::vector<KickRun> kick_runs(const std::vector<double> &kicks) {
+    std::vector<KickRun> runs;
+    KickRun run;
+    for (const double t : kicks) {
+        if (!run.times_s.empty()) {
+            const double ioi = t - run.times_s.back();
+            if (run.times_s.size() == 1) {
+                if (ioi < 0.25) {
+                    continue;
+                }
+                if (ioi <= 0.55) {
+                    run.period_s = ioi;
+                    run.times_s.push_back(t);
+                    continue;
+                }
+            } else {
+                const double r = ioi / run.period_s;
+                if (r < 0.92) {
+                    continue;
+                }
+                if (std::abs(r - 1.0) <= 0.08 || std::abs(r - 2.0) <= 0.16) {
+                    run.period_s += 0.2 * (ioi / std::round(r) - run.period_s);
+                    run.times_s.push_back(t);
+                    continue;
+                }
+            }
+            runs.push_back(std::move(run));
+            run = {};
+        }
+        run.times_s.push_back(t);
+    }
+    if (!run.times_s.empty()) {
+        runs.push_back(std::move(run));
+    }
+    return runs;
+}
+
+// --set: a DJ set has no file-mode reference (file mode assumes one tempo for the whole file), so
+// the live run is measured against its own kicks seen in hindsight. Runs of run_kicks kicks or
+// more are the grooves; a run after drop_after_bars bars without one is a drop (live mode's rule,
+// known in hindsight). Measured: the predicted beat at each kick of a run from its fifth, the
+// times the loop lost its lock, and the drops live mode declared, how late, and the false ones.
+void set_report(const LiveAnalyser &live) {
+    const LiveParams params;
+    const std::vector<LiveState> &states = live.recorded_states();
+    std::vector<KickRun> runs = kick_runs(live.recorded_kicks());
+    std::erase_if(runs, [&](const KickRun &r) {
+        return static_cast<int>(r.times_s.size()) < params.run_kicks;
+    });
+    std::vector<double> drops_s;
+    size_t kicks_in_runs = 0;
+    std::vector<double> periods;
+    for (size_t i = 0; i < runs.size(); ++i) {
+        kicks_in_runs += runs[i].times_s.size();
+        periods.push_back(runs[i].period_s);
+        if (i > 0) {
+            const double gap_beats =
+                (runs[i].times_s.front() - runs[i - 1].times_s.back()) / runs[i].period_s;
+            if (gap_beats >= 4.0 * params.drop_after_bars - 0.5) {
+                drops_s.push_back(runs[i].times_s.front());
+            }
+        }
+    }
+    // The state that predicted time t: the last one analysed up to t.
+    const auto state_at = [&](double t) -> const LiveState * {
+        const auto it =
+            std::upper_bound(states.begin(), states.end(), t,
+                             [](double v, const LiveState &s) { return v < s.analysed_s; });
+        return it == states.begin() ? nullptr : &*(it - 1);
+    };
+    std::vector<double> abs_ms;
+    size_t evaluated = 0;
+    for (const KickRun &run : runs) {
+        for (size_t k = 4; k < run.times_s.size(); ++k) {
+            const double t = run.times_s[k];
+            const LiveState *s = state_at(t);
+            ++evaluated;
+            if (s == nullptr || !s->locked) {
+                continue;
+            }
+            const EngineInputs in = inputs_at(*s, t);
+            const double beat = static_cast<double>(in.beat_index) + in.beat_phase;
+            abs_ms.push_back(std::abs(std::remainder(beat, 1.0)) * s->period_s * 1e3);
+        }
+    }
+    int lost = 0;
+    bool was_locked = false;
+    struct Declared {
+        LiveSection section;
+        double start_s, known_s;
+    };
+    std::vector<Declared> declared;
+    int count = 0;
+    for (const LiveState &s : states) {
+        lost += was_locked && !s.locked;
+        was_locked = s.locked;
+        if (s.section_count != count) {
+            count = s.section_count;
+            declared.push_back({s.section, s.section_start_s, s.analysed_s});
+        }
+    }
+    constexpr double kMatchS = 1.0;
+    int caught = 0, as_groove = 0;
+    std::vector<double> latency_s;
+    std::vector<double> missed_s;
+    for (const double t : drops_s) {
+        const auto near = [&](LiveSection section) {
+            return std::find_if(declared.begin(), declared.end(), [&](const Declared &d) {
+                return d.section == section && std::abs(d.start_s - t) <= kMatchS;
+            });
+        };
+        if (const auto d = near(LiveSection::drop); d != declared.end()) {
+            ++caught;
+            latency_s.push_back(d->known_s - t);
+        } else {
+            as_groove += near(LiveSection::groove) != declared.end();
+            missed_s.push_back(t);
+        }
+    }
+    int false_drops = 0;
+    for (const Declared &d : declared) {
+        if (d.section == LiveSection::drop &&
+            std::none_of(drops_s.begin(), drops_s.end(),
+                         [&](double t) { return std::abs(d.start_s - t) <= kMatchS; })) {
+            ++false_drops;
+        }
+    }
+    std::printf("  hindsight: %zu runs of %d+ kicks (median period %.0f ms), %zu kicks in them; "
+                "%zu drops (a run after %d+ bars without one)\n",
+                runs.size(), params.run_kicks, 1e3 * percentile(periods, 0.5), kicks_in_runs,
+                drops_s.size(), params.drop_after_bars);
+    std::printf("  beat at the kicks of a run (from its fifth): locked at %.1f%% of %zu; error "
+                "|median| %.1f ms, |p95| %.1f ms, within 20 ms %.1f%%; lock lost %d times\n",
+                evaluated > 0 ? 100.0 * static_cast<double>(abs_ms.size()) / evaluated : 0.0,
+                evaluated, percentile(abs_ms, 0.5), percentile(abs_ms, 0.95),
+                abs_ms.empty()
+                    ? 0.0
+                    : 100.0 *
+                          static_cast<double>(std::count_if(abs_ms.begin(), abs_ms.end(),
+                                                            [](double e) { return e <= 20.0; })) /
+                          static_cast<double>(abs_ms.size()),
+                lost);
+    std::printf("  drops: caught %d of %zu (known after median %.1f s, max %.1f s), called a "
+                "groove %d, missed %zu; live drops matching none %d\n",
+                caught, drops_s.size(), latency_s.empty() ? 0.0 : percentile(latency_s, 0.5),
+                latency_s.empty() ? 0.0 : percentile(latency_s, 1.0), as_groove, missed_s.size(),
+                false_drops);
+    if (!missed_s.empty()) {
+        std::printf("  missed drops at:");
+        for (size_t i = 0; i < missed_s.size() && i < 16; ++i) {
+            std::printf(" %.0f", missed_s[i]);
+        }
+        std::printf("%s s\n", missed_s.size() > 16 ? " ..." : "");
+    }
+}
+
 } // namespace
 
 int wmain(int argc, wchar_t **argv) {
     std::filesystem::path audio_path;
     std::filesystem::path weights = "data/m4/student.weights";
     std::filesystem::path project_path;
+    bool set_mode = false;
     int block = 480;
     double trace_from_s = -1.0, trace_to_s = -1.0;
     for (int i = 1; i < argc; ++i) {
@@ -169,6 +347,8 @@ int wmain(int argc, wchar_t **argv) {
             weights = argv[++i];
         } else if (std::wcscmp(argv[i], L"--show") == 0 && i + 1 < argc) {
             project_path = argv[++i];
+        } else if (std::wcscmp(argv[i], L"--set") == 0) {
+            set_mode = true;
         } else {
             audio_path = argv[i];
         }
@@ -176,7 +356,7 @@ int wmain(int argc, wchar_t **argv) {
     if (audio_path.empty()) {
         std::fprintf(stderr, "usage: psyight_live_check <audio> [--block <samples>] "
                              "[--student <weights>] [--trace <from s> <to s>] [--show "
-                             "<project>]\n");
+                             "<project>] [--set]\n");
         return 2;
     }
     const Result<StudentModel> model = load_student(weights);
@@ -201,12 +381,15 @@ int wmain(int argc, wchar_t **argv) {
                 Grid{labels.grid.bpm, seconds_to_samples(labels.grid.first_downbeat_s, sr), sr};
         }
     }
-    const Result<TrackAnalysis> file = analyse_track(mono, sr, audio_path, options);
-    if (!file) {
-        std::fprintf(stderr, "file analysis: %s\n", file.error().message.c_str());
-        return 1;
+    std::optional<TrackAnalysis> file;
+    if (!set_mode) {
+        Result<TrackAnalysis> analysed = analyse_track(mono, sr, audio_path, options);
+        if (!analysed) {
+            std::fprintf(stderr, "file analysis: %s\n", analysed.error().message.c_str());
+            return 1;
+        }
+        file = std::move(analysed.value());
     }
-    const TrackAnalysis &f = file.value();
 
     LiveAnalyser live;
     if (Result<void> r = live.prepare(sr, model.value()); !r) {
@@ -229,11 +412,17 @@ int wmain(int argc, wchar_t **argv) {
     for (const double us : block_us) {
         total_us += us;
     }
-    std::printf("%s: %.1f s, live analysis in blocks of %d samples; reference: file mode from the "
-                "%s%s\n",
-                path_to_utf8(audio_path.filename()).c_str(), duration_s, block,
-                options.source == AnalysisSource::stems ? "stems" : "mix",
-                labelled ? ", labelled grid" : ", detected grid");
+    if (set_mode) {
+        std::printf("%s: %.1f s, live analysis in blocks of %d samples; reference: its own kicks "
+                    "in hindsight (--set)\n",
+                    path_to_utf8(audio_path.filename()).c_str(), duration_s, block);
+    } else {
+        std::printf("%s: %.1f s, live analysis in blocks of %d samples; reference: file mode from "
+                    "the %s%s\n",
+                    path_to_utf8(audio_path.filename()).c_str(), duration_s, block,
+                    options.source == AnalysisSource::stems ? "stems" : "mix",
+                    labelled ? ", labelled grid" : ", detected grid");
+    }
     std::printf("  cost: %.2f%% of real time; per block median %.0f us, p99 %.0f us, max %.0f us\n",
                 100.0 * total_us * 1e-6 / duration_s, block_us[block_us.size() / 2],
                 block_us[block_us.size() * 99 / 100], block_us.back());
@@ -256,6 +445,18 @@ int wmain(int argc, wchar_t **argv) {
             }
         }
     }
+
+    if (set_mode) {
+        set_report(live);
+        std::printf("  live sections:");
+        print_live_sections(live);
+        if (!project_path.empty()) {
+            return show_timeline(live.recorded_states(), project_path, trace_from_s, trace_to_s,
+                                 duration_s);
+        }
+        return 0;
+    }
+    const TrackAnalysis &f = *file;
 
     // Kicks.
     const NoteScore kicks =
@@ -350,17 +551,7 @@ int wmain(int argc, wchar_t **argv) {
         std::printf(" %s@%.0f", s.label.c_str(), s.start_s);
     }
     std::printf("\n  live sections:");
-    LiveSection last = LiveSection::intro;
-    int count = 0;
-    for (const LiveState &s : live.recorded_states()) {
-        if (s.section_count != count) {
-            count = s.section_count;
-            last = s.section;
-            std::printf(" %s@%.0f(+%.0f)", live_section_name(last), s.section_start_s,
-                        s.analysed_s - s.section_start_s);
-        }
-    }
-    std::printf("\n  (live: start@time(+seconds until it was known))\n");
+    print_live_sections(live);
     if (!project_path.empty()) {
         return show_timeline(live.recorded_states(), project_path, trace_from_s, trace_to_s,
                              duration_s);
