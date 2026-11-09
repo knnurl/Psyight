@@ -212,6 +212,7 @@ TEST_CASE("hex pressure: brighter as the riser rises, a kick pushes out, dark fo
         EngineInputs in = grid_at(static_cast<long long>(64 * progress), 0.5);
         in.section = "build";
         in.section_length_s = 64 * 0.4;
+        in.section_end_known = true;
         in.section_progress = progress;
         in.since_section_s = progress * in.section_length_s;
         in.riser = riser;

@@ -236,10 +236,14 @@ TEST_CASE("strobe: rolls on 16ths after the drop starts and in a build's last be
     const std::shared_ptr<const Effect> build = make_strobe(roll);
     in.section = "build";
     in.section_length_s = 10.0;
+    in.section_end_known = true;
     in.since_section_s = 9.0;
     CHECK(level(render(*build, rig, in)[0]) == 0.0f);
     in.since_section_s = 9.9; // The last beat, its fourth 16th.
     CHECK(level(render(*build, rig, in)[0]) == doctest::Approx(1.0f));
+    in.section_end_known = false; // Live: the length is a guess, so no roll.
+    CHECK(level(render(*build, rig, in)[0]) == 0.0f);
+    in.section_end_known = true;
 
     StrobeParams bars;
     bars.trigger = 4;
@@ -287,10 +291,20 @@ TEST_CASE("stutter: gates on the 16th grid, with the bass gate, and ducks after 
     gap.release_s = 0.005;
     in.section = "build";
     in.section_length_s = 10.0;
+    in.section_end_known = true;
     in.since_section_s = 9.5;
     CHECK(level(render(*make_stutter(gap), rig, in)[0]) == doctest::Approx(1.0f));
     in.since_section_s = 9.7;
     CHECK(level(render(*make_stutter(gap), rig, in)[0]) < 0.01f);
+    // Live: the length is one phrase, a guess; a build running past it stays lit (it went
+    // dark until the kicks returned).
+    in.section_end_known = false;
+    for (const double since_s : {9.7, 10.5, 40.0}) {
+        in.since_section_s = since_s;
+        CHECK(level(render(*make_stutter(gap), rig, in)[0]) == doctest::Approx(1.0f));
+    }
+    in.section_end_known = true;
+    in.since_section_s = 9.7;
     in.section = "drop";
     CHECK(level(render(*make_stutter(gap), rig, in)[0]) == doctest::Approx(1.0f));
 }

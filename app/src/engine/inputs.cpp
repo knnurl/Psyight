@@ -109,6 +109,7 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
             in.section_index = static_cast<int>(i);
             in.since_section_s = t_s - section.start_s;
             in.section_length_s = section.end_s - section.start_s;
+            in.section_end_known = true;
             in.section_progress =
                 in.section_length_s > 0.0 ? in.since_section_s / in.section_length_s : 0.0;
             in.section_energy = section.energy;

@@ -56,6 +56,9 @@ struct EngineInputs {
     int section_index = -1;        // Into TrackAnalysis::sections; -1 outside them.
     double since_section_s = 0.0;  // Since the section started.
     double section_length_s = 0.0;
+    // The section's end is known (file mode). Live mode's length is a guess (one phrase), and a
+    // section runs on past it, so effects timed to the end (the build's last beat) must not fire.
+    bool section_end_known = false;
     int section_energy = 1; // 0 low, 1 mid, 2 high.
     double riser = 0.0;     // 0 to 1: how far the build's riser has risen; 0 outside builds.
     double intensity = 0.5; // 0 to 1: how full the music is (analysis/intensity.h; live: the

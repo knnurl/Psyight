@@ -116,7 +116,7 @@ class Strobe final : public Effect {
             since = in.section == "drop" ? in.since_section_s : -1.0;
             break;
         case 1: // The build's last beat.
-            if (in.section == "build" && in.section_length_s > 0.0) {
+            if (in.section == "build" && in.section_end_known && in.section_length_s > 0.0) {
                 since = in.since_section_s - (in.section_length_s - beat_s);
             }
             break;
@@ -174,8 +174,8 @@ class Stutter final : public Effect {
         case 1: // The bassline's gate.
             open = in.bass_active ? 1.0 : std::exp(-in.since_bass_offset_s / release_s);
             break;
-        case 3: // Dark for the build's last gap_beats.
-            if (in.section == "build" && in.section_length_s > 0.0) {
+        case 3: // Dark for the build's last gap_beats (open while the end is unknown: live).
+            if (in.section == "build" && in.section_end_known && in.section_length_s > 0.0) {
                 const double into =
                     in.since_section_s - (in.section_length_s - p_.gap_beats * beat_s);
                 open = into < 0.0 ? 1.0 : std::exp(-into / release_s);
