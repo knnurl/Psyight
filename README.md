@@ -8,6 +8,8 @@ It is a Windows desktop application in C++20 with a Dear ImGui interface, plus f
 
 **Status:** a personal project under active development. The analysis, engine, output, live mode and operator tools all work in software. Real-LED and venue testing are still to come, so expect rough edges.
 
+**New to Psyight?** Start with the [tutorial](docs/TUTORIAL.md): its main text is enough to set up and run a show, and its "In depth" blocks cover every control, the measurements behind live mode and the test tools.
+
 ## What it does
 
 **Analysis (file mode).** A whole track is analysed ahead of playback:
@@ -100,8 +102,9 @@ No audio, stems, track labels or trained weights are in this repository. The liv
 
 ## Documentation
 
+- [docs/TUTORIAL.md](docs/TUTORIAL.md): setting up and running a show, at two depths.
 - [docs/SPEC.md](docs/SPEC.md): requirements and design, with a decision log.
-- [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md): running a show.
+- [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md): running a show, the full reference.
 - [docs/results/](docs/results/): measured accuracy, latency and soak results per milestone.
 - [CLAUDE.md](CLAUDE.md): conventions for working on the code (written for an AI coding agent, useful for humans too).
 
