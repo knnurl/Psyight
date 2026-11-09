@@ -1,11 +1,19 @@
 # Psyight progress and handoff
 
-Last updated: 2026-10-24. Written so another agent can pick up without the original session.
+Last updated: 2026-11-09. Written so another agent can pick up without the original session.
 
 ## Read first
 - `CLAUDE.md` (process, conventions, commands), `docs/SPEC.md` (requirements; decision log in section 16).
 - GitHub: https://github.com/knnurl/Psyight (public since 2026-10-19; no licence chosen yet), branch `main`, everything pushed. Never commit private audio, labels or weights: anything pushed is public.
 - Private audio and labels live in `data/` (gitignored): `OculusDrift.mp3`, `Hagios.mp3`, `Hall of Purity.wav`, `Phase Change.mp3`.
+
+## Where we are (2026-11-09): first test on a DJM-900NXS2 and CDJ-3000s (2026-11-10)
+- Live mode went dark through long builds: the stutter gate's "dark for the build's last beat" used live mode's one-phrase guess at a section's length and never reopened (Mae Terra, Necropsycho bootleg, black from 168 to 232 s). Fixed: EngineInputs::section_end_known (file mode only) gates effects timed to a section's end. `psyight_live_check <audio> --show <project> [--trace a b]` renders the show from the live state as a timeline (it found this).
+- The same build's drop was missed live: the free-running loop drifted more than a quarter beat over 76 s, the returning kicks were rejected for 3.7 s, and the reacquisition reset the last run, so the drop became a groove. A fix (re-phase on two off-grid kicks a period apart in a breakdown or build; keep the last run through a reacquisition) is on the local branch `wip/live-drop-reentry`, NOT on main: on the 23 labelled tracks it catches one more file-mode drop (14 of 27, plus Mae Terra's) but adds 7 live drops file mode lacks, and Trichome Psycho's bar agreement fell from 60% to 2%, OculusDrift's beats within 20 ms from 99.5% to 96.5%. Tune before merging (the comparison script: scratch compare_live.py over psyight_live_check outputs of old and new binaries).
+- Live input: an input device opens with its own channels; Preview > Live input chooses all or one pair and shows each channel's level while running (a DJM's USB sound card carries each channel beside the master; set a USB pair to MIX (REC OUT) in its settings utility, Serato's guide uses USB 9/10). Record writes the analysed input to data/recordings/live-<time>.wav (mono f32) and <name>.clock.csv (live clock, steady_clock ns, UTC); replay with psyight_live_check.
+- Unknown until the test: whether Windows exposes the DJM-900NXS2 as a WASAPI recording device (Psyight cannot use ASIO; the manual mentions ASIO, forums disagree); whether REC OUT follows the master level knob. The owner has no USB audio interface, so USB from the mixer is the only audio path. Driver: DJM-900NXS2 1.310 (Windows 10 and 11) or newer from AlphaTheta.
+- tools/python/djlink_log.py: passive Pro DJ Link logger (never sends) to data/djlink/*.jsonl with perf_counter_ns, the same clock as the recording's clock file. AnyDesk holds UDP 50001 (its discovery) and rekordbox 50000 on this laptop: quit both first. Field offsets from Deep Symmetry's analysis, still to check against the capture.
+- Owner's idea (2026-11-09), not started: follow the CDJs over Pro DJ Link and drive the show from the file-mode analysis of the local copy of the playing track (identify it by the CDJ-3000 position packets' length and BPM, or by the USB's export.pdb with a joined virtual CDJ; mix from on-air flags and, if the DJM sends it, MIDI). Needs the capture first, then a SPEC decision. Plan notes in docs/STANDALONE_PLAN.md (Pro DJ Link section).
 
 ## Where we are (2026-10-18)
 - Done today, all on `main` and pushed: settings persistence; restyle phases 2 to 4 (layout option A, show mode); builds from flatness risers (file and live); modulation (macros, hold per grid division, attack and release, effect settings as targets); the Show tab as an Ableton-style rack (knobs, device chain, route cards, modulation rings); rig templates (pillars, matrix panel); presets (scene presets, palettes, show packs; built-in library plus the user's presets/ folder). Details in the sections below.
