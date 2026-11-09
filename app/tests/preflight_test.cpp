@@ -188,4 +188,19 @@ TEST_CASE("preflight: failures and warnings that matter") {
         has(checks, "Nodes", CheckLevel::ok, "F767 at 192.168.1.50: outputs on universes 1 to 2"));
     CHECK(has(checks, "Nodes", CheckLevel::warn, "universes 3"));
     CHECK(has(checks, "Network", CheckLevel::warn, "10.0.0.5 is not on any local subnet"));
+
+    // The show sent to a node that is off while another answered (the STM32 unpowered, the
+    // ESP32 found): a warning naming the nodes that answered.
+    ArtNode esp32 = node;
+    esp32.ip = {192, 168, 1, 60};
+    art.in.nodes = std::vector<ArtNode>{node, esp32};
+    art.project.output.address = {192, 168, 1, 83};
+    checks = art.run();
+    CHECK(has(checks, "Nodes", CheckLevel::warn,
+              "The show goes to 192.168.1.83, but no node answered there; nodes answered at "
+              "192.168.1.50, 192.168.1.60"));
+    art.project.output.address = esp32.ip; // At a node that answered: no warning.
+    CHECK_FALSE(has(art.run(), "Nodes", CheckLevel::warn, "no node answered there"));
+    art.project.output.address = lan.broadcast(); // Broadcast reaches them all.
+    CHECK_FALSE(has(art.run(), "Nodes", CheckLevel::warn, "no node answered there"));
 }

@@ -222,6 +222,26 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
                 format("No node reported an output on universes %s.",
                        universe_list(missing).c_str()));
         }
+        // The show going to one address where no node answered (a node switched off, or the
+        // address of another node): the found nodes get nothing.
+        const auto &address = p.output.address;
+        const bool broadcast =
+            std::any_of(in.interfaces.begin(), in.interfaces.end(),
+                        [&](const NetworkInterface &i) { return i.broadcast() == address; }) ||
+            address == std::array<std::uint8_t, 4>{255, 255, 255, 255};
+        const bool answered = std::any_of(in.nodes->begin(), in.nodes->end(),
+                                          [&](const ArtNode &n) { return n.ip == address; });
+        if (!multicast && address[0] != 127 && !broadcast && !answered) {
+            std::string found;
+            for (const ArtNode &n : *in.nodes) {
+                found += (found.empty() ? "" : ", ") + ipv4_text(n.ip);
+            }
+            add("Nodes", CheckLevel::warn,
+                format("The show goes to %s, but no node answered there; nodes answered at %s. "
+                       "Set Show > Output to a node's address (ignore this if that node does not "
+                       "answer Art-Net polls).",
+                       ipv4_text(address).c_str(), found.c_str()));
+        }
     }
     return out;
 }
