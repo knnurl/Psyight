@@ -26,6 +26,13 @@ itself a 169.254.x.y address after about a minute; broadcasts arrive either way.
 system tray; the logger names whatever holds a port it cannot open. Windows asks once whether
 Python may receive on this network (often "Public" here): allow it, or nothing arrives. Stop with
 Ctrl+C.
+
+--tcnet: logs TCNet instead (UDP 60000 to 60002, to <out>/tcnet-<time>.jsonl), as AlphaTheta's
+PRO DJ LINK Bridge publishes the decks: it must run on its own, since the Bridge needs ports 50000
+and 50002. Still passive: broadcast status (type 5) and time packets (type 254, each layer's
+playhead in ms, every 1 to 40 ms) arrive without opting in. TCNet specification V3.5.1B (Event
+Imagineering Group, "open and free to be used"): header "TCN" at 4, message type at 7, node name
+at 8 (8 bytes); a time packet's layer 1 to 4 times at 24, 28, 32 and 36 (little-endian).
 """
 
 import argparse
@@ -59,6 +66,11 @@ TYPE_NAMES = {
     (50002, 0x0A): "CDJ status",
     (50002, 0x29): "mixer status",
 }
+TCNET_PORTS = (60000, 60001, 60002)
+TCNET_TYPES = {2: "opt-in", 3: "opt-out", 5: "status", 10: "time sync", 13: "error",
+               20: "request", 30: "application data", 101: "control", 128: "text",
+               132: "keyboard", 200: "data", 204: "file", 213: "application specific",
+               254: "time"}
 
 
 def holder_of(port):
@@ -85,14 +97,18 @@ def main():
     parser.add_argument("--out", default=os.path.join("data", "djlink"))
     parser.add_argument("--summary-s", type=float, default=2.0)
     parser.add_argument("--host", default="", help="address to listen on (default: all)")
-    parser.add_argument("--port-base", type=int, default=50000,
+    parser.add_argument("--port-base", type=int, default=None,
                         help="listen on this and the next two ports (tests only)")
+    parser.add_argument("--tcnet", action="store_true",
+                        help="log TCNet (PRO DJ LINK Bridge's output) instead of Pro DJ Link")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
+    ports = TCNET_PORTS if args.tcnet else PORTS
+    base = args.port_base if args.port_base is not None else ports[0]
 
-    sockets = {}  # socket -> the Pro DJ Link port it stands for
-    for port in PORTS:
-        actual = port - 50000 + args.port_base
+    sockets = {}  # socket -> the protocol port it stands for
+    for port in ports:
+        actual = port - ports[0] + base
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         try:
@@ -104,20 +120,24 @@ def main():
             s.close()
             continue
         sockets[s] = port
-    missing = [p for p in PORTS if p not in sockets.values()]
-    if 50001 in missing:
+    missing = [p for p in ports if p not in sockets.values()]
+    if not args.tcnet and 50001 in missing:
         print("WARNING: no beats or CDJ-3000 positions without port 50001")
+    if args.tcnet and 60001 in missing:
+        print("WARNING: no TCNet time packets (playheads) without port 60001")
     if not sockets:
         sys.exit("no port to listen on")
 
     os.makedirs(args.out, exist_ok=True)
-    path = os.path.join(args.out, datetime.now().strftime("djlink-%Y%m%d-%H%M%S.jsonl"))
-    print(f"listening on {sorted(p - 50000 + args.port_base for p in sockets.values())}, "
+    prefix = "tcnet" if args.tcnet else "djlink"
+    path = os.path.join(args.out, datetime.now().strftime(f"{prefix}-%Y%m%d-%H%M%S.jsonl"))
+    print(f"listening on {sorted(p - ports[0] + base for p in sockets.values())}, "
           f"writing {path} (Ctrl+C to stop)")
 
-    counts = defaultdict(int)  # (src, port, type) -> packets
-    names = {}  # src -> (name, device number)
-    beats = {}  # src -> (bpm, pitch %, beat in bar, t_ns)
+    counts = defaultdict(int)  # (source, port, type) -> packets
+    names = {}  # source -> (name, device number)
+    beats = {}  # source -> (bpm, pitch %, beat in bar, t_ns)
+    layers = {}  # TCNet source -> (layer 1 to 4 times in ms, t_ns)
     other = 0
     total = 0
     next_summary = time.monotonic() + args.summary_s
@@ -133,6 +153,19 @@ def main():
                     log.write(json.dumps({"t_ns": t_ns, "utc": utc, "port": port, "src": src,
                                           "hex": data.hex()}) + "\n")
                     total += 1
+                    if args.tcnet:
+                        if len(data) < 16 or data[4:7] != b"TCN":
+                            other += 1
+                            continue
+                        name = data[8:16].split(b"\0", 1)[0].decode("ascii", "replace")
+                        source = f"{src} {name}"
+                        kind = data[7]
+                        counts[(source, port, kind)] += 1
+                        names.setdefault(source, (name, 0))
+                        if kind == 254 and len(data) >= 40:
+                            layers[source] = ([int.from_bytes(data[24 + 4 * i:28 + 4 * i], "little")
+                                               for i in range(4)], t_ns)
+                        continue
                     if not data.startswith(MAGIC) or len(data) < 0x0B:
                         other += 1
                         continue
@@ -149,9 +182,20 @@ def main():
                 if now >= next_summary:
                     next_summary = now + args.summary_s
                     log.flush()
-                    print(f"--- {datetime.now():%H:%M:%S}: {total} packets ({other} not Pro DJ Link)")
+                    print(f"--- {datetime.now():%H:%M:%S}: {total} packets ({other} not "
+                          f"{'TCNet' if args.tcnet else 'Pro DJ Link'})")
                     for src in sorted({k[0] for k in counts}):
                         name, number = names.get(src, ("?", 0))
+                        if args.tcnet:
+                            kinds = ", ".join(f"{TCNET_TYPES.get(k, k)} {n}"
+                                              for (s, p, k), n in sorted(counts.items()) if s == src)
+                            line = f"  {src}: {kinds}"
+                            if src in layers:
+                                times, t = layers[src]
+                                line += " | layers 1-4 at " + ", ".join(
+                                    f"{ms / 1000:.1f} s" for ms in times)
+                            print(line)
+                            continue
                         kinds = ", ".join(
                             f"{TYPE_NAMES.get((p, k), f'{p}/0x{k:02x}')} {n}"
                             for (s, p, k), n in sorted(counts.items()) if s == src)
