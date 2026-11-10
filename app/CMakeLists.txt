@@ -76,7 +76,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/io/project.cpp
                                src/output/patch.cpp src/output/packets.cpp
                                src/output/sender.cpp src/output/virtual_node.cpp
-                               src/output/show.cpp src/output/udp_socket_win32.cpp
+                               src/output/show.cpp src/output/show_check.cpp src/output/udp_socket_win32.cpp
                                src/output/precise_sleep_win32.cpp src/output/art_poll.cpp
                                src/output/discovery.cpp src/output/preflight.cpp
                                src/ml/student.cpp src/analysis/live_analysis.cpp
@@ -204,6 +204,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp
                              tests/rig_export_test.cpp tests/strip_edit_test.cpp tests/joints_test.cpp
                              tests/hex_effects_test.cpp
+                             tests/show_golden_test.cpp
                              tests/build_kit_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c

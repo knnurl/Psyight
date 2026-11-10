@@ -1,0 +1,328 @@
+{
+  "Dark forest": {
+    "current_max_a": 3.750000184697565,
+    "current_mean_a": 2.715700941839264,
+    "dark_before_mean": 0.20503697582511804,
+    "dark_mean": 0.8070700723448356,
+    "flashes_after": 0,
+    "flashes_before": 130,
+    "groups": {
+      "hex": {
+        "dark_share": 0.0010845986984815619,
+        "max_byte": 34,
+        "mean_byte": 1.7034382926465366
+      },
+      "inner": {
+        "dark_share": 0.0016268980477223427,
+        "max_byte": 34,
+        "mean_byte": 1.6736576126253602
+      },
+      "left": {
+        "dark_share": 0.0010845986984815619,
+        "max_byte": 34,
+        "mean_byte": 1.6944989530174415
+      },
+      "middle": {
+        "dark_share": 0.0016268980477223427,
+        "max_byte": 34,
+        "mean_byte": 1.6397632344117745
+      },
+      "outer": {
+        "dark_share": 0.0010845986984815619,
+        "max_byte": 34,
+        "mean_byte": 1.7727014654812465
+      },
+      "right": {
+        "dark_share": 0.0010845986984815619,
+        "max_byte": 34,
+        "mean_byte": 1.696453424949533
+      },
+      "spokes": {
+        "dark_share": 0.0010845986984815619,
+        "max_byte": 34,
+        "mean_byte": 1.6776049198602094
+      }
+    },
+    "max_after_in_1s": 0,
+    "max_before_in_1s": 7,
+    "power_limited_frames": 445,
+    "scenes": {
+      "Acid gate": {
+        "flashes_alone": 458,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Deep space": {
+        "flashes_alone": 0,
+        "max_byte": 10,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 888.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.9
+      },
+      "Drop impact": {
+        "flashes_alone": 321,
+        "max_byte": 34,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 1101.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.8
+      },
+      "Forest floor": {
+        "flashes_alone": 229,
+        "max_byte": 15,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 1105.0,
+        "quarter_above_20": 0.0,
+        "seconds": 38.9
+      },
+      "Nebula": {
+        "flashes_alone": 53,
+        "max_byte": 15,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 916.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.85
+      },
+      "Pitch meter": {
+        "flashes_alone": 439,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Strobe roll": {
+        "flashes_alone": 3,
+        "max_byte": 13,
+        "max_flashes_alone_in_1s": 2,
+        "median_lit_pixels": 326.0,
+        "quarter_above_20": 0.0,
+        "seconds": 20.75
+      }
+    }
+  },
+  "Hexagon": {
+    "current_max_a": 3.750000175673805,
+    "current_mean_a": 2.106353241141027,
+    "dark_before_mean": 0.38977407063090314,
+    "dark_mean": 0.9327486638585656,
+    "flashes_after": 8,
+    "flashes_before": 91,
+    "groups": {
+      "hex": {
+        "dark_share": 0.026030368763557483,
+        "max_byte": 27,
+        "mean_byte": 1.5823357703328824
+      },
+      "inner": {
+        "dark_share": 0.06019522776572668,
+        "max_byte": 27,
+        "mean_byte": 1.5963367285988281
+      },
+      "left": {
+        "dark_share": 0.026030368763557483,
+        "max_byte": 27,
+        "mean_byte": 1.569908550984498
+      },
+      "middle": {
+        "dark_share": 0.033622559652928416,
+        "max_byte": 26,
+        "mean_byte": 1.601681127982647
+      },
+      "outer": {
+        "dark_share": 0.04609544468546638,
+        "max_byte": 26,
+        "mean_byte": 1.493319279378371
+      },
+      "right": {
+        "dark_share": 0.026030368763557483,
+        "max_byte": 27,
+        "mean_byte": 1.5695574670127364
+      },
+      "spokes": {
+        "dark_share": 0.027114967462039046,
+        "max_byte": 27,
+        "mean_byte": 1.688354874668596
+      }
+    },
+    "max_after_in_1s": 4,
+    "max_before_in_1s": 6,
+    "power_limited_frames": 134,
+    "scenes": {
+      "Comet rain": {
+        "flashes_alone": 95,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Deep space": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Drop bloom": {
+        "flashes_alone": 57,
+        "max_byte": 23,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 552.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.8
+      },
+      "Hex echoes": {
+        "flashes_alone": 363,
+        "max_byte": 18,
+        "max_flashes_alone_in_1s": 7,
+        "median_lit_pixels": 1028.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.9
+      },
+      "Hex pressure": {
+        "flashes_alone": 11,
+        "max_byte": 20,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 519.0,
+        "quarter_above_20": 0.0,
+        "seconds": 20.75
+      },
+      "Hex radar": {
+        "flashes_alone": 235,
+        "max_byte": 27,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 625.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.7
+      },
+      "Hex tunnel": {
+        "flashes_alone": 307,
+        "max_byte": 27,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 675.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.2
+      },
+      "Nebula": {
+        "flashes_alone": 53,
+        "max_byte": 13,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 942.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.85
+      }
+    }
+  },
+  "Psy club": {
+    "current_max_a": 3.750000201044002,
+    "current_mean_a": 2.5444587777874106,
+    "dark_before_mean": 0.275915118196391,
+    "dark_mean": 0.8071939308381831,
+    "flashes_after": 0,
+    "flashes_before": 214,
+    "groups": {
+      "hex": {
+        "dark_share": 0.008134490238611713,
+        "max_byte": 35,
+        "mean_byte": 1.9605996090088655
+      },
+      "inner": {
+        "dark_share": 0.01735357917570499,
+        "max_byte": 35,
+        "mean_byte": 1.9119353013298157
+      },
+      "left": {
+        "dark_share": 0.008134490238611713,
+        "max_byte": 35,
+        "mean_byte": 1.976543724582987
+      },
+      "middle": {
+        "dark_share": 0.008676789587852495,
+        "max_byte": 35,
+        "mean_byte": 1.8134586390978573
+      },
+      "outer": {
+        "dark_share": 0.008134490238611713,
+        "max_byte": 35,
+        "mean_byte": 2.1247377613475473
+      },
+      "right": {
+        "dark_share": 0.008134490238611713,
+        "max_byte": 35,
+        "mean_byte": 1.976436100627354
+      },
+      "spokes": {
+        "dark_share": 0.008134490238611713,
+        "max_byte": 35,
+        "mean_byte": 1.8852057724752993
+      }
+    },
+    "max_after_in_1s": 0,
+    "max_before_in_1s": 6,
+    "power_limited_frames": 527,
+    "scenes": {
+      "Comet rain": {
+        "flashes_alone": 95,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Deep space": {
+        "flashes_alone": 0,
+        "max_byte": 10,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 888.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.9
+      },
+      "Drop bloom": {
+        "flashes_alone": 57,
+        "max_byte": 23,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 552.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.8
+      },
+      "Fire riser": {
+        "flashes_alone": 0,
+        "max_byte": 34,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 480.0,
+        "quarter_above_20": 0.0,
+        "seconds": 20.75
+      },
+      "Kick pulse": {
+        "flashes_alone": 231,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Nebula": {
+        "flashes_alone": 53,
+        "max_byte": 22,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 933.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.85
+      },
+      "Scanner": {
+        "flashes_alone": 366,
+        "max_byte": 35,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 945.0,
+        "quarter_above_20": 0.0,
+        "seconds": 38.9
+      }
+    }
+  }
+}
