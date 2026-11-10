@@ -171,7 +171,8 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     out.index = index_++;
     out.t_s = t_s;
     out.flashes_limited = flashes_limited_;
-    const std::vector<std::uint8_t> bytes = to_bytes(out.frame, config.limiter.gamma);
+    const std::vector<std::uint8_t> bytes =
+        to_bytes(out.frame, config.limiter.gamma, config.limiter.dither, out.index);
     Tee tee(node_, socket_.get());
     out.packets_sent = sender_.send_frame(config.output, patch_frame(config.patch, bytes), tee);
     send_errors_ += tee.errors;

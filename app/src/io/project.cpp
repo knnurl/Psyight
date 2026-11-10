@@ -599,6 +599,8 @@ Result<Project> parse_project_json(std::string_view json_text) {
         l.power_model =
             from_id_or_throw(power_model_from_id(power_model), "power model", power_model);
         l.quiescent_ma = number(lim, "quiescent_ma", l.quiescent_ma, 0.0, 5.0);
+        const std::string dither = optional<std::string>(lim, "dither", dither_id(l.dither));
+        l.dither = from_id_or_throw(dither_from_id(dither), "dither", dither);
         if (const auto caps = lim.find("group_caps"); caps != lim.end()) {
             for (const json &c : caps->get_ref<const json::array_t &>()) {
                 p.group_caps.push_back(
@@ -737,6 +739,7 @@ Result<std::string> to_project_json(const Project &p) {
               {"gamma", finite(l.gamma, "gamma")},
               {"power_model", power_model_id(l.power_model)},
               {"quiescent_ma", finite(l.quiescent_ma, "quiescent_ma")},
+              {"dither", dither_id(l.dither)},
               {"group_caps", group_caps}}},
             {"latency_offset_ms", finite(p.latency_offset_ms, "latency_offset_ms")},
             {"automation", automation_json(a)},

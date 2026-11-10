@@ -1,5 +1,7 @@
 #include "engine/limiters.h"
 
+#include "engine/space.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -73,6 +75,18 @@ double estimated_current_a(const Frame &frame, const LimiterParams &params) {
     return params.power_model == PowerModel::linear
                ? estimated_current_a(frame, params.current_per_channel_ma)
                : duty_current_a(frame, 1.0, params);
+}
+
+const char *dither_id(Dither dither) { return dither == Dither::spatial ? "spatial" : "off"; }
+
+std::optional<Dither> dither_from_id(const std::string &id) {
+    if (id == "off") {
+        return Dither::off;
+    }
+    if (id == "spatial") {
+        return Dither::spatial;
+    }
+    return std::nullopt;
 }
 
 const char *power_model_id(PowerModel model) {
@@ -235,6 +249,25 @@ std::vector<std::uint8_t> to_bytes(const Frame &frame, double gamma) {
         bytes.push_back(to_byte(c.r, gamma));
         bytes.push_back(to_byte(c.g, gamma));
         bytes.push_back(to_byte(c.b, gamma));
+    }
+    return bytes;
+}
+
+std::vector<std::uint8_t> to_bytes(const Frame &frame, double gamma, Dither dither,
+                                   std::int64_t frame_index) {
+    if (dither == Dither::off) {
+        return to_bytes(frame, gamma);
+    }
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(frame.size() * 3);
+    const auto index = static_cast<std::uint64_t>(frame_index);
+    for (size_t i = 0; i < frame.size(); ++i) {
+        const float channels[3] = {frame[i].r, frame[i].g, frame[i].b};
+        for (std::uint64_t ch = 0; ch < 3; ++ch) {
+            const double level = std::clamp(static_cast<double>(channels[ch]), 0.0, 1.0);
+            const double v = std::floor(255.0 * std::pow(level, gamma) + hash_unit(i, index, ch));
+            bytes.push_back(static_cast<std::uint8_t>(std::clamp(v, 0.0, 255.0)));
+        }
     }
     return bytes;
 }

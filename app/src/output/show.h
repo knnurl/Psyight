@@ -101,6 +101,9 @@ struct ShowFrame {
 class ShowRenderer {
   public:
     ShowFrame render(const ShowConfig &config, double t_s);
+    // The index the next frame takes (replay: the recorded one, so a frame the recorder dropped
+    // does not shift the dither of every later frame).
+    void set_next_index(std::int64_t index) { index_ = index; }
 
   private:
     class Tee;

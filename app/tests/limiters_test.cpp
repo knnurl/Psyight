@@ -247,3 +247,25 @@ TEST_CASE("limiters: group caps dim the strips with that tag, the lowest cap win
     }
     CHECK(group_caps_per_pixel(rig, {}) == std::vector<float>(rig.pixels.size(), 1.0f));
 }
+
+TEST_CASE("limiters: spatial dithering keeps the mean level between bytes; off is unchanged") {
+    constexpr double kGamma = 2.2;
+    for (double level = 0.02; level <= 0.4001; level += 0.02) {
+        CAPTURE(level);
+        const auto v = static_cast<float>(level);
+        const Frame frame(4096, Rgb{v, v, v});
+        const std::vector<std::uint8_t> bytes = to_bytes(frame, kGamma, Dither::spatial, 1234);
+        // The mean byte over the pixels (each channel of each).
+        double sum = 0.0;
+        for (const std::uint8_t b : bytes) {
+            sum += b;
+        }
+        const double target = 255.0 * std::pow(static_cast<double>(v), kGamma);
+        CHECK(std::abs(sum / static_cast<double>(bytes.size()) - target) < 0.02);
+        // The same frame index gives the same bytes; another index others.
+        CHECK(to_bytes(frame, kGamma, Dither::spatial, 1234) == bytes);
+        CHECK(to_bytes(frame, kGamma, Dither::spatial, 1235) != bytes);
+        // Off is today's rounding.
+        CHECK(to_bytes(frame, kGamma, Dither::off, 1234) == to_bytes(frame, kGamma));
+    }
+}

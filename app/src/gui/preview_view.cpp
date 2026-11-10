@@ -913,6 +913,17 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
                 "frames and dims wide bright ones.");
             draw_group_caps();
         }
+        if (tier_at_least(Tier::engineer)) {
+            bool dither = p.dither == Dither::spatial;
+            if (ImGui::Checkbox("Spatial dithering (try on the piece)", &dither)) {
+                p.dither = dither ? Dither::spatial : Dither::off;
+                changed = true;
+            }
+            ImGui::SetItemTooltip(
+                "Neighbouring pixels round to different bytes, so under a diffuser dim levels and "
+                "gradients fall between the 8-bit steps. A single pixel may flicker between two "
+                "steps: judge it on the real LEDs.");
+        }
         if (tier_at_least(Tier::engineer)) { // Disabling it is an Engineer action (SPEC 7.7).
             changed |= ImGui::Checkbox("Flash limiter (3 per second)", &p.flash_limiter);
         } else {

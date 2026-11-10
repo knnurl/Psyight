@@ -101,6 +101,7 @@ int replay(const std::filesystem::path &folder) {
             ++missing_config;
             continue;
         }
+        renderer.set_next_index(f.index); // The recorded index (the dither follows it).
         const ShowFrame shown = renderer.render(*c->second, f.t_s);
         ++compared;
         int difference = shown.node_rgb.size() == f.rgb.size() ? 0 : 255;

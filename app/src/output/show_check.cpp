@@ -143,7 +143,8 @@ ShowCheckResult run_show_check(const ShowConfig &config, double duration_s,
         dark.push_back(dark_share(shown.frame));
         render_ms.push_back(shown.render_ms);
 
-        const std::vector<std::uint8_t> bytes = to_bytes(shown.frame, config.limiter.gamma);
+        const std::vector<std::uint8_t> bytes =
+            to_bytes(shown.frame, config.limiter.gamma, config.limiter.dither, shown.index);
         ShowCheckFrame row;
         row.t_s = t_s;
         row.section = shown.section;

@@ -36,6 +36,14 @@
 
 namespace psyight {
 
+// Rounding to bytes (to_bytes): off rounds each channel (with the visible floor); spatial adds a
+// seeded threshold per pixel, channel and frame before rounding down, so neighbours round
+// differently and a diffuser averages them into the levels between bytes (finding L7). Off by
+// default: whether single-step flicker shows is for the owner to judge on the piece.
+enum class Dither { off, spatial };
+const char *dither_id(Dither dither); // "off", "spatial" (files).
+std::optional<Dither> dither_from_id(const std::string &id);
+
 // How the supply current is estimated (above).
 enum class PowerModel { linear, duty };
 const char *power_model_id(PowerModel model); // "linear", "duty" (files).
@@ -52,6 +60,7 @@ struct LimiterParams {
     double gamma = 2.2;
     PowerModel power_model = PowerModel::duty;
     double quiescent_ma = 1.0; // Per pixel, drawn whatever the colour (duty model). [Verify]
+    Dither dither = Dither::off;
 };
 
 // A brightness cap for the strips tagged with a group (SPEC 7.7: "global, and per group").
@@ -154,5 +163,10 @@ inline constexpr double kVisibleFloor = 0.02;
 // Gamma-corrected 8-bit RGB triples, pixel by pixel, a channel at or above kVisibleFloor at
 // least 1.
 std::vector<std::uint8_t> to_bytes(const Frame &frame, double gamma);
+// With a dither: off is the above; spatial is floor(255 * level^gamma + u), u from
+// hash_unit(pixel, frame_index, channel), clamped to 255, with no visible floor (the dither
+// carries the fraction). Deterministic for the same frame index.
+std::vector<std::uint8_t> to_bytes(const Frame &frame, double gamma, Dither dither,
+                                   std::int64_t frame_index);
 
 } // namespace psyight

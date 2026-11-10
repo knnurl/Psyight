@@ -66,6 +66,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.limiter.gamma = 2.5;
     p.limiter.power_model = PowerModel::linear;
     p.limiter.quiescent_ma = 2.5;
+    p.limiter.dither = Dither::spatial;
     p.latency_offset_ms = 42.5;
     p.automation.crossfade_beats = 8.0;
     p.automation.palette_every_phrases = 4;
@@ -120,6 +121,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.limiter.gamma == 2.5);
     CHECK(q.limiter.power_model == PowerModel::linear);
     CHECK(q.limiter.quiescent_ma == 2.5);
+    CHECK(q.limiter.dither == Dither::spatial);
     CHECK(q.latency_offset_ms == 42.5);
     CHECK(q.automation.crossfade_beats == 8.0);
     CHECK(q.automation.palette_every_phrases == 4);
