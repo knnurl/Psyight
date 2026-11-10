@@ -173,7 +173,113 @@ class NoteArcs final : public Effect {
     NoteArcsParams p_;
 };
 
+// The latest trigger that counts (every nth), and its age; false when none.
+bool latest_every(const HitTrigger &t, int every, long long *index, double *age_s) {
+    if (t.index < 0) {
+        return false;
+    }
+    const long long n = std::max(1, every);
+    for (long long k = 0; k < n; ++k) {
+        const long long event = t.index - k;
+        if (event < 0) {
+            return false;
+        }
+        if (((event % n) + n) % n != 0) {
+            continue;
+        }
+        double age = t.since_s;
+        if (k > 0) {
+            if (t.ages != nullptr && k < kEventHistory) {
+                age = (*t.ages)[static_cast<size_t>(k)];
+            } else if (t.spacing_s > 0.0) {
+                age = t.since_s + static_cast<double>(k) * t.spacing_s;
+            } else {
+                return false;
+            }
+        }
+        if (!std::isfinite(age)) {
+            return false;
+        }
+        *index = event;
+        *age_s = age;
+        return true;
+    }
+    return false;
+}
+
+class SpokeKick final : public Effect {
+  public:
+    explicit SpokeKick(const SpokeKickParams &p) : p_(p) {}
+    const char *name() const override { return "Spoke kick"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        std::fill(out.begin(), out.end(), Rgb{});
+        long long index = 0;
+        double since_s = 0.0;
+        if (!latest_every(resolve_trigger(c.in, p_.trigger), p_.every, &index, &since_s)) {
+            return;
+        }
+        const double beat_s = c.in.beat_s > 0.0 ? c.in.beat_s : kReferenceBeatS;
+        const double env = hit_envelope(since_s, p_.hold_s, p_.decay_beats * beat_s);
+        if (env < 1e-3) {
+            return;
+        }
+        const HexTopology t = hex_topology(c.rig);
+        const double span = std::max(1e-6, 1.0 - t.u_min);
+        const double x = since_s / std::max(1e-3, p_.travel_beats * beat_s);
+        const double head = overshoot_ease(std::min(x, 1.0), p_.overshoot);
+        const double tail = std::max(0.01, p_.tail);
+        const Rgb colour = p_.colours == 1
+                               ? Rgb{1.0f, 1.0f, 1.0f}
+                               : c.palette.at(0.25 * static_cast<double>(((index % 4) + 4) % 4));
+        std::vector<char> is_spoke(c.rig.strips.size(), 0);
+        for (const int s : t.spokes) {
+            is_spoke[static_cast<size_t>(s)] = 1;
+        }
+        // Each ring's place along the spokes, for the flash as the head passes.
+        std::vector<double> ring_w(c.rig.strips.size(), -1.0);
+        if (p_.rings == 1) {
+            std::vector<double> sum(c.rig.strips.size(), 0.0);
+            std::vector<int> count(c.rig.strips.size(), 0);
+            for (size_t i = 0; i < out.size(); ++i) {
+                const auto s = static_cast<size_t>(c.rig.pixels[i].strip);
+                sum[s] += t.radius[i];
+                ++count[s];
+            }
+            for (const int r : t.rings) {
+                const auto s = static_cast<size_t>(r);
+                ring_w[s] = count[s] > 0 ? (sum[s] / count[s] - t.u_min) / span : -1.0;
+            }
+        }
+        for (size_t i = 0; i < out.size(); ++i) {
+            const auto s = static_cast<size_t>(c.rig.pixels[i].strip);
+            const double w = (t.radius[i] - t.u_min) / span;
+            double v = 0.0;
+            if (is_spoke[s] != 0) {
+                if (w <= head) {
+                    v = std::max(0.0, 1.0 - (head - w) / tail);
+                }
+                if (since_s < p_.hold_s && w < 0.1) {
+                    v = 1.0; // The hit is on the kick.
+                }
+            } else if (ring_w[s] >= 0.0) {
+                const double d = (ring_w[s] - head) / 0.08;
+                v = std::exp(-d * d);
+            }
+            if (v > 0.0) {
+                out[i] = scaled(colour, std::min(1.0, p_.level * env * v));
+            }
+        }
+    }
+
+  private:
+    SpokeKickParams p_;
+};
+
 } // namespace
+
+std::unique_ptr<Effect> make_spoke_kick(const SpokeKickParams &params) {
+    return std::make_unique<SpokeKick>(params);
+}
 
 std::unique_ptr<Effect> make_note_arcs(const NoteArcsParams &params) {
     return std::make_unique<NoteArcs>(params);

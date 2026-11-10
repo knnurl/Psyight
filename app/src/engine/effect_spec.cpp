@@ -536,6 +536,38 @@ template <> const std::vector<Field<NoteArcsParams>> &fields<NoteArcsParams>() {
     return f;
 }
 
+template <> const std::vector<Field<SpokeKickParams>> &fields<SpokeKickParams>() {
+    using P = SpokeKickParams;
+    static const std::vector<Field<P>> f = {
+        {{"trigger", "Trigger", "", 0.0, kHitTriggerCount - 1.0, true,
+          "What sends the light out: the kick, or the beat when the kick detector misses one",
+          kHitTriggerOptions},
+         nullptr,
+         &P::trigger},
+        {{"every", "Every", "", 1.0, 16.0, true, "Every nth trigger"}, nullptr, &P::every},
+        {{"travel_beats", "Travel", "beats", 0.125, 4.0, false,
+          "Beats the light takes from a spoke's inner end to its corner"},
+         &P::travel_beats},
+        {{"overshoot", "Overshoot", "", 0.0, 0.3, false, "How far it runs past and settles back"},
+         &P::overshoot},
+        {{"tail", "Tail", "", 0.05, 1.0, false, "Tail length, as a share of the spoke"}, &P::tail},
+        {{"hold_s", "Hold", "s", 0.0, 0.2, false, "Full brightness on the hit before the decay"},
+         &P::hold_s},
+        {{"decay_beats", "Decay", "beats", 0.1, 4.0, false, "Brightness time constant"},
+         &P::decay_beats},
+        {{"rings", "Rings", "", 0.0, 1.0, true, "Flash each ring as the light passes it",
+          "Off|Flash as it passes"},
+         nullptr,
+         &P::rings},
+        {{"colours", "Colour", "", 0.0, 1.0, true, "A palette step per hit, or white",
+          "Palette|White"},
+         nullptr,
+         &P::colours},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -605,6 +637,8 @@ EffectSpec default_spec(EffectType type) {
         return {PitchClockParams{}};
     case EffectType::note_arcs:
         return {NoteArcsParams{}};
+    case EffectType::spoke_kick:
+        return {SpokeKickParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -655,8 +689,10 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_interference(p);
             } else if constexpr (std::is_same_v<P, PitchClockParams>) {
                 return make_pitch_clock(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, NoteArcsParams>) {
                 return make_note_arcs(p);
+            } else {
+                return make_spoke_kick(p);
             }
         },
         spec.params);
@@ -712,6 +748,8 @@ const char *effect_type_id(EffectType type) {
         return "pitch_clock";
     case EffectType::note_arcs:
         return "note_arcs";
+    case EffectType::spoke_kick:
+        return "spoke_kick";
     }
     return "plasma";
 }

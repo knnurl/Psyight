@@ -58,6 +58,9 @@
 //   doubts the note.
 // - note arcs: each bass note draws an arc round a ring from a corner, growing while it is held
 //   (arc_per_16th a 16th), so gate ratio and long notes read as length; long notes breathe.
+// - spoke kick: on each kick (or the beat when the detector misses one) a light runs out along
+//   the spokes from their inner ends, easing past the corner, with a tail and a short hold on the
+//   hit; the rings can flash as it passes.
 #pragma once
 
 #include "engine/colour.h"
@@ -321,6 +324,21 @@ struct NoteArcsParams {
     double level = 1.0;
 };
 
+// Spoke kick (kick): on each kick a light runs out along the spokes from their inner ends, easing
+// past the corner and back, with a tail; optionally each ring flashes as it passes.
+struct SpokeKickParams {
+    int trigger = 5; // engine/shape.h kHitTriggerOptions: kick, else beat.
+    int every = 1;
+    double travel_beats = 0.5; // Inner end to corner.
+    double overshoot = 0.1;    // Past the corner and back (engine/shape.h overshoot_ease).
+    double tail = 0.35;        // Of the spoke's length.
+    double hold_s = 0.04;      // Full level on the hit before the decay.
+    double decay_beats = 0.75;
+    int rings = 0;   // Off, flash as it passes.
+    int colours = 0; // Palette, white.
+    double level = 1.0;
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -345,14 +363,15 @@ enum class EffectType {
     sectors,
     interference,
     pitch_clock,
-    note_arcs
+    note_arcs,
+    spoke_kick
 };
 using EffectParams =
     std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
                  BuildParams, DropBurstParams, ChaseParams, WaveParams, StrobeParams, StutterParams,
                  NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams,
                  HexPulseParams, CubeParams, SectorsParams, InterferenceParams, PitchClockParams,
-                 NoteArcsParams>;
+                 NoteArcsParams, SpokeKickParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -380,6 +399,7 @@ std::unique_ptr<Effect> make_sectors(const SectorsParams &params = {});
 std::unique_ptr<Effect> make_interference(const InterferenceParams &params = {});
 std::unique_ptr<Effect> make_pitch_clock(const PitchClockParams &params = {});
 std::unique_ptr<Effect> make_note_arcs(const NoteArcsParams &params = {});
+std::unique_ptr<Effect> make_spoke_kick(const SpokeKickParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

@@ -282,3 +282,81 @@ TEST_CASE("note arcs: a note's arc is as long as it is held") {
     check_sane({p}, rig, note(35, 0.0, 0.3));
     check_sane({NoteArcsParams{}}, rig, note(35, 0.0, 0.6));
 }
+
+namespace {
+
+// A kick `since_s` ago in a groove at 150 BPM.
+EngineInputs kick(double since_s) {
+    EngineInputs in = grid_at(40, since_s / 0.4);
+    in.section = "groove";
+    in.kicks_so_far = 41;
+    in.since_kick_s = since_s;
+    return in;
+}
+
+} // namespace
+
+TEST_CASE("spoke kick: from the inner ends on the hit, out to the corners, easing past") {
+    const Rig rig = mandala();
+    const HexTopology t = hex_topology(rig);
+    const SpokeKickParams p; // Travel half a beat (0.2 s), overshoot 0.1, hold 40 ms.
+    const auto w_of = [&](size_t i) { return (t.radius[i] - t.u_min) / (1.0 - t.u_min); };
+    std::vector<size_t> spoke_pixels;
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        if (t.ring_of_strip[static_cast<size_t>(rig.pixels[i].strip)] < 0) {
+            spoke_pixels.push_back(i);
+        }
+    }
+    // On the kick: the spokes' inner ends are lit, nothing beyond a tenth of the way out.
+    const Frame hit = render({p}, rig, kick(0.0));
+    bool inner_lit = false;
+    for (const size_t i : spoke_pixels) {
+        if (w_of(i) < 0.1) {
+            inner_lit |= level(hit[i]) > 0.9f;
+        } else {
+            CHECK(level(hit[i]) == 0.0f);
+        }
+    }
+    CHECK(inner_lit);
+    for (size_t i = 0; i < rig.pixels.size(); ++i) { // Rings off: the rings stay dark.
+        if (t.ring_of_strip[static_cast<size_t>(rig.pixels[i].strip)] >= 0) {
+            CHECK(level(hit[i]) == 0.0f);
+        }
+    }
+    // Past the corner and back: the head beyond 1 for x in 0.6 to 0.9, settling at 1.
+    for (double x = 0.6; x <= 0.9; x += 0.1) {
+        CHECK(overshoot_ease(x, 0.1) > 1.0);
+        const Frame out = render({p}, rig, kick(x * 0.2));
+        const size_t outer =
+            *std::max_element(spoke_pixels.begin(), spoke_pixels.end(),
+                              [&](size_t a, size_t b) { return t.radius[a] < t.radius[b]; });
+        CHECK(level(out[outer]) > 0.3f);
+    }
+    CHECK(overshoot_ease(1.0, 0.1) == doctest::Approx(1.0));
+    // Rings on: the middle ring flashes as the head passes it, not before.
+    SpokeKickParams rings = p;
+    rings.rings = 1;
+    const size_t middle = pixels_of(rig, t.rings[1]).front();
+    CHECK(level(render({rings}, rig, kick(0.0))[middle]) < 0.05f);
+    float most = 0.0f;
+    for (int k = 1; k <= 20; ++k) {
+        most = std::max(most, level(render({rings}, rig, kick(0.01 * k))[middle]));
+    }
+    CHECK(most > 0.3f);
+    // Kick, else beat: a groove with no kick for two beats still sends one on the beat.
+    EngineInputs missed = kick(0.85);
+    missed.beat_phase = 0.0;
+    const auto brightest = [](const Frame &out) {
+        float most = 0.0f;
+        for (const Rgb &c : out) {
+            most = std::max(most, level(c));
+        }
+        return most;
+    };
+    CHECK(brightest(render({p}, rig, missed)) > 0.9f);
+    SpokeKickParams kick_only = p;
+    kick_only.trigger = 0;
+    CHECK(brightest(render({kick_only}, rig, missed)) < 0.1f); // The old kick, decayed.
+    check_sane({p}, rig, kick(0.1));
+    check_sane({rings}, rig, kick(0.15));
+}
