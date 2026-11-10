@@ -360,3 +360,80 @@ TEST_CASE("spoke kick: from the inner ends on the hit, out to the corners, easin
     check_sane({p}, rig, kick(0.1));
     check_sane({rings}, rig, kick(0.15));
 }
+
+namespace {
+
+// Hats every 8th at 150 BPM, the latest `since_s` ago.
+EngineInputs hats(long long so_far, double since_s) {
+    EngineInputs in = grid_at(40, 0.5);
+    in.section = "groove";
+    in.hats_so_far = so_far;
+    in.since_hat_s = since_s;
+    in.hat_ages_s = {since_s, since_s + 0.2, since_s + 0.4, since_s + 0.6};
+    return in;
+}
+
+} // namespace
+
+TEST_CASE("corner sparks: near the corners and spoke ends, seeded per hat") {
+    const Rig rig = mandala();
+    const HexTopology t = hex_topology(rig);
+    CornerSparksParams p;
+    p.keep = 1;
+    // Sites: every ring corner pixel and every spoke's outer end.
+    std::vector<size_t> sites;
+    for (const int r : t.rings) {
+        for (int k = 0; k < 6; ++k) {
+            const std::vector<size_t> ring = pixels_of(rig, r);
+            sites.push_back(*std::min_element(ring.begin(), ring.end(), [&](size_t a, size_t b) {
+                return turn_distance(t.turn[a], corner_turn(t.frame, k)) <
+                       turn_distance(t.turn[b], corner_turn(t.frame, k));
+            }));
+        }
+    }
+    for (const int s : t.spokes) {
+        const std::vector<size_t> spoke = pixels_of(rig, s);
+        sites.push_back(*std::max_element(spoke.begin(), spoke.end(), [&](size_t a, size_t b) {
+            return t.radius[a] < t.radius[b];
+        }));
+    }
+    // Every lit pixel is within `span` pixels along its strip of a site (rings wrap).
+    for (long long e = 10; e < 40; ++e) {
+        const Frame out = render({p}, rig, hats(e, 0.01));
+        CHECK_FALSE(all_black(out));
+        for (size_t i = 0; i < out.size(); ++i) {
+            if (level(out[i]) == 0.0f) {
+                continue;
+            }
+            bool near = false;
+            for (const size_t s : sites) {
+                const Pixel &a = rig.pixels[i];
+                const Pixel &b = rig.pixels[s];
+                if (a.strip != b.strip) {
+                    continue;
+                }
+                const int n = rig.strips[static_cast<size_t>(a.strip)].count;
+                int d = std::abs(a.index - b.index);
+                if (t.ring_of_strip[static_cast<size_t>(a.strip)] >= 0) {
+                    d = std::min(d, n - d);
+                }
+                near |= d <= p.span;
+            }
+            CHECK(near);
+        }
+    }
+    // The same hat gives the same sites; another seed, others (over a few hats).
+    CHECK(render({p}, rig, hats(17, 0.02)) == render({p}, rig, hats(17, 0.02)));
+    int differ = 0;
+    for (long long e = 10; e < 20; ++e) {
+        differ += render({p}, rig, hats(e, 0.02), 7) != render({p}, rig, hats(e, 0.02), 8);
+    }
+    CHECK(differ >= 5);
+    // Echoes: three hats drawn, the older dimmer.
+    CornerSparksParams echoes;
+    const Frame three = render({echoes}, rig, hats(30, 0.01));
+    CHECK(lit_count(three) >= lit_count(render({p}, rig, hats(30, 0.01))));
+    // Long after the last hat: dark.
+    CHECK(all_black(render({p}, rig, hats(30, 2.0))));
+    check_sane({echoes}, rig, hats(30, 0.03));
+}

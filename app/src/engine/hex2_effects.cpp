@@ -275,7 +275,117 @@ class SpokeKick final : public Effect {
     SpokeKickParams p_;
 };
 
+class CornerSparks final : public Effect {
+  public:
+    explicit CornerSparks(const CornerSparksParams &p) : p_(p) {}
+    const char *name() const override { return "Corner sparks"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        std::fill(out.begin(), out.end(), Rgb{});
+        const HitTrigger trig = resolve_trigger(c.in, p_.trigger);
+        if (trig.index < 0) {
+            return;
+        }
+        const HexTopology t = hex_topology(c.rig);
+        // Pixels per strip (strips are contiguous in rig.pixels, by index).
+        std::vector<int> pixels(c.rig.strips.size(), 0);
+        for (const Pixel &px : c.rig.pixels) {
+            ++pixels[static_cast<size_t>(px.strip)];
+        }
+        // The sites: each ring's pixel nearest each corner, then each spoke's outer end.
+        std::vector<size_t> sites;
+        if (p_.sites != 1) {
+            for (const int r : t.rings) {
+                const auto s = static_cast<size_t>(r);
+                for (int k = 0; k < 6; ++k) {
+                    const double at = corner_turn(t.frame, k);
+                    size_t best = static_cast<size_t>(t.first_pixel[s]);
+                    for (int j = 0; j < pixels[s]; ++j) {
+                        const auto i = static_cast<size_t>(t.first_pixel[s] + j);
+                        if (turn_distance(t.turn[i], at) < turn_distance(t.turn[best], at)) {
+                            best = i;
+                        }
+                    }
+                    sites.push_back(best);
+                }
+            }
+        }
+        if (p_.sites != 0) {
+            for (const int sp : t.spokes) {
+                const auto s = static_cast<size_t>(sp);
+                size_t best = static_cast<size_t>(t.first_pixel[s]);
+                for (int j = 0; j < pixels[s]; ++j) {
+                    const auto i = static_cast<size_t>(t.first_pixel[s] + j);
+                    if (t.radius[i] > t.radius[best]) {
+                        best = i;
+                    }
+                }
+                sites.push_back(best);
+            }
+        }
+        if (sites.empty()) {
+            return;
+        }
+        const int keep = std::clamp(p_.keep, 1, kEventHistory);
+        const int span = std::clamp(p_.span, 1, 8);
+        for (int k = 0; k < keep; ++k) {
+            const long long event = trig.index - k;
+            if (event < 0) {
+                break;
+            }
+            double age = trig.since_s;
+            if (k > 0) {
+                if (trig.ages != nullptr) {
+                    age = (*trig.ages)[static_cast<size_t>(k)];
+                } else if (trig.spacing_s > 0.0) {
+                    age = trig.since_s + k * trig.spacing_s;
+                } else {
+                    break;
+                }
+            }
+            if (!std::isfinite(age)) {
+                break;
+            }
+            const double fade = p_.level * std::exp(-age / std::max(1e-3, p_.decay_s));
+            if (fade < 1e-3) {
+                continue;
+            }
+            for (int j = 0; j < std::clamp(p_.count, 1, 6); ++j) {
+                const auto pick = std::min(
+                    sites.size() - 1,
+                    static_cast<size_t>(hash_unit(c.seed, static_cast<std::uint64_t>(event),
+                                                  211 + static_cast<std::uint64_t>(j)) *
+                                        static_cast<double>(sites.size())));
+                const size_t site = sites[pick];
+                const Pixel &at = c.rig.pixels[site];
+                const auto s = static_cast<size_t>(at.strip);
+                const bool ring = t.ring_of_strip[s] >= 0;
+                const int n = pixels[s];
+                const Rgb colour = c.palette.at(p_.colour_spread * static_cast<double>(pick) /
+                                                static_cast<double>(sites.size()));
+                for (int d = -span; d <= span; ++d) {
+                    int idx = at.index + d;
+                    if (ring) {
+                        idx = ((idx % n) + n) % n;
+                    } else if (idx < 0 || idx >= n) {
+                        continue;
+                    }
+                    const auto i = static_cast<size_t>(t.first_pixel[s] + idx);
+                    const double v = fade * (1.0 - std::abs(d) / (span + 1.0));
+                    max_into(out[i], scaled(colour, std::min(1.0, v)));
+                }
+            }
+        }
+    }
+
+  private:
+    CornerSparksParams p_;
+};
+
 } // namespace
+
+std::unique_ptr<Effect> make_corner_sparks(const CornerSparksParams &params) {
+    return std::make_unique<CornerSparks>(params);
+}
 
 std::unique_ptr<Effect> make_spoke_kick(const SpokeKickParams &params) {
     return std::make_unique<SpokeKick>(params);

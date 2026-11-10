@@ -568,6 +568,30 @@ template <> const std::vector<Field<SpokeKickParams>> &fields<SpokeKickParams>()
     return f;
 }
 
+template <> const std::vector<Field<CornerSparksParams>> &fields<CornerSparksParams>() {
+    using P = CornerSparksParams;
+    static const std::vector<Field<P>> f = {
+        {{"trigger", "Trigger", "", 0.0, kHitTriggerCount - 1.0, true, "What lights the sparks",
+          kHitTriggerOptions},
+         nullptr,
+         &P::trigger},
+        {{"span", "Size", "px", 1.0, 8.0, true, "Pixels lit either side of a site"},
+         nullptr,
+         &P::span},
+        {{"count", "Corners", "", 1.0, 6.0, true, "Sites lit per event"}, nullptr, &P::count},
+        {{"keep", "Echoes", "", 1.0, 4.0, true, "Recent events drawn, fading"}, nullptr, &P::keep},
+        {{"decay_s", "Decay", "s", 0.02, 0.5, false, "Spark time constant"}, &P::decay_s},
+        {{"sites", "Where", "", 0.0, 2.0, true, "Where sparks may land",
+          "Ring corners|Spoke ends|Both"},
+         nullptr,
+         &P::sites},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span over the sites"},
+         &P::colour_spread},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -639,6 +663,8 @@ EffectSpec default_spec(EffectType type) {
         return {NoteArcsParams{}};
     case EffectType::spoke_kick:
         return {SpokeKickParams{}};
+    case EffectType::corner_sparks:
+        return {CornerSparksParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -691,8 +717,10 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_pitch_clock(p);
             } else if constexpr (std::is_same_v<P, NoteArcsParams>) {
                 return make_note_arcs(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, SpokeKickParams>) {
                 return make_spoke_kick(p);
+            } else {
+                return make_corner_sparks(p);
             }
         },
         spec.params);
@@ -750,6 +778,8 @@ const char *effect_type_id(EffectType type) {
         return "note_arcs";
     case EffectType::spoke_kick:
         return "spoke_kick";
+    case EffectType::corner_sparks:
+        return "corner_sparks";
     }
     return "plasma";
 }
