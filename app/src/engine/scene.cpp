@@ -100,11 +100,28 @@ class Conveyor final : public Effect {
         const Rgb colour = hsv(p_.hue_offset_deg +
                                    p_.hue_per_semitone_deg * (in.bass_midi + in.bass_cents / 100.0),
                                1.0, 1.0);
-        const int segment = std::max(1, p_.segment_pixels);
-        const int period = segment * std::max(2, p_.period_segments);
-        const double lit = std::clamp(in.bass_gate_ratio, 0.1, 1.0) * segment;
+        // Segment length per strip: in pixels, or a share of the longest strip in metres.
+        std::vector<int> segments(c.rig.strips.size(), std::max(1, p_.segment_pixels));
+        if (p_.segment_units == 1) {
+            double longest_m = 0.0;
+            for (const StripSpec &s : c.rig.strips) {
+                if (s.pixels_per_m > 0.0) {
+                    longest_m = std::max(longest_m, s.count / s.pixels_per_m);
+                }
+            }
+            for (size_t s = 0; s < segments.size(); ++s) {
+                segments[s] =
+                    std::max(1, static_cast<int>(std::lround(p_.segment_share * longest_m *
+                                                             c.rig.strips[s].pixels_per_m)));
+            }
+        }
         for (size_t i = 0; i < out.size(); ++i) {
             const Pixel &px = c.rig.pixels[i];
+            const int segment = static_cast<size_t>(px.strip) < segments.size()
+                                    ? segments[static_cast<size_t>(px.strip)]
+                                    : std::max(1, p_.segment_pixels);
+            const int period = segment * std::max(2, p_.period_segments);
+            const double lit = std::clamp(in.bass_gate_ratio, 0.1, 1.0) * segment;
             // The pattern steps one segment per note; alternate strips run the other way.
             const long long shift = in.bass_notes_so_far * segment;
             const long long position = (px.strip % 2 == 0 ? px.index : -px.index) + shift;

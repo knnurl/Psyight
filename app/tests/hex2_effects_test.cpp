@@ -671,3 +671,51 @@ TEST_CASE("note history: newest first, entry 0 agreeing with the bass fields; ar
     CHECK(lit_count(render({clock}, rig, sure)) > alone);
     check_sane({clock}, rig, sure);
 }
+
+TEST_CASE("conveyor share of the longest strip; bass bars wrapped by octave") {
+    const Rig rig = mandala();
+    // Conveyor: in share units a segment is the same length in metres on every strip.
+    double longest_m = 0.0;
+    for (const StripSpec &s : rig.strips) {
+        longest_m = std::max(longest_m, s.count / s.pixels_per_m);
+    }
+    ConveyorParams share;
+    share.segment_units = 1;
+    share.segment_share = 3.0 / (longest_m * rig.strips[0].pixels_per_m); // Three pixels.
+    EngineInputs in = note(35, 0.0, 0.01);
+    in.bass_notes_so_far = 3;
+    const Frame out = render({share}, rig, in);
+    // The longest lit run on a strip, in pixels.
+    const auto longest_run = [&](int strip) {
+        int best = 0;
+        int run = 0;
+        for (const size_t i : pixels_of(rig, strip)) {
+            run = level(out[i]) > 0.0f ? run + 1 : 0;
+            best = std::max(best, run);
+        }
+        return best;
+    };
+    REQUIRE(rig.strips[3].count >= 15); // A spoke holds a whole period of five segments.
+    CHECK(longest_run(0) == 3);         // The outer ring.
+    CHECK(longest_run(3) == 3);         // A spoke: the same length.
+    // Pixels (the default) is unchanged by the share.
+    ConveyorParams pixels;
+    ConveyorParams pixels_with_share = pixels;
+    pixels_with_share.segment_share = 0.3;
+    CHECK(render({pixels}, rig, in) == render({pixels_with_share}, rig, in));
+
+    // Bass bars, Around, wrapped: B1 and B2 land on the same turn; unwrapped they do not.
+    BassBarsParams bars;
+    bars.mapping = static_cast<int>(Mapping::around);
+    bars.wrap = 1;
+    const auto lit_at = [&](const Frame &f) {
+        std::vector<bool> lit;
+        for (const Rgb &c : f) {
+            lit.push_back(level(c) > 0.05f);
+        }
+        return lit;
+    };
+    CHECK(lit_at(render({bars}, rig, note(35))) == lit_at(render({bars}, rig, note(47))));
+    bars.wrap = 0;
+    CHECK(lit_at(render({bars}, rig, note(35))) != lit_at(render({bars}, rig, note(47))));
+}

@@ -81,6 +81,15 @@ template <> const std::vector<Field<ConveyorParams>> &fields<ConveyorParams>() {
         {{"hue_offset_deg", "Hue base", "deg", 0.0, 360.0, false, "Hue of MIDI 0 (C-1)"},
          &P::hue_offset_deg},
         {{"release_s", "Release", "s", 0.0, 1.0, false, "Fade after the note ends"}, &P::release_s},
+        {{"segment_units", "Segments", "", 0.0, 1.0, true,
+          "Segment length in pixels, or as a share of the longest strip (one length on every "
+          "strip)",
+          "Pixels|Share of the longest strip"},
+         nullptr,
+         &P::segment_units},
+        {{"segment_share", "Share", "", 0.01, 0.5, false,
+          "Segment length as a share of the longest strip"},
+         &P::segment_share},
     };
     return f;
 }
@@ -353,6 +362,11 @@ template <> const std::vector<Field<BassBarsParams>> &fields<BassBarsParams>() {
           "Pitch|Palette"},
          nullptr,
          &P::colours},
+        {{"wrap", "Wrap", "", 0.0, 1.0, true,
+          "The pitch along the mapping, or its pitch class only, one octave round (for Around)",
+          "Off|Octave"},
+         nullptr,
+         &P::wrap},
     };
     return f;
 }

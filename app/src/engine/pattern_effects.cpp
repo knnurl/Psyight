@@ -448,7 +448,8 @@ class BassBars final : public Effect {
         }
         const double pitch = in.bass_midi + in.bass_cents / 100.0;
         const double span = std::max(1, p_.high_midi - p_.low_midi);
-        const double at = std::clamp((pitch - p_.low_midi) / span, 0.0, 1.0);
+        const double at = p_.wrap == 1 ? frac((pitch - p_.low_midi) / 12.0)
+                                       : std::clamp((pitch - p_.low_midi) / span, 0.0, 1.0);
         const Rgb colour = p_.colours == 0 ? hsv(270.0 + 28.0 * pitch, 1.0, 1.0) : c.palette.at(at);
         const std::vector<double> u = map_pixels(c.rig, mapping_of(p_.mapping), c.seed);
         const double width = std::max(0.005, p_.width);

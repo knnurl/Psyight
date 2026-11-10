@@ -125,6 +125,10 @@ struct ConveyorParams {
     double hue_per_semitone_deg = 28.0;
     double hue_offset_deg = 270.0; // Hue of MIDI 0 (C-1); E1 (28) lands at 334, magenta.
     double release_s = 0.03;       // Fade after the note ends.
+    // Segment length in pixels, or as a share of the rig's longest strip (the same physical
+    // length on every strip, so a short spoke shows whole segments).
+    int segment_units = 0;
+    double segment_share = 0.08;
 };
 
 struct SparkleParams {
@@ -255,6 +259,7 @@ struct BassBarsParams {
     double release_s = 0.08;
     double level = 1.0;
     int colours = 0; // Pitch hue (as the conveyor), palette.
+    int wrap = 0;    // Off, octave: the pitch class only, 0 to 1 per octave (Around: a clock).
 };
 
 struct HexPulseParams {
