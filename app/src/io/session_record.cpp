@@ -50,6 +50,7 @@ void set_legacy_values(const json &project_json, Project &project) {
     static constexpr std::pair<const char *, double> kLegacyEffectParams[] = {
         {"size_units", 0.0},
         {"time_units", 0.0},
+        {"start", 0.0},
     };
     const auto scenes = project_json.find("scenes");
     if (scenes == project_json.end() || !scenes->is_array()) {

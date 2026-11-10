@@ -78,9 +78,11 @@ class HexPulse final : public Effect {
         }
         const HexFrame frame = hex_frame(c.rig, p_.corners);
         std::vector<double> u(out.size());
+        double u_min = 1.0;
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = c.rig.pixels[i].position;
             u[i] = hex_radius(frame, q.x, q.y);
+            u_min = std::min(u_min, u[i]);
         }
         const double travel_s = std::max(1e-3, p_.travel_beats * beat_of(c.in));
         const double width = std::max(0.01, p_.width);
@@ -105,12 +107,15 @@ class HexPulse final : public Effect {
             if (!std::isfinite(age)) {
                 break;
             }
-            const double fade = std::exp(-age / decay_s);
+            const double fade = hit_envelope(age, p_.hold_s, decay_s);
             const double travelled = age / travel_s;
             if (fade < 0.01 || travelled > 1.0 + 3.0 * width) {
                 continue;
             }
-            const double front = p_.direction == 0 ? travelled : 1.0 - travelled;
+            // From the centre (or to it), or across the rig's own span of hex distance.
+            const double front = p_.start == 0 ? (p_.direction == 0 ? travelled : 1.0 - travelled)
+                                 : p_.direction == 0 ? u_min + travelled * (1.0 - u_min)
+                                                     : 1.0 - travelled * (1.0 - u_min);
             const Rgb pulse = c.palette.at(0.25 * static_cast<double>(mod(event, 4)));
             for (size_t i = 0; i < out.size(); ++i) {
                 const double x = (u[i] - front) / width;

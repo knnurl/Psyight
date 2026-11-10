@@ -388,6 +388,13 @@ template <> const std::vector<Field<HexPulseParams>> &fields<HexPulseParams>() {
          &P::colours},
         corners_field<P>(),
         time_units_field<P>(),
+        {{"start", "Start", "", 0.0, 1.0, true,
+          "Where a hexagon starts: the centre, or the rig's innermost pixels (lit on the hit)",
+          "Centre|First pixels"},
+         nullptr,
+         &P::start},
+        {{"hold_s", "Hold", "s", 0.0, 0.2, false, "Full brightness this long before the decay"},
+         &P::hold_s},
     };
     return f;
 }

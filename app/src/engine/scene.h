@@ -42,7 +42,8 @@
 // Hexagon effects (engine/hex_effects.cpp), on the rig seen as a hexagon (engine/space.h: hex
 // distance, so each hexagon ring about the centre is lit at once):
 // - hex pulse: hexagons travelling out from the centre (or in from the edge) on each kick, beat,
-//   bar, bass note or hat, crossing from centre to edge in travel_beats;
+//   bar, bass note or hat, crossing from centre to edge in travel_beats; from the rig's
+//   innermost pixels by default, so the hit lands where there is light;
 // - cube: the hexagon as a cube seen corner-on: three faces in three shades of one colour and
 //   the Y of edges between them, flipping on the beat, bar, two bars, phrase or kick between the
 //   cube seen from above and from below (the Necker cube);
@@ -245,6 +246,10 @@ struct HexPulseParams {
     int colours = 0;    // A palette step per pulse, or the palette from centre to edge.
     int corners = 0;    // Auto, up and down, sideways (engine/space.h hex_frame).
     int time_units = 1; // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
+    // Where a pulse starts: 0 the centre (hex distance 0), 1 the rig's innermost pixels, so the
+    // first ring lights on the hit rather than a 16th after it.
+    int start = 1;
+    double hold_s = 0.0; // Peak hold before the decay (engine/shape.h hit_envelope).
 };
 
 struct CubeParams {

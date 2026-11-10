@@ -107,49 +107,49 @@
   },
   "Hexagon": {
     "current_max_a": 3.7318823529411764,
-    "current_mean_a": 1.3441654544681216,
-    "dark_before_mean": 0.3998257373166987,
-    "dark_mean": 0.9202858214065696,
-    "flashes_after": 12,
-    "flashes_before": 94,
+    "current_mean_a": 1.3764586363829707,
+    "dark_before_mean": 0.3619145175544323,
+    "dark_mean": 0.9105775153316692,
+    "flashes_after": 13,
+    "flashes_before": 121,
     "groups": {
       "hex": {
-        "dark_share": 0.0254880694143167,
-        "max_byte": 31,
-        "mean_byte": 1.6796072490215697
+        "dark_share": 0.008134490238611713,
+        "max_byte": 34,
+        "mean_byte": 1.927424661517216
       },
       "inner": {
-        "dark_share": 0.07321041214750543,
-        "max_byte": 30,
-        "mean_byte": 1.6847118739979292
+        "dark_share": 0.05422993492407809,
+        "max_byte": 34,
+        "mean_byte": 2.0837027256436906
       },
       "left": {
-        "dark_share": 0.0254880694143167,
-        "max_byte": 31,
-        "mean_byte": 1.6707981726915193
+        "dark_share": 0.008134490238611713,
+        "max_byte": 34,
+        "mean_byte": 1.9146014361006265
       },
       "middle": {
-        "dark_share": 0.033622559652928416,
+        "dark_share": 0.026572668112798264,
         "max_byte": 31,
-        "mean_byte": 1.6729781080291075
+        "mean_byte": 1.9866559745234689
       },
       "outer": {
-        "dark_share": 0.04718004338394794,
+        "dark_share": 0.04609544468546638,
         "max_byte": 31,
-        "mean_byte": 1.6244335135905834
+        "mean_byte": 1.7495175317996239
       },
       "right": {
-        "dark_share": 0.0254880694143167,
-        "max_byte": 31,
-        "mean_byte": 1.669765296185305
+        "dark_share": 0.008134490238611713,
+        "max_byte": 34,
+        "mean_byte": 1.9132049369093744
       },
       "spokes": {
-        "dark_share": 0.027114967462039046,
-        "max_byte": 31,
-        "mean_byte": 1.7652634671005074
+        "dark_share": 0.009761388286334056,
+        "max_byte": 34,
+        "mean_byte": 2.0576983911785973
       }
     },
-    "max_after_in_1s": 6,
+    "max_after_in_1s": 4,
     "max_before_in_1s": 7,
     "power_limited_frames": 2,
     "scenes": {
@@ -178,7 +178,7 @@
         "seconds": 12.8
       },
       "Hex echoes": {
-        "flashes_alone": 372,
+        "flashes_alone": 402,
         "max_byte": 18,
         "max_flashes_alone_in_1s": 7,
         "median_lit_pixels": 1052.0,
@@ -186,26 +186,26 @@
         "seconds": 6.9
       },
       "Hex pressure": {
-        "flashes_alone": 16,
+        "flashes_alone": 103,
         "max_byte": 31,
-        "max_flashes_alone_in_1s": 6,
-        "median_lit_pixels": 518.0,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 707.0,
         "quarter_above_20": 0.004819277108433735,
         "seconds": 20.75
       },
       "Hex radar": {
-        "flashes_alone": 235,
+        "flashes_alone": 230,
         "max_byte": 27,
-        "max_flashes_alone_in_1s": 4,
-        "median_lit_pixels": 625.0,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 696.0,
         "quarter_above_20": 0.0,
         "seconds": 19.7
       },
       "Hex tunnel": {
-        "flashes_alone": 307,
-        "max_byte": 27,
+        "flashes_alone": 397,
+        "max_byte": 34,
         "max_flashes_alone_in_1s": 6,
-        "median_lit_pixels": 675.0,
+        "median_lit_pixels": 757.0,
         "quarter_above_20": 0.0,
         "seconds": 19.2
       },

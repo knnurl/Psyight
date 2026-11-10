@@ -53,6 +53,7 @@ TEST_CASE("hex pulse: a kick's hexagon lights a whole ring at once") {
     in.since_kick_s = 0.4 * 2.0 / 3.0; // Two thirds of the way out: on the middle ring.
     HexPulseParams p;
     p.keep = 1;
+    p.start = 0; // From the centre, as before.
     const Frame out = render({p}, rig, in);
     const std::vector<size_t> middle = pixels_of(rig, 1);
     const float lit = level(out[middle.front()]);
@@ -68,6 +69,39 @@ TEST_CASE("hex pulse: a kick's hexagon lights a whole ring at once") {
     const Frame in_ward = render({p}, rig, in);
     CHECK(level(in_ward[pixels_of(rig, 2).front()]) > 0.5f);
     CHECK(level(in_ward[middle.front()]) < 0.1f);
+}
+
+TEST_CASE("hex pulse: from the first pixels the inner ring lights on the kick; a hold keeps the "
+          "peak") {
+    const Rig rig = mandala();
+    EngineInputs in = grid_at(8, 0.0);
+    in.kicks_so_far = 9;
+    in.since_kick_s = 0.0;
+    HexPulseParams p;
+    p.keep = 1;
+    REQUIRE(p.start == 1); // The default.
+    const Frame on_kick = render({p}, rig, in);
+    for (const size_t i : pixels_of(rig, 2)) { // The inner ring.
+        CHECK(level(on_kick[i]) >= 0.9f * static_cast<float>(p.level));
+    }
+    p.start = 0; // From the centre: the inner ring is still dark on the kick.
+    const Frame from_centre = render({p}, rig, in);
+    CHECK(level(from_centre[pixels_of(rig, 2).front()]) < 0.1f);
+    // A hold keeps the peak level for its length, then decays as before.
+    p.start = 1;
+    p.direction = 1; // In from the edge: the outer ring is lit on the kick.
+    p.hold_s = 0.05;
+    in.since_kick_s = 0.0;
+    const size_t outer = pixels_of(rig, 0).front();
+    const float peak = level(render({p}, rig, in)[outer]);
+    CHECK(peak > 0.9f);
+    p.travel_beats = 8.0; // Slow, so the front stays on the outer ring.
+    in.since_kick_s = 0.04;
+    const float held = level(render({p}, rig, in)[outer]);
+    p.hold_s = 0.0;
+    const float decayed = level(render({p}, rig, in)[outer]);
+    CHECK(held > decayed);
+    CHECK(render({p}, rig, in) == render({p}, rig, in)); // Deterministic.
 }
 
 TEST_CASE("cube: three faces in three shades, flipping every bar") {
