@@ -52,13 +52,15 @@ enum class ModSource {
     macro_6,
     macro_7,
     macro_8,
+    bass_confidence, // EngineInputs::bass_confidence: how sure the tracker is of the note.
+    build_progress,  // EngineInputs::build_progress: through a run of builds taken as one.
 };
 
 enum class ModCurve { linear, exponential, logarithmic, s_curve };
 enum class ModTarget { opacity, hue_shift, brightness, setting };
 enum class ModQuantise { off, sixteenth, beat, bar }; // Sample-and-hold per grid division.
 
-inline constexpr std::array<ModSource, 28> kModSources = {ModSource::constant,
+inline constexpr std::array<ModSource, 30> kModSources = {ModSource::constant,
                                                           ModSource::beat_phase,
                                                           ModSource::bar_phase,
                                                           ModSource::phrase_phase,
@@ -85,7 +87,9 @@ inline constexpr std::array<ModSource, 28> kModSources = {ModSource::constant,
                                                           ModSource::macro_5,
                                                           ModSource::macro_6,
                                                           ModSource::macro_7,
-                                                          ModSource::macro_8};
+                                                          ModSource::macro_8,
+                                                          ModSource::bass_confidence,
+                                                          ModSource::build_progress};
 inline constexpr std::array<ModQuantise, 4> kModQuantises = {
     ModQuantise::off, ModQuantise::sixteenth, ModQuantise::beat, ModQuantise::bar};
 inline constexpr double kMaxSmoothingS = 4.0; // Attack and release, at most.

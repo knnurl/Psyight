@@ -99,6 +99,12 @@ double source_value(ModSource source, const EngineInputs &in, std::uint64_t seed
         v = in.macros[static_cast<size_t>(static_cast<int>(source) -
                                           static_cast<int>(ModSource::macro_1))];
         break;
+    case ModSource::bass_confidence:
+        v = in.bass_confidence;
+        break;
+    case ModSource::build_progress:
+        v = in.build_progress;
+        break;
     }
     return std::isfinite(v) ? std::clamp(v, 0.0, 1.0) : 0.0;
 }
@@ -250,6 +256,10 @@ const char *mod_source_name(ModSource source) {
         return "Macro 7";
     case ModSource::macro_8:
         return "Macro 8";
+    case ModSource::bass_confidence:
+        return "Bass confidence";
+    case ModSource::build_progress:
+        return "Build progress";
     }
     return "?";
 }
@@ -368,6 +378,10 @@ const char *mod_source_id(ModSource source) {
         return "macro_7";
     case ModSource::macro_8:
         return "macro_8";
+    case ModSource::bass_confidence:
+        return "bass_confidence";
+    case ModSource::build_progress:
+        return "build_progress";
     }
     return "constant";
 }

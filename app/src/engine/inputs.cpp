@@ -113,6 +113,21 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
             in.section_progress =
                 in.section_length_s > 0.0 ? in.since_section_s / in.section_length_s : 0.0;
             in.section_energy = section.energy;
+            if (section.label == "build") { // The run of builds this one is in.
+                size_t first = i;
+                size_t last = i;
+                while (first > 0 && sections[first - 1].label == "build") {
+                    --first;
+                }
+                while (last + 1 < sections.size() && sections[last + 1].label == "build") {
+                    ++last;
+                }
+                in.since_build_s = t_s - sections[first].start_s;
+                in.build_length_s = sections[last].end_s - sections[first].start_s;
+                in.build_progress =
+                    in.build_length_s > 0.0 ? in.since_build_s / in.build_length_s : 0.0;
+                in.build_end_known = true;
+            }
             break;
         }
     }
@@ -209,6 +224,12 @@ EngineInputs inputs_at(const LiveState &s, double t_s) {
     in.section_progress =
         in.section_length_s > 0.0 ? std::min(1.0, in.since_section_s / in.section_length_s) : 0.0;
     in.section_energy = s.section_energy;
+    if (in.section == "build") { // Live: the section's own values.
+        in.since_build_s = in.since_section_s;
+        in.build_length_s = in.section_length_s;
+        in.build_progress = in.section_progress;
+        in.build_end_known = in.section_end_known;
+    }
     in.riser = s.riser;
     in.intensity = s.intensity;
 

@@ -204,7 +204,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp
                              tests/rig_export_test.cpp tests/strip_edit_test.cpp tests/joints_test.cpp
                              tests/hex_effects_test.cpp
-                             tests/show_golden_test.cpp tests/shape_test.cpp tests/presets_golden_test.cpp tests/hex2_effects_test.cpp
+                             tests/show_golden_test.cpp tests/shape_test.cpp tests/presets_golden_test.cpp tests/hex2_effects_test.cpp tests/inputs_golden_test.cpp
                              tests/build_kit_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c

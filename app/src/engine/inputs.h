@@ -63,6 +63,13 @@ struct EngineInputs {
     double riser = 0.0;     // 0 to 1: how far the build's riser has risen; 0 outside builds.
     double intensity = 0.5; // 0 to 1: how full the music is (analysis/intensity.h; live: the
                             // residual's activity against the grooves').
+    // A run of consecutive build sections taken as one (file mode; a build labelled as two
+    // 4-bar sections climbs as one 8-bar build): the section's own values when its neighbours
+    // are not builds, 0 outside builds. Live mode copies the section's own.
+    double build_progress = 0.0; // 0 to 1 through the run.
+    double since_build_s = 0.0;
+    double build_length_s = 0.0;
+    bool build_end_known = false; // As section_end_known.
     // Residual and hats.
     double residual_level = 0.0; // 0 to 1 (-90 to 0 dB).
     double residual_centroid_hz = 0.0;

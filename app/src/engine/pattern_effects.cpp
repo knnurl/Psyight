@@ -182,6 +182,12 @@ class Stutter final : public Effect {
                 open = into < 0.0 ? 1.0 : std::exp(-into / release_s);
             }
             break;
+        case 4: // As 3, at the end of a run of builds taken as one.
+            if (in.section == "build" && in.build_end_known && in.build_length_s > 0.0) {
+                const double into = in.since_build_s - (in.build_length_s - p_.gap_beats * beat_s);
+                open = into < 0.0 ? 1.0 : std::exp(-into / release_s);
+            }
+            break;
         default: // Duck after each kick, reopening over duty of a beat.
             if (std::isfinite(in.since_kick_s)) {
                 const double t = std::clamp(in.since_kick_s / (p_.duty * beat_s), 0.0, 1.0);
