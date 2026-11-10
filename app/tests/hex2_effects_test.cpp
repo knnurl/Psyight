@@ -478,3 +478,51 @@ TEST_CASE("polar noise: seamless round the top, still without flow, never all da
     }
     check_sane({p}, rig, in);
 }
+
+namespace {
+
+EngineInputs in_phrase(double phase, int index = 2) {
+    EngineInputs in = grid_at(80, 0.0);
+    in.phrase_index = index;
+    in.phrase_phase = phase;
+    return in;
+}
+
+} // namespace
+
+TEST_CASE("phrase fill: fills through the phrase, never unfills, clears on the line") {
+    const Rig rig = mandala();
+    for (int order = 0; order < 4; ++order) {
+        CAPTURE(order);
+        PhraseFillParams p;
+        p.order = order;
+        CHECK(all_black(render({p}, rig, in_phrase(0.0)))); // Nothing at the phrase's start.
+        size_t previous = 0;
+        for (int k = 0; k <= 200; ++k) {
+            const size_t now = lit_count(render({p}, rig, in_phrase(0.97 * k / 200.0)));
+            CHECK(now >= previous);
+            previous = now;
+        }
+        p.clear_beats = 0.0;
+        CHECK(lit_count(render({p}, rig, in_phrase(0.999))) == rig.pixels.size()); // All in.
+        p.clear_beats = 0.5;
+        for (const Rgb &c : render({p}, rig, in_phrase(1.0 - 1e-9))) { // Cleared on the line.
+            CHECK(level(c) < 1e-3f);
+        }
+        check_sane({p}, rig, in_phrase(0.6));
+    }
+    // By side: the first side lit is on the inner ring; the spokes come last.
+    const HexTopology t = hex_topology(rig);
+    const PhraseFillParams sides;
+    CHECK(lit_strips(rig, render({sides}, rig, in_phrase(1.5 / 32.0))) ==
+          std::vector<int>{t.rings[0]});
+    // Random pixels: the same seed gives the same order, another seed another.
+    PhraseFillParams random;
+    random.order = 3;
+    CHECK(render({random}, rig, in_phrase(0.4), 7) == render({random}, rig, in_phrase(0.4), 7));
+    CHECK(render({random}, rig, in_phrase(0.4), 7) != render({random}, rig, in_phrase(0.4), 8));
+    // Before the first phrase it runs on bars in eights.
+    EngineInputs early = grid_at(10, 0.5); // Bar 2, half way.
+    early.phrase_index = -1;
+    CHECK_FALSE(all_black(render({sides}, rig, early)));
+}

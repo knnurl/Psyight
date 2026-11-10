@@ -65,6 +65,9 @@
 //   echoing over the last few hats.
 // - polar noise: a noise field in hex radius and angle, seamless round the hexagon, flowing out
 //   (or in) on a clock; for intros, breakdowns and builds.
+// - phrase fill: the rig fills unit by unit through each phrase (hexagon sides, rings, spokes or
+//   pixels), the newest bright and the rest held dim, clearing on the phrase line: the phrase
+//   gets a shape.
 #pragma once
 
 #include "engine/colour.h"
@@ -371,6 +374,19 @@ struct PolarNoiseParams {
     double level = 0.5;
 };
 
+// Phrase fill (phrase scale): the rig fills unit by unit through each phrase (sides, rings,
+// spokes or pixels), the newest bright, the rest held dim, and clears on the phrase line.
+struct PhraseFillParams {
+    int order = 0;            // By side, inner to outer, spokes then rings, random pixels.
+    int steps = 32;           // Steps a phrase.
+    double hold_level = 0.25; // Units lit earlier.
+    double head_level = 1.0;  // The newest.
+    double head_decay_beats = 1.0;
+    double clear_beats = 0.5; // Fade to black over the phrase's last beats.
+    double colour_spread = 1.0;
+    double level = 0.8;
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -398,14 +414,16 @@ enum class EffectType {
     note_arcs,
     spoke_kick,
     corner_sparks,
-    polar_noise
+    polar_noise,
+    phrase_fill
 };
 using EffectParams =
     std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
                  BuildParams, DropBurstParams, ChaseParams, WaveParams, StrobeParams, StutterParams,
                  NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams,
                  HexPulseParams, CubeParams, SectorsParams, InterferenceParams, PitchClockParams,
-                 NoteArcsParams, SpokeKickParams, CornerSparksParams, PolarNoiseParams>;
+                 NoteArcsParams, SpokeKickParams, CornerSparksParams, PolarNoiseParams,
+                 PhraseFillParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -436,6 +454,7 @@ std::unique_ptr<Effect> make_note_arcs(const NoteArcsParams &params = {});
 std::unique_ptr<Effect> make_spoke_kick(const SpokeKickParams &params = {});
 std::unique_ptr<Effect> make_corner_sparks(const CornerSparksParams &params = {});
 std::unique_ptr<Effect> make_polar_noise(const PolarNoiseParams &params = {});
+std::unique_ptr<Effect> make_phrase_fill(const PhraseFillParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

@@ -412,7 +412,130 @@ class PolarNoise final : public Effect {
     PolarNoiseParams p_;
 };
 
+// Where in the phrase, 0 to 1: the phrase phase, or before the first phrase, bars in eights.
+double phrase_position(const EngineInputs &in) {
+    if (in.phrase_index >= 0) {
+        return std::clamp(in.phrase_phase, 0.0, 1.0);
+    }
+    if (in.bar_index < 0) {
+        return 0.0;
+    }
+    return frac(static_cast<double>(in.bar_index) / 8.0 + in.bar_phase / 8.0);
+}
+
+class PhraseFill final : public Effect {
+  public:
+    explicit PhraseFill(const PhraseFillParams &p) : p_(p) {}
+    const char *name() const override { return "Phrase fill"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        std::fill(out.begin(), out.end(), Rgb{});
+        const size_t n = out.size();
+        if (n == 0) {
+            return;
+        }
+        const HexTopology t = hex_topology(c.rig);
+        // Each pixel's unit rank in the fill order, and the number of units.
+        std::vector<long long> rank(n, 0);
+        long long units = 0;
+        if (p_.order == 0) { // By side: each ring's six sides, innermost first, then the spokes.
+            const auto rings = static_cast<long long>(t.rings.size());
+            std::vector<int> spokes = t.spokes;
+            std::sort(spokes.begin(), spokes.end(), [&](int a, int b) {
+                return t.strip_turn[static_cast<size_t>(a)] < t.strip_turn[static_cast<size_t>(b)];
+            });
+            std::vector<long long> spoke_rank(c.rig.strips.size(), 0);
+            for (size_t k = 0; k < spokes.size(); ++k) {
+                spoke_rank[static_cast<size_t>(spokes[k])] = static_cast<long long>(k);
+            }
+            const double first_corner = corner_turn(t.frame, 0);
+            for (size_t i = 0; i < n; ++i) {
+                const auto s = static_cast<size_t>(c.rig.pixels[i].strip);
+                const int ring = t.ring_of_strip[s];
+                if (ring >= 0) {
+                    const auto side =
+                        std::min(5LL, static_cast<long long>(frac(t.turn[i] - first_corner) * 6.0));
+                    rank[i] = ring * 6 + side;
+                } else {
+                    rank[i] = rings * 6 + spoke_rank[s];
+                }
+            }
+            units = rings * 6 + static_cast<long long>(spokes.size());
+        } else {
+            std::vector<size_t> order(n);
+            for (size_t i = 0; i < n; ++i) {
+                order[i] = i;
+            }
+            const auto ring_of = [&](size_t i) {
+                return t.ring_of_strip[static_cast<size_t>(c.rig.pixels[i].strip)];
+            };
+            if (p_.order == 1) { // Inner to outer.
+                std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                    return t.radius[a] != t.radius[b] ? t.radius[a] < t.radius[b]
+                                                      : t.turn[a] < t.turn[b];
+                });
+            } else if (p_.order == 2) { // Spokes by radius, then the rings by ring and turn.
+                std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                    const int ra = ring_of(a);
+                    const int rb = ring_of(b);
+                    if ((ra >= 0) != (rb >= 0)) {
+                        return ra < 0;
+                    }
+                    if (ra < 0) {
+                        return t.radius[a] < t.radius[b];
+                    }
+                    return ra != rb ? ra < rb : t.turn[a] < t.turn[b];
+                });
+            } else { // Random pixels.
+                std::vector<double> key(n);
+                for (size_t i = 0; i < n; ++i) {
+                    key[i] = hash_unit(c.seed, i, 97);
+                }
+                std::sort(order.begin(), order.end(),
+                          [&](size_t a, size_t b) { return key[a] < key[b]; });
+            }
+            for (size_t k = 0; k < n; ++k) {
+                rank[order[k]] = static_cast<long long>(k);
+            }
+            units = static_cast<long long>(n);
+        }
+        if (units <= 0) {
+            return;
+        }
+        // Unit r fills at step floor(r * (steps - 1) / units) + 1: none at the phrase's start,
+        // all by its last step.
+        const int steps = std::clamp(p_.steps, 4, 128);
+        const double phase = phrase_position(c.in);
+        const double at_steps = phase * steps;
+        const auto done = static_cast<long long>(std::floor(at_steps));
+        const double step_beats = 32.0 / steps; // An 8-bar phrase taken as 32 beats.
+        double clear = 1.0;
+        if (p_.clear_beats > 0.0) {
+            clear = std::clamp((1.0 - phase) / (p_.clear_beats / 32.0), 0.0, 1.0);
+        }
+        for (size_t i = 0; i < n; ++i) {
+            const long long first = rank[i] * (steps - 1) / units + 1;
+            if (first > done) {
+                continue;
+            }
+            const double age_beats = (at_steps - static_cast<double>(first)) * step_beats;
+            const double v =
+                p_.hold_level + (p_.head_level - p_.hold_level) *
+                                    std::exp(-age_beats / std::max(1e-3, p_.head_decay_beats));
+            out[i] = scaled(c.palette.at(p_.colour_spread * static_cast<double>(rank[i]) /
+                                         static_cast<double>(units)),
+                            std::clamp(p_.level * v * clear, 0.0, 1.0));
+        }
+    }
+
+  private:
+    PhraseFillParams p_;
+};
+
 } // namespace
+
+std::unique_ptr<Effect> make_phrase_fill(const PhraseFillParams &params) {
+    return std::make_unique<PhraseFill>(params);
+}
 
 std::unique_ptr<Effect> make_polar_noise(const PolarNoiseParams &params) {
     return std::make_unique<PolarNoise>(params);

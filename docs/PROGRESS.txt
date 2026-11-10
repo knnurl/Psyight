@@ -40,6 +40,7 @@ Last updated: 2026-11-09. Written so another agent can pick up without the origi
   - spoke_kick 0.032 ms.
   - corner_sparks 0.086 ms (the site search scans each ring once per corner).
   - polar_noise 0.131 ms (0.161 with the full topology; it now takes only the hex radius, hex_radii, and the angle's cosine and sine from the position; most of the rest is the fbm noise, as the Noise effect's 0.105 ms).
+  - phrase_fill 0.052 ms. The plan's lit count, round(k / steps * units), cannot light every unit at phase 0.999 (31 of 32 steps done), as its own test asks; unit r fills at step floor(r * (steps - 1) / units) + 1 instead: none at the phrase's start, all by its last step.
 
 ## Where we are (2026-11-09): first test on a DJM-900NXS2 and CDJ-3000s (2026-11-10)
 - Live mode went dark through long builds: the stutter gate's "dark for the build's last beat" used live mode's one-phrase guess at a section's length and never reopened (Mae Terra, Necropsycho bootleg, black from 168 to 232 s). Fixed: EngineInputs::section_end_known (file mode only) gates effects timed to a section's end. `psyight_live_check <audio> --show <project> [--trace a b]` renders the show from the live state as a timeline (it found this).

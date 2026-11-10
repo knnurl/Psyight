@@ -616,6 +616,33 @@ template <> const std::vector<Field<PolarNoiseParams>> &fields<PolarNoiseParams>
     return f;
 }
 
+template <> const std::vector<Field<PhraseFillParams>> &fields<PhraseFillParams>() {
+    using P = PhraseFillParams;
+    static const std::vector<Field<P>> f = {
+        {{"order", "Order", "", 0.0, 3.0, true, "What fills, in which order",
+          "By side|Inner to outer|Spokes, then rings|Random pixels"},
+         nullptr,
+         &P::order},
+        {{"steps", "Steps", "", 4.0, 128.0, true, "Steps the fill takes a phrase"},
+         nullptr,
+         &P::steps},
+        {{"hold_level", "Held", "", 0.0, 1.0, false, "Brightness of what is already filled"},
+         &P::hold_level},
+        {{"head_level", "Newest", "", 0.0, 1.0, false, "Brightness of what was just filled"},
+         &P::head_level},
+        {{"head_decay_beats", "Newest fades", "beats", 0.1, 4.0, false,
+          "How long the newest takes to fade to the held level"},
+         &P::head_decay_beats},
+        {{"clear_beats", "Clear", "beats", 0.0, 4.0, false,
+          "Fade to black over the phrase's last beats"},
+         &P::clear_beats},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span along the fill"},
+         &P::colour_spread},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -691,6 +718,8 @@ EffectSpec default_spec(EffectType type) {
         return {CornerSparksParams{}};
     case EffectType::polar_noise:
         return {PolarNoiseParams{}};
+    case EffectType::phrase_fill:
+        return {PhraseFillParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -747,8 +776,10 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_spoke_kick(p);
             } else if constexpr (std::is_same_v<P, CornerSparksParams>) {
                 return make_corner_sparks(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, PolarNoiseParams>) {
                 return make_polar_noise(p);
+            } else {
+                return make_phrase_fill(p);
             }
         },
         spec.params);
@@ -810,6 +841,8 @@ const char *effect_type_id(EffectType type) {
         return "corner_sparks";
     case EffectType::polar_noise:
         return "polar_noise";
+    case EffectType::phrase_fill:
+        return "phrase_fill";
     }
     return "plasma";
 }
