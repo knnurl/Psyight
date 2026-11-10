@@ -343,8 +343,8 @@ class Bursts final : public Effect {
             if (!std::isfinite(age)) {
                 break;
             }
-            const double fade =
-                std::exp(-age / std::max(1e-3, time_in_s(p_.decay_s, p_.time_units, in)));
+            const double fade = hit_envelope(
+                age, p_.hold_s, std::max(1e-3, time_in_s(p_.decay_s, p_.time_units, in)));
             if (fade < 0.01) {
                 continue;
             }

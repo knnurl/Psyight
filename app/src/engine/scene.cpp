@@ -65,7 +65,7 @@ class Shockwave final : public Effect {
             c.in.since_kick_s * size_in_m(p_.speed_m_per_s, p_.size_units, c.rig);
         const double width_m = size_in_m(p_.width_m, p_.size_units, c.rig);
         const double level =
-            std::exp(-c.in.since_kick_s / time_in_s(p_.decay_s, p_.time_units, c.in));
+            hit_envelope(c.in.since_kick_s, p_.hold_s, time_in_s(p_.decay_s, p_.time_units, c.in));
         const Vec3 centre = centre_of(c.rig);
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = c.rig.pixels[i].position;
@@ -207,7 +207,7 @@ class DropBurst final : public Effect {
             return;
         }
         const double radius_m = size_in_m(p_.speed_m_per_s, p_.size_units, c.rig) * t;
-        const double level = std::exp(-t / time_in_s(p_.decay_s, p_.time_units, c.in));
+        const double level = hit_envelope(t, p_.hold_s, time_in_s(p_.decay_s, p_.time_units, c.in));
         // The disc's soft edge, 10 cm on a 1 m rig.
         const double edge_m = size_in_m(0.1, p_.size_units, c.rig);
         const Vec3 centre = centre_of(c.rig);

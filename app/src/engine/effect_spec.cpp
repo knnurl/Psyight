@@ -61,6 +61,8 @@ template <> const std::vector<Field<ShockwaveParams>> &fields<ShockwaveParams>()
         {{"decay_s", "Decay", "s", 0.02, 2.0, false, "Brightness time constant"}, &P::decay_s},
         size_units_field<P>(),
         time_units_field<P>(),
+        {{"hold_s", "Hold", "s", 0.0, 0.2, false, "Full brightness this long before the decay"},
+         &P::hold_s},
     };
     return f;
 }
@@ -129,6 +131,8 @@ template <> const std::vector<Field<DropBurstParams>> &fields<DropBurstParams>()
          &P::duration_s},
         size_units_field<P>(),
         time_units_field<P>(),
+        {{"hold_s", "Hold", "s", 0.0, 0.2, false, "Full brightness this long before the decay"},
+         &P::hold_s},
     };
     return f;
 }
@@ -305,6 +309,8 @@ template <> const std::vector<Field<BurstsParams>> &fields<BurstsParams>() {
         {{"level", "Level", "", 0.0, 1.0, false, "Burst brightness"}, &P::level},
         size_units_field<P>(),
         time_units_field<P>(),
+        {{"hold_s", "Hold", "s", 0.0, 0.2, false, "Full brightness this long before the decay"},
+         &P::hold_s},
     };
     return f;
 }

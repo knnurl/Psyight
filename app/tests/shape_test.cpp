@@ -167,3 +167,28 @@ TEST_CASE("shape: on the 0.2 m hexagon a rig-relative shockwave is a ring, not t
     CHECK(outer(0) > 0.3f);  // In metres the ring is wider than the rig: the outer ring is lit.
     CHECK(outer(1) < 0.05f); // Relative to the rig it has not reached the outer ring yet.
 }
+
+TEST_CASE("shape: a peak hold on shockwave, bursts and the drop burst keeps the hit at full") {
+    const Rig rig = mandala();
+    const EffectSpec specs[] = {{ShockwaveParams{}}, {BurstsParams{}}, {DropBurstParams{}}};
+    for (const EffectSpec &spec : specs) {
+        CAPTURE(effect_type_id(spec.type()));
+        EngineInputs in = busy(30.0, "drop");
+        in.since_kick_s = 0.0;
+        in.since_section_s = 0.0;
+        const auto brightest = [&](const EffectSpec &s, double age_s) {
+            EngineInputs at = in;
+            at.since_kick_s = age_s;
+            at.since_section_s = age_s;
+            float most = 0.0f;
+            for (const Rgb &c : render(s, rig, at)) {
+                most = std::max(most, level(c));
+            }
+            return most;
+        };
+        const EffectSpec held = with(spec, "hold_s", 0.1);
+        // Held: the same envelope as at the hit while the hold lasts (the shape may move on).
+        CHECK(brightest(held, 0.05) > brightest(spec, 0.05));
+        CHECK(brightest(held, 0.0) == doctest::Approx(brightest(spec, 0.0)));
+    }
+}

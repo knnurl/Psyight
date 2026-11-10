@@ -116,6 +116,7 @@ struct ShockwaveParams {
     double decay_s = 0.25; // Time constant of the ring's brightness.
     int size_units = 1;    // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
     int time_units = 1;    // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
+    double hold_s = 0.0;   // Peak hold before the decay (engine/shape.h hit_envelope).
 };
 
 struct ConveyorParams {
@@ -153,6 +154,7 @@ struct DropBurstParams {
     double duration_s = 1.5; // After the drop starts.
     int size_units = 1;      // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
     int time_units = 1;      // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
+    double hold_s = 0.0;     // Peak hold before the decay (engine/shape.h hit_envelope).
 };
 
 // Mapping and clock values are engine/space.h's Mapping and Clock.
@@ -229,8 +231,9 @@ struct BurstsParams {
     double decay_s = 0.3;
     double sparks = 0.0; // 0: whole rings; towards 1: broken into sparks.
     double level = 0.9;
-    int size_units = 1; // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
-    int time_units = 1; // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
+    int size_units = 1;  // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
+    int time_units = 1;  // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
+    double hold_s = 0.0; // Peak hold before the decay (engine/shape.h hit_envelope).
 };
 
 struct SpiralParams {
