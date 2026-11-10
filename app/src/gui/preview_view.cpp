@@ -1400,6 +1400,7 @@ void PreviewView::draw_rack(Scene &scene, const ShowFrame &frame) {
         remove_layer(scene, static_cast<size_t>(remove));
         scene_edited_ = true;
     }
+    draw_post_effects(scene);
     // Knob menus: routes removed (highest index first) and added.
     std::sort(routes_to_remove_.rbegin(), routes_to_remove_.rend());
     for (const int r : routes_to_remove_) {
@@ -2345,6 +2346,63 @@ const std::string &PreviewView::current_pack() {
         pack_name_ = pack_edited_ ? loaded + " (edited)" : "custom";
     }
     return pack_name_;
+}
+
+void PreviewView::draw_post_effects(Scene &scene) {
+    if (!tier_at_least(Tier::tune)) {
+        return;
+    }
+    const float em = ImGui::GetFontSize();
+    ImGui::SeparatorText("After the layers");
+    int remove = -1;
+    for (size_t k = 0; k < scene.post.size(); ++k) {
+        PostSpec &p = scene.post[k];
+        ImGui::PushID(static_cast<int>(k));
+        scene_edited_ |= ImGui::Checkbox("##on", &p.enabled);
+        ImGui::SetItemTooltip("On or off.");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(post_type_name(p.type()));
+        const auto knob_field = [&](const char *label, double *value, double min, double max,
+                                    const char *format, const char *tooltip) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(5.0f * em);
+            scene_edited_ |= drag_double(label, value, 0.01f, min, max, format);
+            ImGui::SetItemTooltip("%s", tooltip);
+        };
+        if (auto *a = std::get_if<AfterglowParams>(&p.params)) {
+            knob_field("Decay##g", &a->decay_beats, 0.05, 16.0, "%.2f beats",
+                       "How long each pixel's glow takes to fade.");
+            knob_field("Amount##g", &a->amount, 0.0, 1.0, "%.2f", "How much of the glow shows.");
+        } else if (auto *r = std::get_if<RadialEchoParams>(&p.params)) {
+            knob_field("Speed##e", &r->speed, -8.0, 8.0, "%.2f",
+                       "Centre to edge per beat the echo travels; negative: inwards.");
+            knob_field("Decay##e", &r->decay_beats, 0.05, 16.0, "%.2f beats",
+                       "How long the echo takes to fade.");
+            knob_field("Feed##e", &r->feed, 0.0, 1.0, "%.2f", "How much of the scene enters it.");
+            knob_field("Mix##e", &r->mix, 0.0, 1.0, "%.2f", "How much of the echo shows.");
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Remove")) {
+            remove = static_cast<int>(k);
+        }
+        ImGui::PopID();
+    }
+    if (remove >= 0) {
+        scene.post.erase(scene.post.begin() + remove);
+        scene_edited_ = true;
+    }
+    ImGui::SetNextItemWidth(9.0f * em);
+    if (ImGui::BeginCombo("##add post", "+ Add")) {
+        for (const PostType t : kPostTypes) {
+            if (ImGui::Selectable(post_type_name(t))) {
+                scene.post.push_back(default_post(t));
+                scene_edited_ = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("Passes over the scene's frame with memory of the frames before: an "
+                          "afterglow on every pixel, or an echo travelling out from the centre.");
 }
 
 void PreviewView::draw_automation() {

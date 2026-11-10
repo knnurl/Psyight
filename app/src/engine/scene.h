@@ -494,6 +494,27 @@ struct Layer {
                                              const std::vector<double> &values, size_t index) const;
 };
 
+// Post-effects (engine/post.h): applied to a scene's frame after its layers, in order. Unlike
+// effects they have memory (the frames before), held by the show renderer per scene.
+enum class PostType { afterglow, radial_echo }; // Append only.
+// Afterglow: every pixel keeps its brightest recent colour, fading over decay_beats.
+struct AfterglowParams {
+    double decay_beats = 1.0;
+    double amount = 1.0; // How much of the glow is shown.
+};
+// Radial echo: the frame's colour by hex radius travels out (or in) and fades, shown under it.
+struct RadialEchoParams {
+    double speed = 1.0; // Reaches per beat; negative: inwards.
+    double decay_beats = 1.0;
+    double feed = 1.0; // How much of the scene enters the echo.
+    double mix = 0.7;  // How much of the echo is shown.
+};
+struct PostSpec {
+    std::variant<AfterglowParams, RadialEchoParams> params;
+    bool enabled = true;
+    PostType type() const { return static_cast<PostType>(params.index()); }
+};
+
 struct Scene {
     std::string name;
     std::vector<Layer> layers; // Bottom first.
@@ -503,6 +524,7 @@ struct Scene {
     std::vector<int> palette_list;
     std::vector<std::string> sections; // Section labels this scene suits (automation, SPEC 7.6).
     std::vector<ModRoute> routes;      // Modulation (SPEC 7.4).
+    std::vector<PostSpec> post;        // After the layers, in order (engine/post.h).
 };
 
 // Renders the layers bottom to top onto black, with the scene's modulation applied. memory: the

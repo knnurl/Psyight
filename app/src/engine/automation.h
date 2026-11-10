@@ -49,6 +49,7 @@
 #include "analysis/track_analysis.h"
 #include "core/timebase.h"
 #include "engine/inputs.h"
+#include "engine/post.h"
 #include "engine/scene.h"
 #include "engine/variations.h"
 
@@ -181,9 +182,11 @@ using ModMemory = std::vector<std::vector<ModRouteState>>;
 
 // memory: null renders instantaneous route values; otherwise resized to the scenes. variants: the
 // scenes' variations (all_variations) for SceneMix::variant; null draws the scenes themselves.
+// post: the scenes' post-effect memory (engine/post.h), resized to the scenes; each scene's
+// post-effects run on its frame before the crossfade; null skips them (the pure path).
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
                  std::uint64_t seed, ModMemory *memory = nullptr,
-                 const SceneVariants *variants = nullptr);
+                 const SceneVariants *variants = nullptr, PostMemory *post = nullptr);
 
 } // namespace psyight

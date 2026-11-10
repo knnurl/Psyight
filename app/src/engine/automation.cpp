@@ -628,7 +628,8 @@ int SceneLauncher::update(int requested, const EngineInputs &inputs, SceneLaunch
 
 Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Rig &rig,
                  const EngineInputs &inputs, const std::vector<Palette> &palettes,
-                 std::uint64_t seed, ModMemory *memory, const SceneVariants *variants) {
+                 std::uint64_t seed, ModMemory *memory, const SceneVariants *variants,
+                 PostMemory *post) {
     if (scenes.empty() || palettes.empty() || mix.to < 0 ||
         mix.to >= static_cast<int>(scenes.size())) {
         return Frame(rig.pixels.size());
@@ -636,7 +637,12 @@ Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Ri
     if (memory != nullptr) {
         memory->resize(scenes.size());
     }
-    const auto render = [&](int scene, int variant, int shift) {
+    if (post != nullptr) {
+        post->resize(scenes.size());
+    }
+    // advance: step the post-effects' memory (once a frame per scene: not for the palette slew's
+    // second drawing).
+    const auto render = [&](int scene, int variant, int shift, bool advance) {
         const auto i = static_cast<size_t>(scene);
         const auto v = static_cast<size_t>(variant);
         // A variation shares its scene's route memory: the same routes, the same render time.
@@ -646,25 +652,29 @@ Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Ri
                 : scenes[i];
         // A scene rendered twice in a frame (a palette slew) steps its routes at the same render
         // time twice, which returns the same values.
-        return render_scene(s, rig, inputs,
-                            palettes[static_cast<size_t>(
-                                scene_palette(s, shift, palettes.size(), mix.palette_rotation))],
-                            seed,
-                            memory != nullptr ? &(*memory)[static_cast<size_t>(scene)] : nullptr);
+        Frame out = render_scene(
+            s, rig, inputs,
+            palettes[static_cast<size_t>(
+                scene_palette(s, shift, palettes.size(), mix.palette_rotation))],
+            seed, memory != nullptr ? &(*memory)[static_cast<size_t>(scene)] : nullptr);
+        if (post != nullptr) {
+            apply_post(s, rig, inputs, out, &(*post)[i], advance);
+        }
+        return out;
     };
     // The scene crossfade at one palette shift.
-    const auto render_scenes = [&](int shift) {
-        Frame incoming = render(mix.to, mix.variant, shift);
+    const auto render_scenes = [&](int shift, bool advance) {
+        Frame incoming = render(mix.to, mix.variant, shift, advance);
         if (mix.from < 0 || mix.to_weight >= 1.0) {
             return incoming;
         }
-        Frame frame = render(mix.from, mix.variant_from, shift);
+        Frame frame = render(mix.from, mix.variant_from, shift, advance);
         mix_into(frame, incoming, mix.to_weight);
         return frame;
     };
-    Frame frame = render_scenes(mix.palette_shift);
+    Frame frame = render_scenes(mix.palette_shift, true);
     if (mix.palette_weight < 1.0) {
-        Frame old = render_scenes(mix.palette_shift_from);
+        Frame old = render_scenes(mix.palette_shift_from, false);
         mix_into(old, frame, mix.palette_weight);
         frame = std::move(old);
     }

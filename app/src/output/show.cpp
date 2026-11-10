@@ -57,6 +57,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
     if (std::abs(t_s - last_t_s_) > kSeekResetS) {
         limiters_.reset();
         modulation_.clear();
+        post_.clear();
         launcher_.reset();
     }
     last_t_s_ = t_s;
@@ -144,7 +145,7 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
             out.frame.assign(config.rig.pixels.size(), Rgb{});
         } else {
             out.frame = render_mix(config.scenes, out.mix, config.rig, inputs, config.palettes,
-                                   config.seed, &modulation_, &variants_);
+                                   config.seed, &modulation_, &variants_, &post_);
             if (config.live == nullptr && t_s < kTrackFadeInS) { // A track's start: from black.
                 fade = std::max(0.0, t_s) / kTrackFadeInS;
             }

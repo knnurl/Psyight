@@ -105,6 +105,24 @@ Scene parse_scene(const json &item) {
     s.name = optional<std::string>(item, "name", "");
     s.palette = integer(item, "palette", 0, 0, 1000);
     s.sections = optional<std::vector<std::string>>(item, "sections", {});
+    if (const auto post = item.find("post"); post != item.end()) {
+        for (const json &e : post->get_ref<const json::array_t &>()) {
+            const std::string type = e.at("type").get<std::string>();
+            PostSpec spec = default_post(from_id_or_throw(post_type_from_id(type), "post", type));
+            spec.enabled = optional<bool>(e, "enabled", true);
+            const json params = e.contains("params") ? e.at("params") : json::object();
+            if (auto *a = std::get_if<AfterglowParams>(&spec.params)) {
+                a->decay_beats = number(params, "decay_beats", a->decay_beats, 0.05, 16.0);
+                a->amount = number(params, "amount", a->amount, 0.0, 1.0);
+            } else if (auto *r = std::get_if<RadialEchoParams>(&spec.params)) {
+                r->speed = number(params, "speed", r->speed, -8.0, 8.0);
+                r->decay_beats = number(params, "decay_beats", r->decay_beats, 0.05, 16.0);
+                r->feed = number(params, "feed", r->feed, 0.0, 1.0);
+                r->mix = number(params, "mix", r->mix, 0.0, 1.0);
+            }
+            s.post.push_back(spec);
+        }
+    }
     if (const auto list = item.find("palette_list"); list != item.end()) {
         for (const json &v : list->get_ref<const json::array_t &>()) {
             const int index = v.get<int>();
@@ -272,6 +290,24 @@ json scene_json(const Scene &s) {
                 {"routes", routes}};
     if (!s.palette_list.empty()) {
         out["palette_list"] = s.palette_list;
+    }
+    if (!s.post.empty()) {
+        json post = json::array();
+        for (const PostSpec &p : s.post) {
+            json params;
+            if (const auto *a = std::get_if<AfterglowParams>(&p.params)) {
+                params = {{"decay_beats", finite(a->decay_beats, "decay_beats")},
+                          {"amount", finite(a->amount, "amount")}};
+            } else if (const auto *r = std::get_if<RadialEchoParams>(&p.params)) {
+                params = {{"speed", finite(r->speed, "speed")},
+                          {"decay_beats", finite(r->decay_beats, "decay_beats")},
+                          {"feed", finite(r->feed, "feed")},
+                          {"mix", finite(r->mix, "mix")}};
+            }
+            post.push_back(
+                {{"type", post_type_id(p.type())}, {"enabled", p.enabled}, {"params", params}});
+        }
+        out["post"] = post;
     }
     return out;
 }
