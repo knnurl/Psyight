@@ -573,6 +573,11 @@ Result<Project> parse_project_json(std::string_view json_text) {
             number(lim, "current_per_channel_ma", l.current_per_channel_ma, 0.0, 1000.0);
         l.budget_a = number(lim, "budget_a", l.budget_a, 0.0, 10000.0);
         l.gamma = number(lim, "gamma", l.gamma, 1.0, 4.0);
+        const std::string power_model =
+            optional<std::string>(lim, "power_model", power_model_id(l.power_model));
+        l.power_model =
+            from_id_or_throw(power_model_from_id(power_model), "power model", power_model);
+        l.quiescent_ma = number(lim, "quiescent_ma", l.quiescent_ma, 0.0, 5.0);
         if (const auto caps = lim.find("group_caps"); caps != lim.end()) {
             for (const json &c : caps->get_ref<const json::array_t &>()) {
                 p.group_caps.push_back(
@@ -709,6 +714,8 @@ Result<std::string> to_project_json(const Project &p) {
               {"current_per_channel_ma", finite(l.current_per_channel_ma, "current")},
               {"budget_a", finite(l.budget_a, "budget_a")},
               {"gamma", finite(l.gamma, "gamma")},
+              {"power_model", power_model_id(l.power_model)},
+              {"quiescent_ma", finite(l.quiescent_ma, "quiescent_ma")},
               {"group_caps", group_caps}}},
             {"latency_offset_ms", finite(p.latency_offset_ms, "latency_offset_ms")},
             {"automation", automation_json(a)},

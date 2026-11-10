@@ -31,6 +31,22 @@ Grid parse_grid(const json &j) {
             j.at("sample_rate_hz").get<int>()};
 }
 
+// A recording made before a setting existed replays as recorded: every setting whose default
+// changed the show (docs/PLAN_HEX_VISUALS.md table 1.2) takes its legacy value when the recorded
+// project lacks it. (A project file opened in the app takes the new defaults instead.)
+void set_legacy_values(const json &project_json, Project &project) {
+    const auto lacks = [](const json &j, const char *section, const char *key) {
+        const auto s = j.find(section);
+        return s == j.end() || !s->is_object() || !s->contains(key);
+    };
+    if (lacks(project_json, "limiter", "power_model")) {
+        project.limiter.power_model = PowerModel::linear;
+    }
+    if (lacks(project_json, "limiter", "quiescent_ma")) {
+        project.limiter.quiescent_ma = 0.0;
+    }
+}
+
 // Little-endian, as on every target this runs on; copied byte by byte to stay portable.
 template <typename T> void put(std::vector<std::uint8_t> &out, T value) {
     std::array<std::uint8_t, sizeof(T)> bytes{};
@@ -137,6 +153,7 @@ Result<std::vector<ParamsEntry>> parse_params_jsonl(std::string_view text) {
                 return project.error();
             }
             e.project = std::move(project.value());
+            set_legacy_values(j.at("project"), e.project);
             const json &r = j.at("runtime");
             e.runtime.manual_scene = r.at("manual_scene").get<int>();
             e.runtime.blackout = r.at("blackout").get<bool>();

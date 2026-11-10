@@ -15,7 +15,13 @@
 // its rising pixels are held just under flash_delta above their trough; it is let through once
 // the window has room. This is a safeguard, not a certification (SPEC 7.7).
 // Power budget: the current estimate is current_per_channel_ma at full per colour channel (SPEC 18
-// A5: about 20 mA for WS2812B), summed; above budget_a the whole frame is scaled down.
+// A5: about 20 mA for WS2812B), summed; above budget_a the whole frame is scaled down. Two
+// estimates (PowerModel): duty (the default) takes each channel's share of full as the byte sent
+// over 255, since the LED's current follows its PWM duty, which is after gamma, plus quiescent_ma
+// per pixel whatever its colour; linear (the older one) takes the level before gamma, which is
+// too high everywhere but at full and scaled wide bright frames far below the budget (finding
+// L1 of docs/research/UX_VISUAL_REVIEW.md). Under duty the current is not linear in the scale,
+// so the scale comes from the gamma curve and is then stepped down until the estimate fits.
 // Stateful (the flash history), deterministic for the same frame sequence and times.
 #pragma once
 
@@ -24,10 +30,16 @@
 
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace psyight {
+
+// How the supply current is estimated (above).
+enum class PowerModel { linear, duty };
+const char *power_model_id(PowerModel model); // "linear", "duty" (files).
+std::optional<PowerModel> power_model_from_id(const std::string &id);
 
 struct LimiterParams {
     double brightness_cap = 1.0; // Global, 0 to 1.
@@ -38,6 +50,8 @@ struct LimiterParams {
     double current_per_channel_ma = 20.0;
     double budget_a = 10.0; // 0 disables the power budget.
     double gamma = 2.2;
+    PowerModel power_model = PowerModel::duty;
+    double quiescent_ma = 1.0; // Per pixel, drawn whatever the colour (duty model). [Verify]
 };
 
 // A brightness cap for the strips tagged with a group (SPEC 7.7: "global, and per group").
@@ -52,8 +66,10 @@ std::vector<float> group_caps_per_pixel(const Rig &rig, const std::vector<GroupC
 // Rec. 709 luminance of linear RGB.
 double luminance(const Rgb &c);
 
-// Estimated supply current of a frame in amperes.
+// Estimated supply current of a frame in amperes: the linear model.
 double estimated_current_a(const Frame &frame, double current_per_channel_ma);
+// The same under params' model (its gamma, current per channel and quiescent current).
+double estimated_current_a(const Frame &frame, const LimiterParams &params);
 
 // The per-pixel flash tracking shared by the limiter and the meter.
 class FlashTracker {

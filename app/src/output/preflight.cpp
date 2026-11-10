@@ -131,7 +131,8 @@ std::vector<PreflightCheck> run_preflight(const PreflightInputs &in) {
     }
 
     // Power.
-    const double full_white_a = pixels * 3 * p.limiter.current_per_channel_ma * 1e-3;
+    const double full_white_a =
+        estimated_current_a(Frame(static_cast<size_t>(pixels), Rgb{1.0f, 1.0f, 1.0f}), p.limiter);
     if (p.limiter.budget_a <= 0.0) {
         add("Power", CheckLevel::warn,
             format("Power budget off; full white would draw about %.1f A.", full_white_a));

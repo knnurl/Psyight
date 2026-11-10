@@ -894,6 +894,23 @@ void PreviewView::draw_controls(const ShowFrame &frame) {
             changed |= knob("Power##budget", &p.budget_a, 0.0, 20.0,
                             p.budget_a <= 0.0 ? "off" : "%.1f A", defaults.budget_a);
             ImGui::SetItemTooltip("Power budget: the frame is scaled to stay under it (0: off).");
+            if (p.power_model == PowerModel::duty) {
+                ImGui::SameLine();
+                changed |= knob("Idle##quiescent", &p.quiescent_ma, 0.0, 5.0, "%.1f mA",
+                                defaults.quiescent_ma);
+                ImGui::SetItemTooltip("Idle per pixel: the current each pixel draws whatever its "
+                                      "colour, in mA.");
+            }
+            int model = p.power_model == PowerModel::duty ? 0 : 1;
+            ImGui::SetNextItemWidth(160.0f);
+            if (ImGui::Combo("Power estimate", &model, "From duty\0Linear (older)\0")) {
+                p.power_model = model == 0 ? PowerModel::duty : PowerModel::linear;
+                changed = true;
+            }
+            ImGui::SetItemTooltip(
+                "From duty: each channel's current follows the byte sent, after gamma, plus the "
+                "idle current. Linear (older): the level before gamma, which overestimates dim "
+                "frames and dims wide bright ones.");
             draw_group_caps();
         }
         if (tier_at_least(Tier::engineer)) { // Disabling it is an Engineer action (SPEC 7.7).

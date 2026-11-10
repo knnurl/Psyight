@@ -5,6 +5,7 @@
 #include "output/recorder.h"
 
 #include <doctest/doctest.h>
+#include <nlohmann/json.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -77,6 +78,41 @@ TEST_CASE("session files: meta, params and frames round trip; a truncated frame 
     REQUIRE(file.value().frames.size() == 2);
     check_same(file.value().frames[1], frame(1, 4));
     CHECK_FALSE(parse_frames(std::vector<std::uint8_t>(20, 0)).ok());
+}
+
+// A params line as a recording made before the hexagon-visuals settings existed would hold it:
+// the project without them.
+std::string older_params_line(const Project &p) {
+    nlohmann::json line = nlohmann::json::parse(params_line(1, p, {}).value());
+    nlohmann::json &project = line["project"];
+    project["limiter"].erase("power_model");
+    project["limiter"].erase("quiescent_ma");
+    return line.dump() + "\n";
+}
+
+TEST_CASE("session files: settings a recording predates take their legacy values; a project file "
+          "takes the new defaults") {
+    Project p = default_project();
+    const std::string older = older_params_line(p);
+    const Result<std::vector<ParamsEntry>> entries = parse_params_jsonl(older);
+    REQUIRE(entries.ok());
+    const Project &replayed = entries.value()[0].project;
+    CHECK(replayed.limiter.power_model == PowerModel::linear);
+    CHECK(replayed.limiter.quiescent_ma == 0.0);
+    // The same project text opened as a project file: the new defaults.
+    const nlohmann::json project = nlohmann::json::parse(older)["project"];
+    const Result<Project> opened = parse_project_json(project.dump());
+    REQUIRE(opened.ok());
+    CHECK(opened.value().limiter.power_model == PowerModel::duty);
+    CHECK(opened.value().limiter.quiescent_ma == 1.0);
+    // A recording made with the settings keeps them.
+    p.limiter.power_model = PowerModel::duty;
+    p.limiter.quiescent_ma = 2.5;
+    const Result<std::vector<ParamsEntry>> newer =
+        parse_params_jsonl(params_line(2, p, {}).value());
+    REQUIRE(newer.ok());
+    CHECK(newer.value()[0].project.limiter.power_model == PowerModel::duty);
+    CHECK(newer.value()[0].project.limiter.quiescent_ma == 2.5);
 }
 
 TEST_CASE("recorder: writes every frame and configuration in order, and refuses an old folder") {

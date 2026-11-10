@@ -135,6 +135,7 @@ TEST_CASE("limiters: the power budget scales a frame down to the supply's limit"
     LimiterParams p;
     p.flash_limiter = false;
     p.budget_a = 10.0;
+    p.power_model = PowerModel::linear; // The older estimate, as before the duty model.
     Frame white(kPixels, Rgb{1.0f, 1.0f, 1.0f});
     CHECK(estimated_current_a(white, 20.0) == doctest::Approx(444 * 3 * 0.02)); // 26.6 A.
     Limiters limiters(p);
@@ -143,6 +144,58 @@ TEST_CASE("limiters: the power budget scales a frame down to the supply's limit"
     CHECK(report.power_scale == doctest::Approx(10.0 / 26.64).epsilon(0.001));
     Frame dim(kPixels, Rgb{0.1f, 0.0f, 0.0f});
     CHECK(limiters.process(dim, 1.0).power_scale == 1.0);
+}
+
+TEST_CASE("limiters: the duty model estimates from the bytes sent, after gamma") {
+    LimiterParams p;
+    p.flash_limiter = false;
+    p.quiescent_ma = 0.0;
+    p.budget_a = 0.0;
+    REQUIRE(p.power_model == PowerModel::duty); // The default.
+    // 408 pixels of white at the 44% cap: byte 41 on every channel.
+    const Frame white(408, Rgb{0.4375f, 0.4375f, 0.4375f});
+    CHECK(to_bytes(white, p.gamma)[0] == 41);
+    CHECK(estimated_current_a(white, p) == doctest::Approx(408 * 3 * 41 / 255.0 * 0.02));
+    CHECK(estimated_current_a(white, p) == doctest::Approx(3.94).epsilon(0.003));
+    // Linear, the same frame: 10.7 A.
+    p.power_model = PowerModel::linear;
+    CHECK(estimated_current_a(white, p) == doctest::Approx(408 * 3 * 0.4375 * 0.02));
+    p.power_model = PowerModel::duty;
+    // With a 3.75 A budget it is trimmed, not crushed: bytes 39 or 40, the estimate within it.
+    p.budget_a = 3.75;
+    Limiters limiters(p);
+    Frame frame = white;
+    const LimiterReport report = limiters.process(frame, 0.0);
+    CHECK(report.power_scale < 1.0);
+    CHECK(report.current_a <= 3.75);
+    for (const std::uint8_t b : to_bytes(frame, p.gamma)) {
+        CHECK((b == 39 || b == 40));
+    }
+    // Deterministic: the same frame twice gives the same scale.
+    Limiters again(p);
+    Frame second = white;
+    CHECK(again.process(second, 0.0).power_scale == report.power_scale);
+    CHECK(second == frame);
+}
+
+TEST_CASE("limiters: the duty estimate is monotonic, counts the idle current, and a budget under "
+          "it gives black") {
+    LimiterParams p;
+    p.flash_limiter = false;
+    double previous = -1.0;
+    for (int k = 0; k <= 100; ++k) {
+        const float v = static_cast<float>(k) / 100.0f;
+        const double a = estimated_current_a(Frame(200, Rgb{v, 0.5f * v, 0.0f}), p);
+        CHECK(a >= previous); // A brighter frame never estimates lower.
+        previous = a;
+    }
+    CHECK(estimated_current_a(Frame(200, Rgb{}), p) == doctest::Approx(200 * 1e-3)); // Idle.
+    p.budget_a = 0.1; // Under the 0.2 A the pixels draw idle.
+    Limiters limiters(p);
+    Frame frame(200, Rgb{1.0f, 1.0f, 1.0f});
+    const LimiterReport report = limiters.process(frame, 0.0);
+    CHECK(report.power_scale == 0.0);
+    CHECK(frame == Frame(200, Rgb{}));
 }
 
 TEST_CASE("limiters: brightness cap and gamma to bytes") {

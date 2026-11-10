@@ -10,6 +10,26 @@ namespace {
 
 constexpr double kRiseWindowS = 0.1; // Pixels that rose this recently still count as rising.
 constexpr double kUnder = 0.99;      // Held rises stop just under flash_delta.
+constexpr int kPowerSteps = 16;      // Duty model: at most this many steps down...
+constexpr double kPowerStep = 0.98;  // ...of this, after the closed-form scale.
+
+// One channel's byte as sent: gamma to 8 bits, a channel at or above kVisibleFloor at least 1.
+std::uint8_t to_byte(float v, double gamma) {
+    const double level = std::clamp(static_cast<double>(v), 0.0, 1.0);
+    const long out = std::lround(255.0 * std::pow(level, gamma));
+    return static_cast<std::uint8_t>(out == 0 && level >= kVisibleFloor ? 1 : out);
+}
+
+// The duty model's current of the frame scaled by `scale`.
+double duty_current_a(const Frame &frame, double scale, const LimiterParams &p) {
+    long long bytes = 0;
+    const auto s = static_cast<float>(scale);
+    for (const Rgb &c : frame) {
+        bytes += to_byte(c.r * s, p.gamma) + to_byte(c.g * s, p.gamma) + to_byte(c.b * s, p.gamma);
+    }
+    return static_cast<double>(bytes) / 255.0 * p.current_per_channel_ma * 1e-3 +
+           static_cast<double>(frame.size()) * p.quiescent_ma * 1e-3;
+}
 
 void expire(std::deque<double> &starts_s, double t_s) {
     while (!starts_s.empty() && t_s - starts_s.front() >= 1.0) {
@@ -47,6 +67,26 @@ double estimated_current_a(const Frame &frame, double current_per_channel_ma) {
         sum += static_cast<double>(c.r) + c.g + c.b;
     }
     return sum * current_per_channel_ma * 1e-3;
+}
+
+double estimated_current_a(const Frame &frame, const LimiterParams &params) {
+    return params.power_model == PowerModel::linear
+               ? estimated_current_a(frame, params.current_per_channel_ma)
+               : duty_current_a(frame, 1.0, params);
+}
+
+const char *power_model_id(PowerModel model) {
+    return model == PowerModel::linear ? "linear" : "duty";
+}
+
+std::optional<PowerModel> power_model_from_id(const std::string &id) {
+    if (id == "linear") {
+        return PowerModel::linear;
+    }
+    if (id == "duty") {
+        return PowerModel::duty;
+    }
+    return std::nullopt;
 }
 
 void FlashTracker::reset() {
@@ -150,9 +190,25 @@ LimiterReport Limiters::process(Frame &frame, double t_s) {
         }
     }
     // Power budget.
-    const double current_a = estimated_current_a(frame, p_.current_per_channel_ma);
+    const double current_a = estimated_current_a(frame, p_);
     if (p_.budget_a > 0.0 && current_a > p_.budget_a) {
-        report.power_scale = p_.budget_a / current_a;
+        if (p_.power_model == PowerModel::linear) {
+            report.power_scale = p_.budget_a / current_a;
+        } else {
+            const double quiescent_a = static_cast<double>(frame.size()) * p_.quiescent_ma * 1e-3;
+            double s = 0.0;
+            if (p_.budget_a > quiescent_a) {
+                s = std::pow((p_.budget_a - quiescent_a) / (current_a - quiescent_a),
+                             1.0 / std::max(1.0, p_.gamma));
+                // The visible floor and rounding make the current step, so the closed form can
+                // land just over the budget.
+                for (int k = 0; k < kPowerSteps && duty_current_a(frame, s, p_) > p_.budget_a;
+                     ++k) {
+                    s *= kPowerStep;
+                }
+            }
+            report.power_scale = s;
+        }
         for (Rgb &c : frame) {
             c = scaled(c, report.power_scale);
         }
@@ -161,7 +217,7 @@ LimiterReport Limiters::process(Frame &frame, double t_s) {
     // on starts from the true state). It only dims, so the power budget still holds.
     report.flash_limited = flashes_.detect(frame, t_s, p_.flash_limiter);
     flashes_.commit(frame);
-    report.current_a = estimated_current_a(frame, p_.current_per_channel_ma);
+    report.current_a = estimated_current_a(frame, p_);
     return report;
 }
 
@@ -175,15 +231,10 @@ bool FlashMeter::add(const Frame &frame, double t_s) {
 std::vector<std::uint8_t> to_bytes(const Frame &frame, double gamma) {
     std::vector<std::uint8_t> bytes;
     bytes.reserve(frame.size() * 3);
-    const auto byte = [gamma](float v) {
-        const double level = std::clamp(static_cast<double>(v), 0.0, 1.0);
-        const long out = std::lround(255.0 * std::pow(level, gamma));
-        return static_cast<std::uint8_t>(out == 0 && level >= kVisibleFloor ? 1 : out);
-    };
     for (const Rgb &c : frame) {
-        bytes.push_back(byte(c.r));
-        bytes.push_back(byte(c.g));
-        bytes.push_back(byte(c.b));
+        bytes.push_back(to_byte(c.r, gamma));
+        bytes.push_back(to_byte(c.g, gamma));
+        bytes.push_back(to_byte(c.b, gamma));
     }
     return bytes;
 }
