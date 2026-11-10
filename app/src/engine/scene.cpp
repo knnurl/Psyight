@@ -1,6 +1,7 @@
 #include "engine/scene.h"
 
 #include "engine/effect_spec.h"
+#include "engine/shape.h"
 
 #include <algorithm>
 #include <cmath>
@@ -37,10 +38,11 @@ class Plasma final : public Effect {
     void render(const EffectContext &c, std::span<Rgb> out) const override {
         const double level = is_groove(c.in.section) ? p_.groove_level : p_.ambient_level;
         const double t = c.in.t_s * p_.speed_hz;
+        const double scale_m = size_in_m(p_.scale_m, p_.size_units, c.rig);
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = c.rig.pixels[i].position;
-            const double a = std::sin(2.0 * kPi * (q.x / p_.scale_m + t));
-            const double b = std::sin(2.0 * kPi * (q.y / (0.7 * p_.scale_m) - 1.7 * t) + q.x);
+            const double a = std::sin(2.0 * kPi * (q.x / scale_m + t));
+            const double b = std::sin(2.0 * kPi * (q.y / (0.7 * scale_m) - 1.7 * t) + q.x);
             const double v = 0.5 + 0.25 * (a + b); // 0 to 1.
             out[i] = scaled(c.palette.at(0.5 * v + 0.1 * t), level * (0.4 + 0.6 * v));
         }
@@ -59,15 +61,18 @@ class Shockwave final : public Effect {
             std::fill(out.begin(), out.end(), Rgb{});
             return;
         }
-        const double radius_m = c.in.since_kick_s * p_.speed_m_per_s;
-        const double level = std::exp(-c.in.since_kick_s / p_.decay_s);
+        const double radius_m =
+            c.in.since_kick_s * size_in_m(p_.speed_m_per_s, p_.size_units, c.rig);
+        const double width_m = size_in_m(p_.width_m, p_.size_units, c.rig);
+        const double level =
+            std::exp(-c.in.since_kick_s / time_in_s(p_.decay_s, p_.time_units, c.in));
         const Vec3 centre = centre_of(c.rig);
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = c.rig.pixels[i].position;
             const double d = std::sqrt((q.x - centre.x) * (q.x - centre.x) +
                                        (q.y - centre.y) * (q.y - centre.y) +
                                        (q.z - centre.z) * (q.z - centre.z));
-            const double x = (d - radius_m) / p_.width_m;
+            const double x = (d - radius_m) / width_m;
             const double v = level * std::exp(-x * x);
             out[i] = scaled({1.0f, 1.0f, 1.0f}, v);
         }
@@ -176,12 +181,13 @@ class Build final : public Effect {
             (c.in.since_section_s + p_.speed_ramp * c.in.section_length_s * p * p * p / 3.0);
         const double level = p_.start_level + (p_.end_level - p_.start_level) * p * p;
         const Vec3 centre = centre_of(c.rig);
+        const double wavelength_m = size_in_m(p_.wavelength_m, p_.size_units, c.rig);
         const Rgb colour = c.palette.at(0.25 * p);
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = c.rig.pixels[i].position;
             const double d = std::hypot(q.x - centre.x, q.y - centre.y, q.z - centre.z);
             // Constant-phase points sit at d = wavelength * (k - phase): they move inward.
-            const double v = 0.5 + 0.5 * std::cos(2.0 * kPi * (d / p_.wavelength_m + phase));
+            const double v = 0.5 + 0.5 * std::cos(2.0 * kPi * (d / wavelength_m + phase));
             out[i] = scaled(colour, level * v * v * v);
         }
     }
@@ -196,18 +202,20 @@ class DropBurst final : public Effect {
     const char *name() const override { return "Drop burst"; }
     void render(const EffectContext &c, std::span<Rgb> out) const override {
         const double t = c.in.since_section_s;
-        if (c.in.section != "drop" || t >= p_.duration_s) {
+        if (c.in.section != "drop" || t >= time_in_s(p_.duration_s, p_.time_units, c.in)) {
             std::fill(out.begin(), out.end(), Rgb{});
             return;
         }
-        const double radius_m = p_.speed_m_per_s * t;
-        const double level = std::exp(-t / p_.decay_s);
+        const double radius_m = size_in_m(p_.speed_m_per_s, p_.size_units, c.rig) * t;
+        const double level = std::exp(-t / time_in_s(p_.decay_s, p_.time_units, c.in));
+        // The disc's soft edge, 10 cm on a 1 m rig.
+        const double edge_m = size_in_m(0.1, p_.size_units, c.rig);
         const Vec3 centre = centre_of(c.rig);
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = c.rig.pixels[i].position;
             const double d = std::hypot(q.x - centre.x, q.y - centre.y, q.z - centre.z);
-            // A filled disc with a soft 10 cm edge, brightest at its rim.
-            const double inside = std::clamp((radius_m - d) / 0.1 + 1.0, 0.0, 1.0);
+            // A filled disc with a soft edge, brightest at its rim.
+            const double inside = std::clamp((radius_m - d) / edge_m + 1.0, 0.0, 1.0);
             const double rim = radius_m > 0.0 ? 0.5 + 0.5 * std::min(1.0, d / radius_m) : 1.0;
             out[i] = scaled({1.0f, 1.0f, 1.0f}, level * inside * rim);
         }

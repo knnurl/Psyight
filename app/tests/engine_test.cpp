@@ -126,7 +126,7 @@ TEST_CASE("shockwave: a ring at speed times time since the kick, nothing before 
     const Palette palette = default_palettes()[0];
     EngineInputs in;
     std::vector<Rgb> out(rig.pixels.size());
-    const auto effect = make_shockwave({6.0, 0.25, 0.25});
+    const auto effect = make_shockwave({6.0, 0.25, 0.25, 0, 0}); // Metres and seconds.
     effect->render({rig, in, palette, 1}, out);
     for (const Rgb &c : out) {
         CHECK(luminance(c) == 0.0f);

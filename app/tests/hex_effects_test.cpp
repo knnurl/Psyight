@@ -1,6 +1,7 @@
 // The hexagon effects (engine/hex_effects.cpp) and hex mappings (engine/space.h), on the hexagon
 // mandala preset: rings at hex distance 1, 2/3 and 1/3, spokes at every corner.
 
+#include "effect_test_helpers.h"
 #include "engine/effect_spec.h"
 #include "engine/presets.h"
 #include "engine/rig.h"
@@ -21,45 +22,11 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 
-Rig mandala() {
-    for (const RigPreset &p : builtin_rig_presets()) {
-        if (p.name == "Hexagon mandala") {
-            return build_rig(p.strips);
-        }
-    }
-    FAIL("no hexagon mandala");
-    return {};
-}
-
-float level(const Rgb &c) { return std::max({c.r, c.g, c.b}); }
-
-Frame render(const EffectSpec &spec, const Rig &rig, const EngineInputs &in) {
-    const Palette palette{"test", {{1, 0, 0}, {0, 0, 1}}};
-    Frame out(rig.pixels.size());
-    make_effect(spec)->render({rig, in, palette, 7}, out);
-    return out;
-}
-
-std::vector<size_t> pixels_of(const Rig &rig, int strip) {
-    std::vector<size_t> out;
-    for (size_t i = 0; i < rig.pixels.size(); ++i) {
-        if (rig.pixels[i].strip == strip) {
-            out.push_back(i);
-        }
-    }
-    return out;
-}
-
-EngineInputs grid_at(long long beat, double phase) {
-    EngineInputs in;
-    in.beat_s = 0.4;
-    in.beat_index = beat;
-    in.beat_phase = phase;
-    in.beat_in_bar = static_cast<int>(beat % 4);
-    in.bar_index = beat / 4;
-    in.bar_phase = (static_cast<double>(beat % 4) + phase) / 4.0;
-    return in;
-}
+using test::grid_at;
+using test::level;
+using test::mandala;
+using test::pixels_of;
+using test::render;
 
 } // namespace
 
@@ -168,8 +135,11 @@ TEST_CASE("hexagon pack: ids, settings and every scene renders on the mandala") 
         CAPTURE(effect_type_id(t));
         CHECK(effect_type_from_id(effect_type_id(t)) == t);
         const std::vector<EffectParamInfo> infos = effect_param_infos(t);
-        CHECK(std::string(infos.back().id) == "corners");
-        CHECK(effect_option_name(infos.back(), 2) == "Sideways");
+        const auto corners = std::find_if(infos.begin(), infos.end(), [](const auto &info) {
+            return std::string(info.id) == "corners";
+        });
+        REQUIRE(corners != infos.end());
+        CHECK(effect_option_name(*corners, 2) == "Sideways");
     }
     const auto packs = builtin_show_packs();
     const auto hexagon = std::find_if(packs.begin(), packs.end(),

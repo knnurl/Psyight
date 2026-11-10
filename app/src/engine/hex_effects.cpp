@@ -2,6 +2,7 @@
 // ring about the rig's centre is one hex distance.
 
 #include "engine/scene.h"
+#include "engine/shape.h"
 #include "engine/space.h"
 
 #include <algorithm>
@@ -84,6 +85,7 @@ class HexPulse final : public Effect {
         const double travel_s = std::max(1e-3, p_.travel_beats * beat_of(c.in));
         const double width = std::max(0.01, p_.width);
         const long long every = std::max(1, p_.every);
+        const double decay_s = std::max(1e-3, time_in_s(p_.decay_s, p_.time_units, c.in));
         const int keep = t.spacing_s > 0.0   ? std::clamp(p_.keep, 1, 6)
                          : t.ages != nullptr ? std::clamp(p_.keep, 1, kEventHistory)
                                              : 1;
@@ -103,7 +105,7 @@ class HexPulse final : public Effect {
             if (!std::isfinite(age)) {
                 break;
             }
-            const double fade = std::exp(-age / std::max(1e-3, p_.decay_s));
+            const double fade = std::exp(-age / decay_s);
             const double travelled = age / travel_s;
             if (fade < 0.01 || travelled > 1.0 + 3.0 * width) {
                 continue;
@@ -260,7 +262,7 @@ class Interference final : public Effect {
     void render(const EffectContext &c, std::span<Rgb> out) const override {
         const EngineInputs &in = c.in;
         const HexFrame frame = hex_frame(c.rig, p_.corners);
-        const double k = 2.0 * kPi / std::max(0.01, p_.scale_m);
+        const double k = 2.0 * kPi / std::max(0.01, size_in_m(p_.scale_m, p_.size_units, c.rig));
         const double drift = 2.0 * kPi * clock_cycles(in, clock_of(p_.clock), p_.rate);
         const double pump = std::isfinite(in.since_kick_s)
                                 ? p_.kick_pump * std::exp(-in.since_kick_s / (0.5 * beat_of(in)))

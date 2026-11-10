@@ -86,12 +86,15 @@ struct PlasmaParams {
     double scale_m = 1.4;        // Spatial period.
     double groove_level = 0.15;  // Brightness during grooves and drops.
     double ambient_level = 0.45; // Brightness in intros, breakdowns, builds and outros.
+    int size_units = 1;          // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
 };
 
 struct ShockwaveParams {
     double speed_m_per_s = 6.0;
     double width_m = 0.25;
     double decay_s = 0.25; // Time constant of the ring's brightness.
+    int size_units = 1;    // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
+    int time_units = 1;    // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
 };
 
 struct ConveyorParams {
@@ -120,12 +123,15 @@ struct BuildParams {
     double speed_ramp = 3.0;     // Extra speed at the end, as a multiple of the start speed.
     double start_level = 0.15;
     double end_level = 0.75;
+    int size_units = 1; // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
 };
 
 struct DropBurstParams {
     double speed_m_per_s = 4.0;
     double decay_s = 0.35;
     double duration_s = 1.5; // After the drop starts.
+    int size_units = 1;      // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
+    int time_units = 1;      // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
 };
 
 // Mapping and clock values are engine/space.h's Mapping and Clock.
@@ -178,6 +184,7 @@ struct NoiseParams {
     double level = 0.5;
     double colour_spread = 0.8;
     double brightness_colour = 0.3; // Palette shift with the residual's brightness.
+    int size_units = 1;             // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
 };
 
 struct FireParams {
@@ -188,7 +195,8 @@ struct FireParams {
     double scale_m = 0.25;
     double flicker = 0.6;
     double level = 1.0;
-    int colours = 0; // Fire, palette.
+    int colours = 0;    // Fire, palette.
+    int size_units = 1; // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
 };
 
 struct BurstsParams {
@@ -200,6 +208,8 @@ struct BurstsParams {
     double decay_s = 0.3;
     double sparks = 0.0; // 0: whole rings; towards 1: broken into sparks.
     double level = 0.9;
+    int size_units = 1; // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
+    int time_units = 1; // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
 };
 
 struct SpiralParams {
@@ -232,8 +242,9 @@ struct HexPulseParams {
     double decay_s = 0.5;
     int keep = 3; // Pulses alive at once (hats and bass notes: at most kEventHistory).
     double level = 1.0;
-    int colours = 0; // A palette step per pulse, or the palette from centre to edge.
-    int corners = 0; // Auto, up and down, sideways (engine/space.h hex_frame).
+    int colours = 0;    // A palette step per pulse, or the palette from centre to edge.
+    int corners = 0;    // Auto, up and down, sideways (engine/space.h hex_frame).
+    int time_units = 1; // 0 seconds, 1 beats against 150 BPM (engine/shape.h).
 };
 
 struct CubeParams {
@@ -268,6 +279,7 @@ struct InterferenceParams {
     double level = 0.6;
     double colour_spread = 0.6;
     int corners = 0;
+    int size_units = 1; // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
 };
 
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h

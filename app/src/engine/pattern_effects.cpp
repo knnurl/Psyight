@@ -1,6 +1,7 @@
 // The pattern effects (engine/scene.h): built on engine/space.h's mappings and clocks.
 
 #include "engine/scene.h"
+#include "engine/shape.h"
 #include "engine/space.h"
 
 #include <algorithm>
@@ -216,7 +217,7 @@ class Noise final : public Effect {
     explicit Noise(const NoiseParams &p) : p_(p) {}
     const char *name() const override { return "Noise field"; }
     void render(const EffectContext &c, std::span<Rgb> out) const override {
-        const double scale = std::max(0.01, p_.scale_m);
+        const double scale = std::max(0.01, size_in_m(p_.scale_m, p_.size_units, c.rig));
         const double z = c.in.t_s * p_.speed_hz;
         const double timbre =
             p_.brightness_colour * std::clamp(c.in.residual_centroid_hz / 6000.0, 0.0, 1.0);
@@ -240,10 +241,10 @@ class Fire final : public Effect {
         const std::vector<double> u = map_pixels(c.rig, mapping_of(p_.mapping), c.seed);
         const double extent = std::max(
             {c.rig.max.x - c.rig.min.x, c.rig.max.y - c.rig.min.y, c.rig.max.z - c.rig.min.z, 0.1});
-        const double scale = std::max(0.01, p_.scale_m);
+        const double scale = std::max(0.01, size_in_m(p_.scale_m, p_.size_units, c.rig));
         const double height =
             std::max(1e-3, p_.height * (1.0 + p_.riser_boost * std::clamp(c.in.riser, 0.0, 1.0)));
-        const double rise = p_.speed_m_per_s * c.in.t_s;
+        const double rise = size_in_m(p_.speed_m_per_s, p_.size_units, c.rig) * c.in.t_s;
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = c.rig.pixels[i].position;
             const double n =
@@ -342,7 +343,8 @@ class Bursts final : public Effect {
             if (!std::isfinite(age)) {
                 break;
             }
-            const double fade = std::exp(-age / std::max(1e-3, p_.decay_s));
+            const double fade =
+                std::exp(-age / std::max(1e-3, time_in_s(p_.decay_s, p_.time_units, in)));
             if (fade < 0.01) {
                 continue;
             }
@@ -364,8 +366,8 @@ class Bursts final : public Effect {
                                                      static_cast<double>(rig.pixels.size())));
         const Vec3 origin = rig.pixels[at].position;
         const Rgb colour = c.palette.at(hash_unit(c.seed, event, 44));
-        const double radius = age * p_.speed_m_per_s;
-        const double width = std::max(0.01, p_.width_m);
+        const double radius = age * size_in_m(p_.speed_m_per_s, p_.size_units, rig);
+        const double width = std::max(0.01, size_in_m(p_.width_m, p_.size_units, rig));
         for (size_t i = 0; i < out.size(); ++i) {
             const Vec3 &q = rig.pixels[i].position;
             const double dx = q.x - origin.x;

@@ -1,5 +1,6 @@
 #include "engine/effect_spec.h"
 
+#include "engine/shape.h"
 #include "engine/space.h"
 
 #include <algorithm>
@@ -19,6 +20,24 @@ template <typename P> struct Field {
 
 template <typename P> const std::vector<Field<P>> &fields();
 
+// Sizes and speeds in metres or relative to the rig (engine/shape.h).
+template <typename P> Field<P> size_units_field() {
+    return {{"size_units", "Sizes", "", 0.0, 1.0, true,
+             "Sizes and speeds in metres, or relative to the rig's reach (per metre of it)",
+             kSizeUnitsOptions},
+            nullptr,
+            &P::size_units};
+}
+
+// Times in seconds or in beats (engine/shape.h).
+template <typename P> Field<P> time_units_field() {
+    return {{"time_units", "Times", "", 0.0, 1.0, true,
+             "Times in seconds, or in beats (the same at 150 BPM, shorter when faster)",
+             kTimeUnitsOptions},
+            nullptr,
+            &P::time_units};
+}
+
 template <> const std::vector<Field<PlasmaParams>> &fields<PlasmaParams>() {
     using P = PlasmaParams;
     static const std::vector<Field<P>> f = {
@@ -29,6 +48,7 @@ template <> const std::vector<Field<PlasmaParams>> &fields<PlasmaParams>() {
         {{"ambient_level", "Ambient", "", 0.0, 1.0, false,
           "Level in intros, breakdowns, builds and outros"},
          &P::ambient_level},
+        size_units_field<P>(),
     };
     return f;
 }
@@ -39,6 +59,8 @@ template <> const std::vector<Field<ShockwaveParams>> &fields<ShockwaveParams>()
         {{"speed_m_per_s", "Speed", "m/s", 0.5, 30.0, false, "Ring speed"}, &P::speed_m_per_s},
         {{"width_m", "Width", "m", 0.02, 2.0, false, "Ring width"}, &P::width_m},
         {{"decay_s", "Decay", "s", 0.02, 2.0, false, "Brightness time constant"}, &P::decay_s},
+        size_units_field<P>(),
+        time_units_field<P>(),
     };
     return f;
 }
@@ -93,6 +115,7 @@ template <> const std::vector<Field<BuildParams>> &fields<BuildParams>() {
         {{"start_level", "Start", "", 0.0, 1.0, false, "Level at the build start"},
          &P::start_level},
         {{"end_level", "End", "", 0.0, 1.0, false, "Level at the build end"}, &P::end_level},
+        size_units_field<P>(),
     };
     return f;
 }
@@ -104,6 +127,8 @@ template <> const std::vector<Field<DropBurstParams>> &fields<DropBurstParams>()
         {{"decay_s", "Decay", "s", 0.05, 3.0, false, "Burst time constant"}, &P::decay_s},
         {{"duration_s", "Duration", "s", 0.1, 5.0, false, "Burst duration after the drop starts"},
          &P::duration_s},
+        size_units_field<P>(),
+        time_units_field<P>(),
     };
     return f;
 }
@@ -234,6 +259,7 @@ template <> const std::vector<Field<NoiseParams>> &fields<NoiseParams>() {
         {{"brightness_colour", "Timbre", "", 0.0, 1.0, false,
           "Palette shift with the residual's brightness (spectral centroid)"},
          &P::brightness_colour},
+        size_units_field<P>(),
     };
     return f;
 }
@@ -255,6 +281,7 @@ template <> const std::vector<Field<FireParams>> &fields<FireParams>() {
         {{"colours", "Colours", "", 0.0, 1.0, true, "Fire colours, or the palette", "Fire|Palette"},
          nullptr,
          &P::colours},
+        size_units_field<P>(),
     };
     return f;
 }
@@ -275,6 +302,8 @@ template <> const std::vector<Field<BurstsParams>> &fields<BurstsParams>() {
         {{"decay_s", "Decay", "s", 0.05, 3.0, false, "Burst time constant"}, &P::decay_s},
         {{"sparks", "Sparks", "", 0.0, 0.95, false, "Break the rings into sparks"}, &P::sparks},
         {{"level", "Level", "", 0.0, 1.0, false, "Burst brightness"}, &P::level},
+        size_units_field<P>(),
+        time_units_field<P>(),
     };
     return f;
 }
@@ -358,6 +387,7 @@ template <> const std::vector<Field<HexPulseParams>> &fields<HexPulseParams>() {
          nullptr,
          &P::colours},
         corners_field<P>(),
+        time_units_field<P>(),
     };
     return f;
 }
@@ -428,6 +458,7 @@ template <> const std::vector<Field<InterferenceParams>> &fields<InterferencePar
         {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span over the lattice"},
          &P::colour_spread},
         corners_field<P>(),
+        size_units_field<P>(),
     };
     return f;
 }

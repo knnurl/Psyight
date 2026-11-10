@@ -1,5 +1,6 @@
 // Session recording: file formats, and the recorder writing them from its own thread.
 
+#include "engine/effect_spec.h"
 #include "io/session_record.h"
 #include "io/text_file.h"
 #include "output/recorder.h"
@@ -87,7 +88,32 @@ std::string older_params_line(const Project &p) {
     nlohmann::json &project = line["project"];
     project["limiter"].erase("power_model");
     project["limiter"].erase("quiescent_ma");
+    for (nlohmann::json &scene : project["scenes"]) {
+        for (nlohmann::json &layer : scene["layers"]) {
+            for (const char *id : {"size_units", "time_units"}) {
+                layer["params"].erase(id);
+            }
+        }
+    }
     return line.dump() + "\n";
+}
+
+// Checks every size_units and time_units setting in the project equals `value`; returns how many.
+int units_settings(const Project &project, double value) {
+    int count = 0;
+    for (const Scene &scene : project.scenes) {
+        for (const Layer &layer : scene.layers) {
+            const std::vector<EffectParamInfo> infos = effect_param_infos(layer.spec.type());
+            for (size_t i = 0; i < infos.size(); ++i) {
+                const std::string id = infos[i].id;
+                if (id == "size_units" || id == "time_units") {
+                    CHECK(effect_param(layer.spec, i) == value);
+                    ++count;
+                }
+            }
+        }
+    }
+    return count;
 }
 
 TEST_CASE("session files: settings a recording predates take their legacy values; a project file "
@@ -99,12 +125,14 @@ TEST_CASE("session files: settings a recording predates take their legacy values
     const Project &replayed = entries.value()[0].project;
     CHECK(replayed.limiter.power_model == PowerModel::linear);
     CHECK(replayed.limiter.quiescent_ma == 0.0);
+    CHECK(units_settings(replayed, 0.0) > 0); // The default scenes have a shockwave and plasma.
     // The same project text opened as a project file: the new defaults.
     const nlohmann::json project = nlohmann::json::parse(older)["project"];
     const Result<Project> opened = parse_project_json(project.dump());
     REQUIRE(opened.ok());
     CHECK(opened.value().limiter.power_model == PowerModel::duty);
     CHECK(opened.value().limiter.quiescent_ma == 1.0);
+    CHECK(units_settings(opened.value(), 1.0) > 0);
     // A recording made with the settings keeps them.
     p.limiter.power_model = PowerModel::duty;
     p.limiter.quiescent_ma = 2.5;

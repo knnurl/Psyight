@@ -1,6 +1,7 @@
 #include "io/session_record.h"
 
 #include "core/paths.h"
+#include "engine/effect_spec.h"
 #include "io/text_file.h"
 
 #include <nlohmann/json.hpp>
@@ -44,6 +45,42 @@ void set_legacy_values(const json &project_json, Project &project) {
     }
     if (lacks(project_json, "limiter", "quiescent_ma")) {
         project.limiter.quiescent_ma = 0.0;
+    }
+    // Effect settings, by id: the value that reproduces the older output.
+    static constexpr std::pair<const char *, double> kLegacyEffectParams[] = {
+        {"size_units", 0.0},
+        {"time_units", 0.0},
+    };
+    const auto scenes = project_json.find("scenes");
+    if (scenes == project_json.end() || !scenes->is_array()) {
+        return;
+    }
+    for (size_t s = 0; s < scenes->size() && s < project.scenes.size(); ++s) {
+        const auto layers = (*scenes)[s].find("layers");
+        if (layers == (*scenes)[s].end() || !layers->is_array()) {
+            continue;
+        }
+        Scene &scene = project.scenes[s];
+        for (size_t l = 0; l < layers->size() && l < scene.layers.size(); ++l) {
+            const json &recorded = (*layers)[l];
+            const auto params = recorded.find("params");
+            Layer &layer = scene.layers[l];
+            const std::vector<EffectParamInfo> infos = effect_param_infos(layer.spec.type());
+            bool changed = false;
+            for (const auto &[id, value] : kLegacyEffectParams) {
+                const bool recorded_it =
+                    params != recorded.end() && params->is_object() && params->contains(id);
+                for (size_t i = 0; i < infos.size() && !recorded_it; ++i) {
+                    if (std::string_view(infos[i].id) == id) {
+                        set_effect_param(layer.spec, i, value);
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) {
+                layer.effect = make_effect(layer.spec);
+            }
+        }
     }
 }
 
