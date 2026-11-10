@@ -63,6 +63,59 @@ const ScenePreset &find(const std::vector<ScenePreset> &all, const std::string &
     return all.front();
 }
 
+// A layer from an effect id and settings by id (the Hexagon 3 packs, generated from a spec).
+Layer layer_by_id(const char *effect, std::initializer_list<std::pair<const char *, double>> params,
+                  const char *blend, float opacity, const char *group) {
+    EffectSpec spec = default_spec(effect_type_from_id(effect).value());
+    const std::vector<EffectParamInfo> infos = effect_param_infos(spec.type());
+    for (const auto &[id, value] : params) {
+        for (size_t i = 0; i < infos.size(); ++i) {
+            if (std::string(infos[i].id) == id) {
+                set_effect_param(spec, i, value);
+            }
+        }
+    }
+    Layer l = make_layer(spec, blend_mode_from_id(blend).value(), opacity);
+    l.group = group;
+    return l;
+}
+
+ModRoute route_by_id(const char *source, const char *target, int layer, double amount,
+                     const char *param, bool invert) {
+    ModRoute r = route(mod_source_from_id(source).value(), mod_target_from_id(target).value(),
+                       layer, amount, ModCurve::linear, param);
+    r.invert = invert;
+    return r;
+}
+
+// A pack whose scenes each rotate through their own palettes (named, added to the pack as
+// needed), palette shift every two phrases.
+ShowPack rotating_pack(std::string name, std::string description,
+                       const std::vector<ScenePreset> &chosen,
+                       const std::vector<std::pair<std::string, std::vector<std::string>>> &lists) {
+    ShowPack pack = pack_of(std::move(name), std::move(description), chosen);
+    pack.automation.palette_every_phrases = 2;
+    pack.automation.palette_rotation = PaletteRotation::scene_list;
+    for (Scene &s : pack.scenes) {
+        for (const auto &[scene, palettes] : lists) {
+            if (s.name != scene) {
+                continue;
+            }
+            for (const std::string &pal : palettes) {
+                const auto it = std::find_if(pack.palettes.begin(), pack.palettes.end(),
+                                             [&](const Palette &p) { return p.name == pal; });
+                if (it == pack.palettes.end()) {
+                    pack.palettes.push_back(palette_named(pal));
+                    s.palette_list.push_back(static_cast<int>(pack.palettes.size()) - 1);
+                } else {
+                    s.palette_list.push_back(static_cast<int>(it - pack.palettes.begin()));
+                }
+            }
+        }
+    }
+    return pack;
+}
+
 } // namespace
 
 std::vector<Palette> builtin_palettes() {
@@ -867,6 +920,553 @@ std::vector<ScenePreset> builtin_scene_presets() {
                                        ModCurve::linear, "flow"));
         looks.push_back(std::move(p));
     }
+    // BEGIN Hexagon 3 scenes (generated from hex3_spec.py)
+    {
+        ScenePreset p{"Tunnel 3",
+                      "Hexagons drawn inwards on the beat, the kick's hexagon pushing out "
+                      "from the inner ring, sectors stepping with the bass, the bass note "
+                      "round the outer ring.",
+                      {},
+                      palette_named("UV violet")};
+        p.scene.sections = {"groove", "low", "mid"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 6.0},
+                                              {"clock", 2.0},
+                                              {"rate", -1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.5},
+                                              {"width", 0.25},
+                                              {"level", 0.35},
+                                              {"colour_spread", 0.5}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "sectors",
+            {{"clock", 5.0}, {"count", 6.0}, {"tail", 3.0}, {"level", 0.5}, {"colour_spread", 1.0}},
+            "add", 0.7f, ""));
+        p.scene.layers.push_back(layer_by_id("hex_pulse",
+                                             {{"trigger", 0.0},
+                                              {"travel_beats", 1.0},
+                                              {"width", 0.12},
+                                              {"decay_s", 0.5},
+                                              {"keep", 3.0}},
+                                             "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "pitch_clock",
+            {{"width", 0.07}, {"confidence", 0.2}, {"release_s", 0.15}, {"spokes", 0.0}}, "add",
+            1.0f, "outer"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Radar 3",
+                      "Twelve slices stepping round with the bass, a hexagon closing in each "
+                      "bar, ducking after each kick; the kick itself runs out along the "
+                      "spokes.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "mid"};
+        p.scene.layers.push_back(layer_by_id("sectors",
+                                             {{"clock", 5.0},
+                                              {"count", 12.0},
+                                              {"tail", 6.0},
+                                              {"level", 0.9},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("hex_pulse",
+                                             {{"trigger", 2.0},
+                                              {"direction", 1.0},
+                                              {"travel_beats", 4.0},
+                                              {"decay_s", 2.0},
+                                              {"keep", 1.0},
+                                              {"level", 0.7},
+                                              {"width", 0.1}},
+                                             "screen", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("stutter", {{"mode", 2.0}, {"depth", 0.6}}, "multiply", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("spoke_kick", {{"tail", 0.8}, {"travel_beats", 1.0}},
+                                             "screen", 1.0f, "spokes"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Ring rain",
+                      "Every bass note a hexagon going out, kicks as wide bright hexagons, "
+                      "hats sparking at the corners.",
+                      {},
+                      palette_named("Magenta storm")};
+        p.scene.sections = {"groove", "high"};
+        p.scene.layers.push_back(layer_by_id("hex_pulse",
+                                             {{"trigger", 3.0},
+                                              {"keep", 4.0},
+                                              {"travel_beats", 1.0},
+                                              {"width", 0.08},
+                                              {"decay_s", 0.4},
+                                              {"level", 0.7}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 0.0}, {"width", 0.15}, {"decay_s", 0.4}, {"keep", 2.0}},
+            "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "corner_sparks", {{"span", 2.0}, {"count", 2.0}, {"level", 0.9}}, "add", 0.6f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Echo field",
+                      "Polar smoke drifting in, each bass note a hexagon, hats at the "
+                      "corners: dim but never dark.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"breakdown", "low"};
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.7}, {"floor", 0.25}, {"flow", -0.1}, {"clock", 3.0}},
+            "alpha", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("hex_pulse",
+                                             {{"trigger", 3.0},
+                                              {"keep", 4.0},
+                                              {"travel_beats", 1.0},
+                                              {"width", 0.08},
+                                              {"decay_s", 0.6},
+                                              {"level", 0.6}},
+                                             "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "corner_sparks", {{"span", 2.0}, {"count", 2.0}, {"level", 0.9}}, "add", 0.6f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Pressure 3",
+                      "The rings fill from the inside through the phrase, hexagons falling in "
+                      "on the beats, kicks pushing out; brighter as the whole build climbs, "
+                      "dark only for its last beat.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 6.0},
+                                              {"clock", 2.0},
+                                              {"rate", -1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.3},
+                                              {"level", 0.45},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "phrase_fill", {{"order", 1.0}, {"hold_level", 0.45}, {"steps", 32.0}, {"level", 0.7}},
+            "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 1.0}, {"direction", 1.0}, {"colours", 1.0}, {"width", 0.12}},
+            "screen", 0.8f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse",
+            {{"trigger", 0.0}, {"width", 0.08}, {"travel_beats", 0.5}, {"decay_s", 0.25}}, "screen",
+            1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("stutter", {{"mode", 4.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+        p.scene.routes.push_back(route_by_id("build_progress", "brightness", 0, 0.25, "", false));
+        p.scene.routes.push_back(route_by_id("riser", "opacity", 2, 0.4, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Bloom 3",
+                      "The drop's burst and white flashes, then hexagon rings pumping on the "
+                      "16ths and a wide hexagon on every kick.",
+                      {},
+                      palette_named("Magenta storm")};
+        p.scene.sections = {"drop"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 6.0},
+                                              {"clock", 1.0},
+                                              {"rate", 0.25},
+                                              {"shape", 3.0},
+                                              {"spread", 2.0},
+                                              {"width", 0.3},
+                                              {"level", 0.4},
+                                              {"colour_spread", 0.5}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 0.0}, {"width", 0.15}, {"decay_s", 0.4}, {"keep", 2.0}},
+            "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("drop_burst", {}, "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("strobe", {}, "screen", 1.0f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Echo intro",
+                      "Faint smoke; each bass note sends a hexagon out from the inner ring; "
+                      "hats at the corners.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"intro"};
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.6}, {"floor", 0.2}, {"flow", 0.05}, {"clock", 3.0}},
+            "alpha", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("hex_pulse",
+                                             {{"trigger", 3.0},
+                                              {"keep", 4.0},
+                                              {"travel_beats", 1.0},
+                                              {"width", 0.08},
+                                              {"decay_s", 0.6},
+                                              {"level", 0.6}},
+                                             "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "corner_sparks", {{"span", 2.0}, {"count", 2.0}, {"level", 0.9}}, "add", 0.6f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Deep tunnel",
+                      "Slow hexagons drawn inwards each bar over a cellular automaton, with "
+                      "an afterglow.",
+                      {},
+                      palette_named("Mono violet")};
+        p.scene.sections = {"outro"};
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.5}, {"floor", 0.2}, {"flow", -0.05}, {"clock", 3.0}},
+            "alpha", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 6.0},
+                                              {"clock", 3.0},
+                                              {"rate", -0.5},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.3},
+                                              {"level", 0.9}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("ring_automaton", {{"rule", 150.0}, {"generations", 16.0}, {"level", 0.8}},
+                        "add", 0.8f, ""));
+        p.scene.post.push_back({AfterglowParams{1.5, 0.7}, true});
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Cube 3",
+                      "The hexagon as a cube flipping every bar, a hexagon on every kick, "
+                      "each bass note an arc round the outer ring.",
+                      {},
+                      palette_named("UV violet")};
+        p.scene.sections = {"groove", "low", "mid"};
+        p.scene.layers.push_back(
+            layer_by_id("cube", {{"flip", 1.0}, {"level", 0.4}, {"edges", 0.9}, {"fade_s", 0.06}},
+                        "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("hex_pulse",
+                                             {{"trigger", 0.0},
+                                              {"travel_beats", 1.0},
+                                              {"width", 0.12},
+                                              {"decay_s", 0.5},
+                                              {"keep", 3.0}},
+                                             "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "note_arcs", {{"ring_mode", 2.0}, {"arc_per_16th", 0.25}, {"confidence", 0.2}}, "add",
+            1.0f, "outer"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Lattice",
+                      "A hexagonal lattice drifting and pumping on each kick, sectors "
+                      "stepping with the bass, kicks along the spokes.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"groove", "mid"};
+        p.scene.layers.push_back(layer_by_id(
+            "interference",
+            {{"level", 0.6}, {"kick_pump", 1.0}, {"rate", 0.25}, {"clock", 2.0}, {"scale_m", 0.6}},
+            "add", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("sectors", {{"clock", 5.0}, {"count", 6.0}, {"tail", 2.0}, {"level", 0.6}},
+                        "add", 0.6f, ""));
+        p.scene.layers.push_back(layer_by_id("spoke_kick", {{"tail", 0.8}, {"travel_beats", 1.0}},
+                                             "screen", 1.0f, "spokes"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Star radar",
+                      "Twelve slices stepping with the bass, the cube's Y flashing on the "
+                      "kick, the bass note round the middle ring.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "high"};
+        p.scene.layers.push_back(layer_by_id("sectors",
+                                             {{"clock", 5.0},
+                                              {"count", 12.0},
+                                              {"tail", 4.0},
+                                              {"level", 0.8},
+                                              {"colour_spread", 0.4}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("cube", {{"flip", 4.0}, {"level", 0.0}, {"edges", 1.0}, {"fade_s", 0.0}},
+                        "screen", 0.8f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("stutter", {{"mode", 2.0}, {"depth", 0.5}}, "multiply", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("pitch_clock", {{"width", 0.08}, {"confidence", 0.2}, {"spokes", 0.0}},
+                        "add", 1.0f, "middle"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Facets",
+                      "The cube turning once a phrase, slowly, rule 90 growing round the "
+                      "rings, hats at the corners.",
+                      {},
+                      palette_named("Mono violet")};
+        p.scene.sections = {"breakdown", "low"};
+        p.scene.layers.push_back(
+            layer_by_id("cube", {{"flip", 3.0}, {"level", 0.5}, {"edges", 0.9}, {"fade_s", 1.0}},
+                        "add", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("ring_automaton", {{"rule", 90.0}, {"generations", 32.0}, {"level", 0.6}},
+                        "add", 0.8f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "corner_sparks", {{"span", 2.0}, {"count", 2.0}, {"level", 0.9}}, "add", 0.6f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Fold",
+                      "Slices filling round on the beats, hexagons falling inwards, the "
+                      "phrase filling side by side; dark for the build's last beat.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 6.0},
+                                              {"clock", 2.0},
+                                              {"rate", -1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.3},
+                                              {"level", 0.45},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("phrase_fill",
+                                             {{"order", 0.0}, {"hold_level", 0.45}, {"level", 0.7}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("sectors", {{"mode", 2.0}, {"clock", 2.0}, {"count", 6.0}, {"level", 0.6}},
+                        "add", 0.6f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("hex_pulse", {{"trigger", 1.0}, {"direction", 1.0}, {"width", 0.12}},
+                        "screen", 0.7f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("stutter", {{"mode", 4.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+        p.scene.routes.push_back(route_by_id("build_progress", "brightness", 0, 0.25, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Shatter",
+                      "The drop's burst and flashes, the cube flipping on every kick, white "
+                      "kicks flashing each ring.",
+                      {},
+                      palette_named("Magenta storm")};
+        p.scene.sections = {"drop"};
+        p.scene.layers.push_back(
+            layer_by_id("cube", {{"flip", 4.0}, {"level", 0.45}, {"edges", 1.0}, {"fade_s", 0.03}},
+                        "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "spoke_kick", {{"colours", 1.0}, {"rings", 1.0}, {"tail", 0.8}}, "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("drop_burst", {}, "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("strobe", {}, "screen", 1.0f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Facet intro",
+                      "A faint lattice drifting; each bass note a hexagon from the inner "
+                      "ring.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"intro"};
+        p.scene.layers.push_back(layer_by_id(
+            "interference",
+            {{"level", 0.75}, {"kick_pump", 0.0}, {"rate", 0.1}, {"clock", 3.0}, {"scale_m", 0.6}},
+            "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse",
+            {{"trigger", 3.0}, {"keep", 4.0}, {"width", 0.08}, {"decay_s", 0.6}, {"level", 0.6}},
+            "screen", 1.0f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Fading cube",
+                      "The cube turning once a phrase, glowing out.",
+                      {},
+                      palette_named("Mono violet")};
+        p.scene.sections = {"outro"};
+        p.scene.layers.push_back(
+            layer_by_id("cube", {{"flip", 3.0}, {"level", 0.55}, {"edges", 0.9}, {"fade_s", 2.0}},
+                        "add", 1.0f, ""));
+        p.scene.post.push_back({AfterglowParams{2.0, 0.6}, true});
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Pulse 3",
+                      "Kick hexagons from the inner ring out, the bass note as a clock hand "
+                      "on the middle ring and its spoke, hats sparking at the inner corners.",
+                      {},
+                      palette_named("UV violet")};
+        p.scene.sections = {"groove", "low", "mid"};
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 0.0}, {"keep", 2.0}, {"width", 0.14}, {"decay_s", 0.45}},
+            "add", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("pitch_clock", {{"width", 0.1}, {"confidence", 0.2}, {"release_s", 0.2}},
+                        "screen", 1.0f, "middle"));
+        p.scene.layers.push_back(layer_by_id("corner_sparks",
+                                             {{"span", 2.0}, {"count", 3.0}, {"level", 0.9}}, "add",
+                                             0.7f, "inner"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Arc pulse",
+                      "Kick hexagons, each bass note an arc on the outer ring with the last "
+                      "three still showing.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"groove", "mid"};
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 0.0}, {"keep", 2.0}, {"width", 0.14}, {"decay_s", 0.45}},
+            "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("note_arcs",
+                                             {{"ring_mode", 2.0},
+                                              {"history", 3.0},
+                                              {"arc_per_16th", 0.2},
+                                              {"confidence", 0.2},
+                                              {"release_s", 0.3}},
+                                             "screen", 1.0f, "outer"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Hammer",
+                      "Wide kick hexagons, ramps racing round the outer ring on the 16ths "
+                      "gated by the bassline, kicks flashing along the spokes.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "high"};
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 0.0}, {"keep", 2.0}, {"width", 0.2}, {"decay_s", 0.35}},
+            "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 7.0},
+                                              {"wings", 2.0},
+                                              {"clock", 1.0},
+                                              {"rate", 0.25},
+                                              {"shape", 2.0},
+                                              {"spread", 3.0},
+                                              {"level", 0.9}},
+                                             "add", 1.0f, "outer"));
+        p.scene.layers.push_back(layer_by_id("stutter", {{"mode", 1.0}, {"release_s", 0.03}},
+                                             "multiply", 1.0f, "outer"));
+        p.scene.layers.push_back(
+            layer_by_id("spoke_kick", {{"tail", 0.8}}, "screen", 1.0f, "spokes"));
+        p.scene.routes.push_back(
+            route_by_id("residual_brightness", "hue_shift", 1, 90.0, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Breath",
+                      "Smoke breathing, the bass note on the middle ring with its last three "
+                      "notes trailing, a hexagon per bass note.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"breakdown", "low"};
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.7}, {"floor", 0.25}, {"flow", -0.08}, {"clock", 3.0}},
+            "alpha", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("pitch_clock",
+                        {{"width", 0.1}, {"trail", 3.0}, {"confidence", 0.2}, {"release_s", 0.3}},
+                        "screen", 1.0f, "middle"));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 3.0}, {"keep", 3.0}, {"width", 0.08}, {"decay_s", 0.5}},
+            "screen", 0.6f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Climb",
+                      "The rings filling from the inside, hexagons falling in on the beats, "
+                      "kicks along the spokes, a strobe roll on the spokes at the end, then "
+                      "dark.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 6.0},
+                                              {"clock", 2.0},
+                                              {"rate", -1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.3},
+                                              {"level", 0.45},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("phrase_fill",
+                                             {{"order", 1.0}, {"hold_level", 0.45}, {"level", 0.7}},
+                                             "add", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("hex_pulse", {{"trigger", 1.0}, {"direction", 1.0}, {"width", 0.12}},
+                        "screen", 0.8f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("spoke_kick", {{"tail", 0.8}}, "screen", 1.0f, "spokes"));
+        p.scene.layers.push_back(layer_by_id(
+            "strobe", {{"trigger", 1.0}, {"flashes", 4.0}, {"colour", 1.0}, {"level", 0.8}},
+            "screen", 1.0f, "spokes"));
+        p.scene.layers.push_back(
+            layer_by_id("stutter", {{"mode", 4.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+        p.scene.routes.push_back(route_by_id("build_progress", "brightness", 0, 0.25, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Impact 3",
+                      "The drop's burst and flashes, white kick hexagons flashing each ring "
+                      "as they pass, bass arcs on the outer ring.",
+                      {},
+                      palette_named("Magenta storm")};
+        p.scene.sections = {"drop"};
+        p.scene.layers.push_back(layer_by_id(
+            "note_arcs", {{"ring_mode", 2.0}, {"arc_per_16th", 0.25}, {"confidence", 0.2}}, "add",
+            1.0f, "outer"));
+        p.scene.layers.push_back(layer_by_id(
+            "spoke_kick", {{"colours", 1.0}, {"rings", 1.0}, {"tail", 0.8}}, "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse", {{"trigger", 0.0}, {"width", 0.15}, {"decay_s", 0.35}, {"keep", 2.0}},
+            "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("drop_burst", {}, "screen", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("strobe", {}, "screen", 1.0f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Heartbeat",
+                      "Faint smoke, each bass note a hexagon going out.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"intro"};
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.6}, {"floor", 0.2}, {"flow", 0.05}, {"clock", 3.0}},
+            "alpha", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id(
+            "hex_pulse",
+            {{"trigger", 3.0}, {"keep", 4.0}, {"width", 0.1}, {"decay_s", 0.6}, {"level", 0.7}},
+            "screen", 1.0f, ""));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Afterglow",
+                      "A hexagon each bar, slowly, over a glowing automaton.",
+                      {},
+                      palette_named("Mono violet")};
+        p.scene.sections = {"outro"};
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.5}, {"floor", 0.2}, {"flow", -0.05}, {"clock", 3.0}},
+            "alpha", 1.0f, ""));
+        p.scene.layers.push_back(layer_by_id("hex_pulse",
+                                             {{"trigger", 2.0},
+                                              {"travel_beats", 4.0},
+                                              {"width", 0.2},
+                                              {"decay_s", 3.0},
+                                              {"keep", 2.0},
+                                              {"level", 0.9}},
+                                             "screen", 1.0f, ""));
+        p.scene.layers.push_back(
+            layer_by_id("ring_automaton", {{"rule", 150.0}, {"generations", 16.0}, {"level", 0.8}},
+                        "add", 0.8f, ""));
+        p.scene.post.push_back({AfterglowParams{2.0, 0.8}, true});
+        looks.push_back(std::move(p));
+    }
+    // END Hexagon 3 scenes
     for (ScenePreset &p : looks) {
         p.scene.name = p.name;
         p.scene.palette = 0;
@@ -1020,6 +1620,58 @@ std::vector<ShowPack> builtin_show_packs() {
         }
     }
     packs.push_back(std::move(hex2));
+    // BEGIN Hexagon 3 packs (generated from hex3_spec.py)
+    packs.push_back(
+        rotating_pack("Hexagon 3: Tunnel",
+                      "The Hexagon pack's tunnel kept and repaired: hexagon rings "
+                      "drawn on every beat and kick, the bass on the outer ring "
+                      "as a pitch clock, hats at the corners; breakdowns, builds "
+                      "and the end never go dark.",
+                      {find(looks, "Tunnel 3"), find(looks, "Radar 3"), find(looks, "Ring rain"),
+                       find(looks, "Echo field"), find(looks, "Pressure 3"), find(looks, "Bloom 3"),
+                       find(looks, "Echo intro"), find(looks, "Deep tunnel")},
+                      {{"Tunnel 3", {"UV violet", "Magenta storm"}},
+                       {"Radar 3", {"Toxic", "Ocean UV"}},
+                       {"Ring rain", {"Magenta storm", "UV violet"}},
+                       {"Echo field", {"Ocean UV", "Mono violet"}},
+                       {"Pressure 3", {"Ember"}},
+                       {"Bloom 3", {"Magenta storm"}},
+                       {"Echo intro", {"Ocean UV"}},
+                       {"Deep tunnel", {"Mono violet", "Ocean UV"}}}));
+    packs.push_back(
+        rotating_pack("Hexagon 3: Geometry",
+                      "The hexagon as figures: the Necker cube flipping, a "
+                      "hexagonal lattice pumping on the kick, slices folding "
+                      "round; bass arcs on the outer ring.",
+                      {find(looks, "Cube 3"), find(looks, "Lattice"), find(looks, "Star radar"),
+                       find(looks, "Facets"), find(looks, "Fold"), find(looks, "Shatter"),
+                       find(looks, "Facet intro"), find(looks, "Fading cube")},
+                      {{"Cube 3", {"UV violet", "Ocean UV"}},
+                       {"Lattice", {"Ocean UV", "Toxic"}},
+                       {"Star radar", {"Toxic", "Magenta storm"}},
+                       {"Facets", {"Mono violet", "Ocean UV"}},
+                       {"Fold", {"Ember"}},
+                       {"Shatter", {"Magenta storm"}},
+                       {"Facet intro", {"Ocean UV"}},
+                       {"Fading cube", {"Mono violet"}}}));
+    packs.push_back(
+        rotating_pack("Hexagon 3: Pulse",
+                      "Rhythm first, each sound in its own place: the kick as "
+                      "hexagon rings, the bass note as a clock on the middle "
+                      "ring, hats at the corners, the acid line round the "
+                      "outside.",
+                      {find(looks, "Pulse 3"), find(looks, "Arc pulse"), find(looks, "Hammer"),
+                       find(looks, "Breath"), find(looks, "Climb"), find(looks, "Impact 3"),
+                       find(looks, "Heartbeat"), find(looks, "Afterglow")},
+                      {{"Pulse 3", {"UV violet", "Magenta storm"}},
+                       {"Arc pulse", {"Ocean UV", "UV violet"}},
+                       {"Hammer", {"Toxic", "Ember"}},
+                       {"Breath", {"Ocean UV", "Mono violet"}},
+                       {"Climb", {"Ember", "Magenta storm"}},
+                       {"Impact 3", {"Magenta storm"}},
+                       {"Heartbeat", {"Ocean UV"}},
+                       {"Afterglow", {"Mono violet"}}}));
+    // END Hexagon 3 packs
     return packs;
 }
 
