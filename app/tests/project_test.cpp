@@ -78,6 +78,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.automation.vary.remap = false;
     p.automation.energy_dim = 0.4;
     p.automation.energy_scenes = false;
+    p.automation.hold_rule = HoldRule::strict;
     p.show_pack = "Hexagon";
     p.group_caps = {{"booth", 0.4}, {"canopy", 0.75}};
     p.macro_values[1] = 0.25;
@@ -129,6 +130,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.automation.vary == VariationKinds{true, false, true, true, true});
     CHECK(q.automation.energy_dim == 0.4);
     CHECK_FALSE(q.automation.energy_scenes);
+    CHECK(q.automation.hold_rule == HoldRule::strict);
     CHECK(q.show_pack == "Hexagon");
     REQUIRE(q.group_caps.size() == 2);
     CHECK(q.group_caps[1].group == "canopy");

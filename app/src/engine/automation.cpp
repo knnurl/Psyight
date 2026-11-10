@@ -24,10 +24,20 @@ std::vector<int> tagged(const std::vector<Scene> &scenes, const std::string &lab
 
 bool cuts_into(const std::string &label) { return label == "groove" || label == "drop"; }
 
+constexpr double kPhraseToleranceS = 0.05;
+
 // Too short to change the scene for.
-bool held(const DetectedSection &section, double min_dwell_s) {
+bool held(const DetectedSection &section, double min_dwell_s, HoldRule rule) {
+    const double dwell_s =
+        rule == HoldRule::tolerant ? min_dwell_s - kPhraseToleranceS : min_dwell_s;
     return section.label != "build" && section.label != "drop" &&
-           section.end_s - section.start_s < min_dwell_s;
+           section.end_s - section.start_s < dwell_s;
+}
+
+// A build shorter than a phrase (tolerant rule): sections held after it look past it.
+bool short_build(const DetectedSection &section, double min_dwell_s) {
+    return section.label == "build" &&
+           section.end_s - section.start_s < min_dwell_s - kPhraseToleranceS;
 }
 
 int palette_index(const Scene &scene, int shift, size_t palette_count) {
@@ -35,25 +45,34 @@ int palette_index(const Scene &scene, int shift, size_t palette_count) {
     return ((scene.palette + shift) % n + n) % n;
 }
 
-// The section whose scene section `index` shows: itself, or the one before a held blip.
-size_t own_section(const std::vector<DetectedSection> &sections, size_t index, double min_dwell_s) {
-    while (index > 0 && held(sections[index], min_dwell_s)) {
+// The section whose scene section `index` shows: itself, or the one before a held blip (tolerant:
+// and before a short build that held sections follow).
+size_t own_section(const std::vector<DetectedSection> &sections, size_t index, double min_dwell_s,
+                   HoldRule rule) {
+    if (rule == HoldRule::strict) {
+        while (index > 0 && held(sections[index], min_dwell_s, rule)) {
+            --index;
+        }
+        return index;
+    }
+    const size_t from = index;
+    while (index > 0 && (held(sections[index], min_dwell_s, rule) ||
+                         (index != from && short_build(sections[index], min_dwell_s)))) {
         --index;
     }
     return index;
 }
 
 // Earlier sections with the same label (blips aside): the rotation between sections.
-size_t occurrence_of(const std::vector<DetectedSection> &sections, size_t index,
-                     double min_dwell_s) {
+size_t occurrence_of(const std::vector<DetectedSection> &sections, size_t index, double min_dwell_s,
+                     HoldRule rule) {
     size_t occurrence = 0;
     for (size_t j = 0; j < index; ++j) {
-        occurrence += sections[j].label == sections[index].label && !held(sections[j], min_dwell_s);
+        occurrence +=
+            sections[j].label == sections[index].label && !held(sections[j], min_dwell_s, rule);
     }
     return occurrence;
 }
-
-constexpr double kPhraseToleranceS = 0.05;
 
 // Phrases a section starting at start_s has run by t_s: phrase starts after its own, up to t_s.
 long long phrases_run(const std::vector<double> &phrase_starts, double start_s, double t_s) {
@@ -251,13 +270,14 @@ int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, 
 
 int scene_for_section(const std::vector<Scene> &scenes,
                       const std::vector<DetectedSection> &sections, size_t index,
-                      double min_dwell_s) {
+                      double min_dwell_s, HoldRule rule) {
     if (scenes.empty() || index >= sections.size()) {
         return 0;
     }
-    index = own_section(sections, index, min_dwell_s);
+    index = own_section(sections, index, min_dwell_s, rule);
     return scene_for_label(scenes, sections[index].label,
-                           occurrence_of(sections, index, min_dwell_s), sections[index].energy);
+                           occurrence_of(sections, index, min_dwell_s, rule),
+                           sections[index].energy);
 }
 
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,
@@ -300,7 +320,8 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
     }
     const auto index = static_cast<size_t>(inputs.section_index);
     { // A phrase-end fill.
-        const DetectedSection &own = sections[own_section(sections, index, phrase_s)];
+        const DetectedSection &own =
+            sections[own_section(sections, index, phrase_s, params.hold_rule)];
         const long long phrase = phrases_run(phrase_starts, own.start_s, inputs.t_s);
         const auto next = static_cast<size_t>(inputs.phrase_index + 1);
         if (inputs.phrase_index >= 0 && next < phrase_starts.size()) {
@@ -341,14 +362,14 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
     // The look of section i at time t_s: its own section's (or the one before a blip), rotated
     // and varied by the phrases it has run.
     const auto look_at = [&](size_t i, double t_s, long long *phrases_out) {
-        const size_t own = own_section(sections, i, phrase_s);
+        const size_t own = own_section(sections, i, phrase_s, params.hold_rule);
         const DetectedSection &s = sections[own];
         const long long phrases = phrases_run(phrase_starts, s.start_s, t_s);
         if (phrases_out != nullptr) {
             *phrases_out = phrases;
         }
         const auto key = static_cast<std::uint64_t>(std::llround(s.start_s * 1000.0));
-        const size_t occurrence = occurrence_of(sections, own, phrase_s);
+        const size_t occurrence = occurrence_of(sections, own, phrase_s, params.hold_rule);
         return std::pair{look_in_section(scenes, params, s.label, occurrence,
                                          phrase_energy(s, phrases), phrases, key),
                          phrases > 0
@@ -527,6 +548,18 @@ const char *scene_launch_name(SceneLaunch launch) {
         return "Next phrase";
     }
     return "Next bar";
+}
+
+const char *hold_rule_id(HoldRule rule) { return rule == HoldRule::strict ? "strict" : "tolerant"; }
+
+std::optional<HoldRule> hold_rule_from_id(const std::string &id) {
+    if (id == "strict") {
+        return HoldRule::strict;
+    }
+    if (id == "tolerant") {
+        return HoldRule::tolerant;
+    }
+    return std::nullopt;
 }
 
 std::optional<SceneLaunch> scene_launch_from_id(const std::string &id) {

@@ -88,6 +88,7 @@ std::string older_params_line(const Project &p) {
     nlohmann::json &project = line["project"];
     project["limiter"].erase("power_model");
     project["limiter"].erase("quiescent_ma");
+    project["automation"].erase("hold_rule");
     for (nlohmann::json &scene : project["scenes"]) {
         for (nlohmann::json &layer : scene["layers"]) {
             for (const char *id : {"size_units", "time_units"}) {
@@ -125,6 +126,7 @@ TEST_CASE("session files: settings a recording predates take their legacy values
     const Project &replayed = entries.value()[0].project;
     CHECK(replayed.limiter.power_model == PowerModel::linear);
     CHECK(replayed.limiter.quiescent_ma == 0.0);
+    CHECK(replayed.automation.hold_rule == HoldRule::strict);
     CHECK(units_settings(replayed, 0.0) > 0); // The default scenes have a shockwave and plasma.
     // The same project text opened as a project file: the new defaults.
     const nlohmann::json project = nlohmann::json::parse(older)["project"];
@@ -132,6 +134,7 @@ TEST_CASE("session files: settings a recording predates take their legacy values
     REQUIRE(opened.ok());
     CHECK(opened.value().limiter.power_model == PowerModel::duty);
     CHECK(opened.value().limiter.quiescent_ma == 1.0);
+    CHECK(opened.value().automation.hold_rule == HoldRule::tolerant);
     CHECK(units_settings(opened.value(), 1.0) > 0);
     // A recording made with the settings keeps them.
     p.limiter.power_model = PowerModel::duty;

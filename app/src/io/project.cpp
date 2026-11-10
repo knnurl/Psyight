@@ -196,6 +196,8 @@ AutomationParams parse_automation(const json &aut) {
     }
     a.energy_dim = number(aut, "energy_dim", a.energy_dim, 0.0, 1.0);
     a.energy_scenes = optional<bool>(aut, "energy_scenes", a.energy_scenes);
+    const std::string hold = optional<std::string>(aut, "hold_rule", hold_rule_id(a.hold_rule));
+    a.hold_rule = from_id_or_throw(hold_rule_from_id(hold), "hold rule", hold);
     return a;
 }
 
@@ -217,7 +219,8 @@ json automation_json(const AutomationParams &a) {
               {"mirror", a.vary.mirror},
               {"mute", a.vary.mute}}},
             {"energy_dim", finite(a.energy_dim, "energy_dim")},
-            {"energy_scenes", a.energy_scenes}};
+            {"energy_scenes", a.energy_scenes},
+            {"hold_rule", hold_rule_id(a.hold_rule)}};
 }
 
 json scene_json(const Scene &s) {

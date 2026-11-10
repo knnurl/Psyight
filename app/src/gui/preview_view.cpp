@@ -2323,6 +2323,16 @@ void PreviewView::draw_automation() {
     ImGui::SetNextItemWidth(6.0f * em);
     field(drag_int("Palette every (phrases)", &a.palette_every_phrases, 0.05f, 0, 64, "%d"),
           "The palette moves on by one this often; 0 keeps each scene's own.");
+    int hold = a.hold_rule == HoldRule::tolerant ? 0 : 1;
+    ImGui::SetNextItemWidth(10.0f * em);
+    if (ImGui::Combo("Short sections", &hold, "Look past short builds\0Strict (older)\0")) {
+        a.hold_rule = hold == 0 ? HoldRule::tolerant : HoldRule::strict;
+        changed = true;
+    }
+    ImGui::SetItemTooltip(
+        "A section shorter than a phrase keeps the scene before it. Look past short builds: a "
+        "one-bar build shows the build scene for its bar, and the short sections after it go "
+        "back to the scene before it. Strict (older): they keep the build scene.");
     ImGui::SeparatorText("Long sections");
     ImGui::SetNextItemWidth(6.0f * em);
     field(drag_int("Next scene every (phrases)", &a.rotate_every_phrases, 0.05f, 0, 64, "%d"),

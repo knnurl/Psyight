@@ -1,46 +1,46 @@
 {
   "Dark forest": {
     "current_max_a": 3.713372549019608,
-    "current_mean_a": 1.450094806686228,
-    "dark_before_mean": 0.21923431540206653,
-    "dark_mean": 0.7843317571264048,
-    "flashes_after": 38,
-    "flashes_before": 118,
+    "current_mean_a": 1.4750032325294498,
+    "dark_before_mean": 0.1217390306327399,
+    "dark_mean": 0.7555176806803693,
+    "flashes_after": 39,
+    "flashes_before": 154,
     "groups": {
       "hex": {
         "dark_share": 0.0010845986984815619,
         "max_byte": 34,
-        "mean_byte": 2.0376018126379667
+        "mean_byte": 2.129334090830837
       },
       "inner": {
         "dark_share": 0.013015184381778741,
         "max_byte": 34,
-        "mean_byte": 2.0860487597849695
+        "mean_byte": 2.2106636486529014
       },
       "left": {
         "dark_share": 0.0010845986984815619,
         "max_byte": 34,
-        "mean_byte": 2.0296598038109317
+        "mean_byte": 2.1153786273452617
       },
       "middle": {
         "dark_share": 0.0016268980477223427,
         "max_byte": 34,
-        "mean_byte": 2.017718958169874
+        "mean_byte": 2.1021753511484444
       },
       "outer": {
         "dark_share": 0.0010845986984815619,
         "max_byte": 34,
-        "mean_byte": 2.043492153208479
+        "mean_byte": 2.1353367857179255
       },
       "right": {
         "dark_share": 0.0010845986984815619,
         "max_byte": 34,
-        "mean_byte": 2.030411081714794
+        "mean_byte": 2.1281242293915796
       },
       "spokes": {
         "dark_share": 0.0016268980477223427,
         "max_byte": 34,
-        "mean_byte": 2.025143483369484
+        "mean_byte": 2.1080776241262926
       }
     },
     "max_after_in_1s": 4,
@@ -75,15 +75,15 @@
         "flashes_alone": 229,
         "max_byte": 17,
         "max_flashes_alone_in_1s": 3,
-        "median_lit_pixels": 1106.0,
+        "median_lit_pixels": 1101.0,
         "quarter_above_20": 0.0,
-        "seconds": 38.9
+        "seconds": 51.65
       },
       "Nebula": {
         "flashes_alone": 67,
-        "max_byte": 11,
+        "max_byte": 13,
         "max_flashes_alone_in_1s": 4,
-        "median_lit_pixels": 793.0,
+        "median_lit_pixels": 836.0,
         "quarter_above_20": 0.0,
         "seconds": 12.85
       },
@@ -99,54 +99,54 @@
         "flashes_alone": 3,
         "max_byte": 16,
         "max_flashes_alone_in_1s": 2,
-        "median_lit_pixels": 326.0,
+        "median_lit_pixels": 436.0,
         "quarter_above_20": 0.0,
-        "seconds": 20.75
+        "seconds": 8.0
       }
     }
   },
   "Hexagon": {
     "current_max_a": 3.7318823529411764,
-    "current_mean_a": 1.3764586363829707,
-    "dark_before_mean": 0.3619145175544323,
-    "dark_mean": 0.9105775153316692,
-    "flashes_after": 13,
-    "flashes_before": 121,
+    "current_mean_a": 1.413543022415037,
+    "dark_before_mean": 0.30781370152302967,
+    "dark_mean": 0.8405018229674764,
+    "flashes_after": 20,
+    "flashes_before": 212,
     "groups": {
       "hex": {
         "dark_share": 0.008134490238611713,
         "max_byte": 34,
-        "mean_byte": 1.927424661517216
+        "mean_byte": 2.2971977374544292
       },
       "inner": {
-        "dark_share": 0.05422993492407809,
+        "dark_share": 0.031453362255965296,
         "max_byte": 34,
-        "mean_byte": 2.0837027256436906
+        "mean_byte": 2.7275967493476583
       },
       "left": {
         "dark_share": 0.008134490238611713,
         "max_byte": 34,
-        "mean_byte": 1.9146014361006265
+        "mean_byte": 2.2788123957719417
       },
       "middle": {
-        "dark_share": 0.026572668112798264,
+        "dark_share": 0.009219088937093275,
         "max_byte": 31,
-        "mean_byte": 1.9866559745234689
+        "mean_byte": 2.4238204027630297
       },
       "outer": {
-        "dark_share": 0.04609544468546638,
+        "dark_share": 0.009761388286334056,
         "max_byte": 31,
-        "mean_byte": 1.7495175317996239
+        "mean_byte": 1.9690443819824224
       },
       "right": {
         "dark_share": 0.008134490238611713,
         "max_byte": 34,
-        "mean_byte": 1.9132049369093744
+        "mean_byte": 2.2887759708098763
       },
       "spokes": {
         "dark_share": 0.009761388286334056,
         "max_byte": 34,
-        "mean_byte": 2.0576983911785973
+        "mean_byte": 2.452373689443241
       }
     },
     "max_after_in_1s": 4,
@@ -189,31 +189,31 @@
         "flashes_alone": 103,
         "max_byte": 31,
         "max_flashes_alone_in_1s": 5,
-        "median_lit_pixels": 707.0,
-        "quarter_above_20": 0.004819277108433735,
-        "seconds": 20.75
+        "median_lit_pixels": 1090.0,
+        "quarter_above_20": 0.0125,
+        "seconds": 8.0
       },
       "Hex radar": {
         "flashes_alone": 230,
-        "max_byte": 27,
+        "max_byte": 31,
         "max_flashes_alone_in_1s": 3,
         "median_lit_pixels": 696.0,
         "quarter_above_20": 0.0,
-        "seconds": 19.7
+        "seconds": 12.75
       },
       "Hex tunnel": {
         "flashes_alone": 397,
         "max_byte": 34,
         "max_flashes_alone_in_1s": 6,
-        "median_lit_pixels": 757.0,
+        "median_lit_pixels": 784.0,
         "quarter_above_20": 0.0,
-        "seconds": 19.2
+        "seconds": 38.9
       },
       "Nebula": {
         "flashes_alone": 67,
-        "max_byte": 11,
+        "max_byte": 20,
         "max_flashes_alone_in_1s": 4,
-        "median_lit_pixels": 820.0,
+        "median_lit_pixels": 797.0,
         "quarter_above_20": 0.0,
         "seconds": 12.85
       }
@@ -221,46 +221,46 @@
   },
   "Psy club": {
     "current_max_a": 3.717450980392157,
-    "current_mean_a": 1.587282761260689,
-    "dark_before_mean": 0.2902884420418764,
-    "dark_mean": 0.7571182767314352,
-    "flashes_after": 99,
-    "flashes_before": 171,
+    "current_mean_a": 1.6928332695334112,
+    "dark_before_mean": 0.21386201303048755,
+    "dark_mean": 0.6926104779503179,
+    "flashes_after": 133,
+    "flashes_before": 215,
     "groups": {
       "hex": {
         "dark_share": 0.008134490238611713,
         "max_byte": 35,
-        "mean_byte": 2.960950621109696
+        "mean_byte": 3.4588985871523823
       },
       "inner": {
         "dark_share": 0.031995661605206074,
         "max_byte": 35,
-        "mean_byte": 3.081293816215534
+        "mean_byte": 3.9144974692697083
       },
       "left": {
         "dark_share": 0.008134490238611713,
         "max_byte": 35,
-        "mean_byte": 2.9787056077305354
+        "mean_byte": 3.4622610852674343
       },
       "middle": {
         "dark_share": 0.008676789587852495,
         "max_byte": 35,
-        "mean_byte": 2.919847386963278
+        "mean_byte": 3.5747180812602926
       },
       "outer": {
         "dark_share": 0.008134490238611713,
         "max_byte": 35,
-        "mean_byte": 2.973879248011578
+        "mean_byte": 3.2344018921919186
       },
       "right": {
         "dark_share": 0.008134490238611713,
         "max_byte": 35,
-        "mean_byte": 2.9785300657446503
+        "mean_byte": 3.4628263722576818
       },
       "spokes": {
         "dark_share": 0.009219088937093275,
         "max_byte": 35,
-        "mean_byte": 2.9244094962641625
+        "mean_byte": 3.459252229452883
       }
     },
     "max_after_in_1s": 3,
@@ -293,11 +293,11 @@
       },
       "Fire riser": {
         "flashes_alone": 0,
-        "max_byte": 34,
+        "max_byte": 33,
         "max_flashes_alone_in_1s": 0,
-        "median_lit_pixels": 481.0,
+        "median_lit_pixels": 801.0,
         "quarter_above_20": 0.0,
-        "seconds": 20.75
+        "seconds": 8.0
       },
       "Kick pulse": {
         "flashes_alone": 231,
@@ -309,9 +309,9 @@
       },
       "Nebula": {
         "flashes_alone": 67,
-        "max_byte": 21,
+        "max_byte": 27,
         "max_flashes_alone_in_1s": 4,
-        "median_lit_pixels": 795.0,
+        "median_lit_pixels": 820.0,
         "quarter_above_20": 0.0,
         "seconds": 12.85
       },
@@ -319,9 +319,9 @@
         "flashes_alone": 270,
         "max_byte": 35,
         "max_flashes_alone_in_1s": 5,
-        "median_lit_pixels": 1081.0,
+        "median_lit_pixels": 1088.0,
         "quarter_above_20": 0.0,
-        "seconds": 38.9
+        "seconds": 51.65
       }
     }
   }

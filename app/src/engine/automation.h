@@ -11,6 +11,11 @@
 //   (a groove that steps up gets its high-energy look).
 // - A section shorter than a phrase keeps the scene before it (it does not count in the
 //   rotation either), unless it is a build or a drop: a blip in the structure is no scene change.
+//   HoldRule::tolerant (the default) compares the length with 50 ms of tolerance (a labelled
+//   8-bar section can come out a few femtoseconds short of the phrase), and a held section looks
+//   back past a build shorter than a phrase to the section before it: a one-bar "build" is a
+//   fill before a return, so it colours its own bars, not the 16 after it. HoldRule::strict is
+//   the older rule (no tolerance; held sections inherit a short build's scene).
 // - Long sections rotate: every rotate_every_phrases phrases into a section, the next scene with
 //   its tag (and energy) takes over, on the phrase's downbeat, cut or crossfaded over
 //   rotate_fade_beats. Builds do not rotate: their arc runs through. Phrases count from the
@@ -69,6 +74,11 @@ const char *scene_launch_id(SceneLaunch launch);   // "now", "bar", "phrase" (fi
 const char *scene_launch_name(SceneLaunch launch); // "Now", "Next bar", "Next phrase".
 std::optional<SceneLaunch> scene_launch_from_id(const std::string &id);
 
+// How a section shorter than a phrase keeps the scene before it (above).
+enum class HoldRule { strict, tolerant };
+const char *hold_rule_id(HoldRule rule); // "strict", "tolerant" (files).
+std::optional<HoldRule> hold_rule_from_id(const std::string &id);
+
 struct AutomationParams {
     double crossfade_beats = 4.0;
     int palette_every_phrases = 2; // 0 keeps each scene's own palette.
@@ -83,6 +93,7 @@ struct AutomationParams {
     VariationKinds vary;        // What variations may change.
     double energy_dim = 0.25;   // Quieter passages dim by up to this; 0: never.
     bool energy_scenes = true;  // File mode: each phrase's energy picks its scene.
+    HoldRule hold_rule = HoldRule::tolerant;
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
@@ -135,10 +146,11 @@ int scene_for_label(const std::vector<Scene> &scenes, const std::string &label, 
                     int energy = -1, size_t step = 0);
 
 // The scene for section `index` of the analysis (rotation among tagged scenes). Sections shorter
-// than min_dwell_s, builds and drops aside, keep the scene of the section before them.
+// than min_dwell_s, builds and drops aside, keep the scene of the section before them (by the
+// hold rule).
 int scene_for_section(const std::vector<Scene> &scenes,
                       const std::vector<DetectedSection> &sections, size_t index,
-                      double min_dwell_s = 0.0);
+                      double min_dwell_s = 0.0, HoldRule rule = HoldRule::strict);
 
 // timeline: hand-edited sections in place of the analysis's (null: its own), as inputs_at.
 SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysis, const Grid &grid,

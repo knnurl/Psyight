@@ -244,6 +244,63 @@ TEST_CASE("automation: a section shorter than a phrase keeps the scene before it
     CHECK(mix.from == -1);
 }
 
+TEST_CASE("automation: a one-bar build does not keep its scene on through the sections held "
+          "after it (tolerant rule)") {
+    // Alien Army's labelled lengths at its grid (finding L3): the two 8-bar grooves after the
+    // one-bar build come out a few femtoseconds short of the phrase.
+    const double bpm = 183.9997623150804;
+    const double beat_s = 60.0 / bpm;
+    const double bar_s = 4.0 * beat_s;
+    const double phrase_s = 8.0 * bar_s;
+    std::vector<DetectedSection> sections;
+    double t = 0.0;
+    for (const auto &[label, length_s] :
+         std::vector<std::pair<const char *, double>>{{"groove", 52.2},
+                                                      {"breakdown", bar_s},
+                                                      {"build", bar_s},
+                                                      {"groove", 10.434796088009065},
+                                                      {"groove", 10.434796088009051},
+                                                      {"groove", 16.0 * bar_s}}) {
+        sections.push_back({t, t + length_s, label, 1.0});
+        t += length_s;
+    }
+    REQUIRE(sections[3].end_s - sections[3].start_s < phrase_s); // Short by rounding.
+    const std::vector<Scene> scenes = default_scenes();
+    // Tolerant: the three grooves after the build show a groove scene; the build its own. The
+    // 8-bar grooves are full phrases within the tolerance, so each takes its turn in the groove
+    // rotation (Groove, Staccato).
+    CHECK(scene_for_section(scenes, sections, 2, phrase_s, HoldRule::tolerant) == kBuild);
+    CHECK(scene_for_section(scenes, sections, 3, phrase_s, HoldRule::tolerant) == kStaccato);
+    CHECK(scene_for_section(scenes, sections, 4, phrase_s, HoldRule::tolerant) == kGroove);
+    CHECK(scene_for_section(scenes, sections, 5, phrase_s, HoldRule::tolerant) == kStaccato);
+    // Strict (the older rule): the first two keep the build scene.
+    CHECK(scene_for_section(scenes, sections, 3, phrase_s, HoldRule::strict) == kBuild);
+    CHECK(scene_for_section(scenes, sections, 4, phrase_s, HoldRule::strict) == kBuild);
+    CHECK(scene_for_section(scenes, sections, 5, phrase_s, HoldRule::strict) == kStaccato);
+
+    // A 4-bar groove after a 1-bar build inherits the groove before the build.
+    const std::vector<DetectedSection> short_after = {{0.0, 25.6, "groove", 1.0},
+                                                      {25.6, 27.2, "build", 1.0},
+                                                      {27.2, 33.6, "groove", 1.0},
+                                                      {33.6, 60.0, "breakdown", 1.0}};
+    CHECK(scene_for_section(scenes, short_after, 2, kPhraseS, HoldRule::tolerant) == kGroove);
+    CHECK(scene_for_section(scenes, short_after, 2, kPhraseS, HoldRule::strict) == kBuild);
+
+    // automate follows the project's rule (tolerant by default).
+    TrackAnalysis a = arrangement();
+    a.sections = short_after;
+    a.duration_s = 60.0;
+    AutomationParams params;
+    params.rotate_every_phrases = 0;
+    params.fill = PhraseFill::off;
+    params.vary_every_phrases = 0;
+    REQUIRE(params.hold_rule == HoldRule::tolerant);
+    CHECK(automate(scenes, a, a.grid, inputs_at(a, a.grid, 26.0), params).to == kBuild);
+    CHECK(automate(scenes, a, a.grid, inputs_at(a, a.grid, 30.0), params).to == kGroove);
+    params.hold_rule = HoldRule::strict;
+    CHECK(automate(scenes, a, a.grid, inputs_at(a, a.grid, 30.0), params).to == kBuild);
+}
+
 TEST_CASE("automation: energy tags pick a section's scene by its energy") {
     std::vector<Scene> scenes(4);
     scenes[0].sections = {"groove"};

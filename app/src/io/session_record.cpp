@@ -46,6 +46,9 @@ void set_legacy_values(const json &project_json, Project &project) {
     if (lacks(project_json, "limiter", "quiescent_ma")) {
         project.limiter.quiescent_ma = 0.0;
     }
+    if (lacks(project_json, "automation", "hold_rule")) {
+        project.automation.hold_rule = HoldRule::strict;
+    }
     // Effect settings, by id: the value that reproduces the older output.
     static constexpr std::pair<const char *, double> kLegacyEffectParams[] = {
         {"size_units", 0.0},
