@@ -4,6 +4,7 @@
 #include "engine/automation.h"
 #include "engine/effect_spec.h"
 #include "engine/inputs.h"
+#include "engine/presets.h"
 #include "engine/rig.h"
 #include "engine/scene.h"
 
@@ -299,6 +300,44 @@ TEST_CASE("automation: a one-bar build does not keep its scene on through the se
     CHECK(automate(scenes, a, a.grid, inputs_at(a, a.grid, 30.0), params).to == kGroove);
     params.hold_rule = HoldRule::strict;
     CHECK(automate(scenes, a, a.grid, inputs_at(a, a.grid, 30.0), params).to == kBuild);
+}
+
+TEST_CASE("automation: palette rotation through every palette, or each scene's own list") {
+    Scene s;
+    s.palette = 2;
+    CHECK(scene_palette(s, 0, 6, PaletteRotation::all) == 2);
+    CHECK(scene_palette(s, 5, 6, PaletteRotation::all) == 1);
+    CHECK(scene_palette(s, -1, 6, PaletteRotation::all) == 1);
+    CHECK(scene_palette(s, 7, 6, PaletteRotation::scene_list) == 2); // No list: its own.
+    s.palette_list = {4, 0, 3};
+    CHECK(scene_palette(s, 0, 6, PaletteRotation::all) == 2); // The list only counts in its mode.
+    CHECK(scene_palette(s, 0, 6, PaletteRotation::scene_list) == 4);
+    CHECK(scene_palette(s, 1, 6, PaletteRotation::scene_list) == 0);
+    CHECK(scene_palette(s, 5, 6, PaletteRotation::scene_list) == 3);
+    CHECK(scene_palette(s, -1, 6, PaletteRotation::scene_list) == 3);
+    CHECK(scene_palette(s, 0, 3, PaletteRotation::scene_list) == 1); // Wrapped to the palettes.
+}
+
+TEST_CASE("automation: with every palette, render_mix shows each built-in pack as before") {
+    const Rig rig = default_rig();
+    for (const ShowPack &pack : builtin_show_packs()) {
+        CAPTURE(pack.name);
+        REQUIRE(pack.automation.palette_rotation == PaletteRotation::all);
+        const TrackAnalysis a = arrangement();
+        for (int k = 0; k < 20; ++k) {
+            const double t = 5.0 * k + 0.37;
+            const EngineInputs in = inputs_at(a, a.grid, t);
+            SceneMix mix;
+            mix.to = k % static_cast<int>(pack.scenes.size());
+            mix.palette_shift = k;
+            const Scene &scene = pack.scenes[static_cast<size_t>(mix.to)];
+            const int n = static_cast<int>(pack.palettes.size());
+            const Palette &before =
+                pack.palettes[static_cast<size_t>(((scene.palette + k) % n + n) % n)];
+            CHECK(render_mix(pack.scenes, mix, rig, in, pack.palettes, 1) ==
+                  render_scene(scene, rig, in, before, 1));
+        }
+    }
 }
 
 TEST_CASE("automation: energy tags pick a section's scene by its energy") {

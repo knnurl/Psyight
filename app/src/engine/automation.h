@@ -37,7 +37,10 @@
 // - Entering a groove or drop cuts (sections start on downbeats, so the cut lands on one);
 //   entering anything else crossfades over crossfade_beats, at most half the section.
 // - The palette shifts by one every palette_every_phrases phrases (counted over the track),
-//   slewed over palette_slew_beats as an RGB crossfade (not a hue-path slew).
+//   slewed over palette_slew_beats as an RGB crossfade (not a hue-path slew). With
+//   PaletteRotation::all (the default) a scene's palette moves through every palette; with
+//   scene_list, through the scene's own palette_list (or stays on its palette when it has none),
+//   so each scene keeps a colour identity.
 // - A manual scene overrides the section rules until released. SceneLauncher (below) makes a
 //   newly chosen scene, or the return to the rules, wait for the next bar or phrase (SPEC 7.6:
 //   a cut on the next downbeat), as AutomationParams::launch says.
@@ -74,6 +77,11 @@ const char *scene_launch_id(SceneLaunch launch);   // "now", "bar", "phrase" (fi
 const char *scene_launch_name(SceneLaunch launch); // "Now", "Next bar", "Next phrase".
 std::optional<SceneLaunch> scene_launch_from_id(const std::string &id);
 
+// What the palette shift moves a scene through (above).
+enum class PaletteRotation { all, scene_list };
+const char *palette_rotation_id(PaletteRotation rotation); // "all", "scene_list" (files).
+std::optional<PaletteRotation> palette_rotation_from_id(const std::string &id);
+
 // How a section shorter than a phrase keeps the scene before it (above).
 enum class HoldRule { strict, tolerant };
 const char *hold_rule_id(HoldRule rule); // "strict", "tolerant" (files).
@@ -94,6 +102,7 @@ struct AutomationParams {
     double energy_dim = 0.25;   // Quieter passages dim by up to this; 0: never.
     bool energy_scenes = true;  // File mode: each phrase's energy picks its scene.
     HoldRule hold_rule = HoldRule::tolerant;
+    PaletteRotation palette_rotation = PaletteRotation::all;
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
@@ -126,14 +135,18 @@ struct SceneMix {
     double to_weight = 1.0; // 1: `to` alone.
     int palette_shift = 0;  // Added to each scene's palette index.
     int palette_shift_from = 0;
-    double palette_weight = 1.0;       // 1: palette_shift alone.
-    double brightness = 1.0;           // Following the energy (energy_dim).
+    double palette_weight = 1.0;                             // 1: palette_shift alone.
+    PaletteRotation palette_rotation = PaletteRotation::all; // From the automation params.
+    double brightness = 1.0;                                 // Following the energy (energy_dim).
     int variant = 0;                   // Of `to` (SceneVariants); 0: the scene itself.
     int variant_from = 0;              // Of `from`.
     PhraseFill fill = PhraseFill::off; // A phrase-end fill playing (never mix: the one picked).
     double fill_s = 0.0;               // Its length...
     double fill_progress = 0.0;        // ...and how far through, 0 to 1.
 };
+
+// The palette a scene shows at a palette shift, by the rotation (above); palette_count > 0.
+int scene_palette(const Scene &scene, int shift, size_t palette_count, PaletteRotation rotation);
 
 // Energy tags, by DetectedSection::energy (0 low, 1 mid, 2 high).
 inline constexpr std::array<const char *, 3> kEnergyTags = {"low", "mid", "high"};

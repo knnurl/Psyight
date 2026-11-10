@@ -105,6 +105,15 @@ Scene parse_scene(const json &item) {
     s.name = optional<std::string>(item, "name", "");
     s.palette = integer(item, "palette", 0, 0, 1000);
     s.sections = optional<std::vector<std::string>>(item, "sections", {});
+    if (const auto list = item.find("palette_list"); list != item.end()) {
+        for (const json &v : list->get_ref<const json::array_t &>()) {
+            const int index = v.get<int>();
+            if (index < 0 || index > 1000) {
+                throw FieldError{"palette_list out of range"};
+            }
+            s.palette_list.push_back(index);
+        }
+    }
     for (const json &l : item.at("layers").get_ref<const json::array_t &>()) {
         const std::string effect = l.at("effect").get<std::string>();
         const EffectType type = from_id_or_throw(effect_type_from_id(effect), "effect", effect);
@@ -198,6 +207,10 @@ AutomationParams parse_automation(const json &aut) {
     a.energy_scenes = optional<bool>(aut, "energy_scenes", a.energy_scenes);
     const std::string hold = optional<std::string>(aut, "hold_rule", hold_rule_id(a.hold_rule));
     a.hold_rule = from_id_or_throw(hold_rule_from_id(hold), "hold rule", hold);
+    const std::string rotation =
+        optional<std::string>(aut, "palette_rotation", palette_rotation_id(a.palette_rotation));
+    a.palette_rotation =
+        from_id_or_throw(palette_rotation_from_id(rotation), "palette rotation", rotation);
     return a;
 }
 
@@ -220,7 +233,8 @@ json automation_json(const AutomationParams &a) {
               {"mute", a.vary.mute}}},
             {"energy_dim", finite(a.energy_dim, "energy_dim")},
             {"energy_scenes", a.energy_scenes},
-            {"hold_rule", hold_rule_id(a.hold_rule)}};
+            {"hold_rule", hold_rule_id(a.hold_rule)},
+            {"palette_rotation", palette_rotation_id(a.palette_rotation)}};
 }
 
 json scene_json(const Scene &s) {
@@ -251,11 +265,15 @@ json scene_json(const Scene &s) {
                           {"release_s", finite(r.release_s, "release_s")},
                           {"param", r.param}});
     }
-    return {{"name", s.name},
-            {"palette", s.palette},
-            {"sections", s.sections},
-            {"layers", layers},
-            {"routes", routes}};
+    json out = {{"name", s.name},
+                {"palette", s.palette},
+                {"sections", s.sections},
+                {"layers", layers},
+                {"routes", routes}};
+    if (!s.palette_list.empty()) {
+        out["palette_list"] = s.palette_list;
+    }
+    return out;
 }
 
 } // namespace

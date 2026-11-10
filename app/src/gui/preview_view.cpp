@@ -958,6 +958,36 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes, const ShowFrame 
     }
     ImGui::SetItemTooltip("Automation shifts it by one every %d phrases.",
                           project_.project().automation.palette_every_phrases);
+    if (tier_at_least(Tier::tune)) {
+        // The palettes this scene rotates through (Automation > Palette rotation: each scene's
+        // own list).
+        std::string shown;
+        for (const int i : scene.palette_list) {
+            if (i >= 0 && i < static_cast<int>(palettes.size())) {
+                shown += (shown.empty() ? "" : ", ") + palettes[static_cast<size_t>(i)].name;
+            }
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(9.0f * em);
+        if (ImGui::BeginCombo("Rotates through", shown.empty() ? "Its own only" : shown.c_str())) {
+            for (int i = 0; i < static_cast<int>(palettes.size()); ++i) {
+                const auto at = std::find(scene.palette_list.begin(), scene.palette_list.end(), i);
+                bool on = at != scene.palette_list.end();
+                if (ImGui::Checkbox(palettes[static_cast<size_t>(i)].name.c_str(), &on)) {
+                    if (on) {
+                        scene.palette_list.push_back(i);
+                    } else {
+                        scene.palette_list.erase(at);
+                    }
+                    scene_edited_ = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SetItemTooltip(
+            "The palettes this scene moves through, in the order ticked, when Automation > "
+            "Palette rotation is \"Each scene's own list\". None: it keeps its own palette.");
+    }
     // Section tags: which sections the automation may pick this scene for; wraps like the cards.
     ImGui::TextUnformatted("For");
     const ImGuiStyle &style = ImGui::GetStyle();
@@ -2323,6 +2353,15 @@ void PreviewView::draw_automation() {
     ImGui::SetNextItemWidth(6.0f * em);
     field(drag_int("Palette every (phrases)", &a.palette_every_phrases, 0.05f, 0, 64, "%d"),
           "The palette moves on by one this often; 0 keeps each scene's own.");
+    int rotation = a.palette_rotation == PaletteRotation::all ? 0 : 1;
+    ImGui::SetNextItemWidth(10.0f * em);
+    if (ImGui::Combo("Palette rotation", &rotation, "Every palette\0Each scene's own list\0")) {
+        a.palette_rotation = rotation == 0 ? PaletteRotation::all : PaletteRotation::scene_list;
+        changed = true;
+    }
+    ImGui::SetItemTooltip("Every palette: each shift moves every scene to the next palette. Each "
+                          "scene's own list: a scene moves only through the palettes ticked in "
+                          "its \"Rotates through\", so it keeps its colours.");
     int hold = a.hold_rule == HoldRule::tolerant ? 0 : 1;
     ImGui::SetNextItemWidth(10.0f * em);
     if (ImGui::Combo("Short sections", &hold, "Look past short builds\0Strict (older)\0")) {

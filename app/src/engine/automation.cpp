@@ -40,10 +40,7 @@ bool short_build(const DetectedSection &section, double min_dwell_s) {
            section.end_s - section.start_s < min_dwell_s - kPhraseToleranceS;
 }
 
-int palette_index(const Scene &scene, int shift, size_t palette_count) {
-    const auto n = static_cast<int>(palette_count);
-    return ((scene.palette + shift) % n + n) % n;
-}
+int wrap(int i, int n) { return (i % n + n) % n; }
 
 // The section whose scene section `index` shows: itself, or the one before a held blip (tolerant:
 // and before a short build that held sections follow).
@@ -284,6 +281,7 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
                   const EngineInputs &inputs, const AutomationParams &params, int manual_scene,
                   const SectionTimeline *timeline) {
     SceneMix mix;
+    mix.palette_rotation = params.palette_rotation;
     const std::vector<double> &phrase_starts =
         timeline != nullptr ? timeline->phrase_starts_s : analysis.phrase_starts_s;
     const std::vector<DetectedSection> &sections =
@@ -407,6 +405,7 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
                        const EngineInputs &inputs, const AutomationParams &params,
                        int manual_scene) {
     SceneMix mix;
+    mix.palette_rotation = params.palette_rotation;
     const double beat_s = state.tempo_known ? state.period_s : 0.5;
     if (params.palette_every_phrases > 0 && inputs.phrase_index >= 0) {
         const int n = params.palette_every_phrases;
@@ -550,6 +549,32 @@ const char *scene_launch_name(SceneLaunch launch) {
     return "Next bar";
 }
 
+int scene_palette(const Scene &scene, int shift, size_t palette_count, PaletteRotation rotation) {
+    const auto n = static_cast<int>(palette_count);
+    if (rotation == PaletteRotation::all) {
+        return wrap(scene.palette + shift, n);
+    }
+    if (scene.palette_list.empty()) {
+        return wrap(scene.palette, n);
+    }
+    const auto size = static_cast<int>(scene.palette_list.size());
+    return wrap(scene.palette_list[static_cast<size_t>(wrap(shift, size))], n);
+}
+
+const char *palette_rotation_id(PaletteRotation rotation) {
+    return rotation == PaletteRotation::scene_list ? "scene_list" : "all";
+}
+
+std::optional<PaletteRotation> palette_rotation_from_id(const std::string &id) {
+    if (id == "all") {
+        return PaletteRotation::all;
+    }
+    if (id == "scene_list") {
+        return PaletteRotation::scene_list;
+    }
+    return std::nullopt;
+}
+
 const char *hold_rule_id(HoldRule rule) { return rule == HoldRule::strict ? "strict" : "tolerant"; }
 
 std::optional<HoldRule> hold_rule_from_id(const std::string &id) {
@@ -621,9 +646,11 @@ Frame render_mix(const std::vector<Scene> &scenes, const SceneMix &mix, const Ri
                 : scenes[i];
         // A scene rendered twice in a frame (a palette slew) steps its routes at the same render
         // time twice, which returns the same values.
-        return render_scene(
-            s, rig, inputs, palettes[static_cast<size_t>(palette_index(s, shift, palettes.size()))],
-            seed, memory != nullptr ? &(*memory)[static_cast<size_t>(scene)] : nullptr);
+        return render_scene(s, rig, inputs,
+                            palettes[static_cast<size_t>(
+                                scene_palette(s, shift, palettes.size(), mix.palette_rotation))],
+                            seed,
+                            memory != nullptr ? &(*memory)[static_cast<size_t>(scene)] : nullptr);
     };
     // The scene crossfade at one palette shift.
     const auto render_scenes = [&](int shift) {

@@ -129,6 +129,7 @@ Result<void> save_rig_preset(const std::filesystem::path &dir, const RigPreset &
 int apply_scene_preset(Project &project, const ScenePreset &preset, int index) {
     Scene scene = preset.scene;
     scene.palette = palette_index(project, preset.palette);
+    scene.palette_list.clear(); // A scene preset carries one palette.
     if (index >= 0 && index < static_cast<int>(project.scenes.size())) {
         project.scenes[static_cast<size_t>(index)] = std::move(scene);
         return index;
@@ -162,6 +163,7 @@ int add_palette(Project &project, const Palette &palette) {
 ScenePreset scene_preset_of(const Project &project, int index) {
     ScenePreset preset;
     preset.scene = project.scenes.at(static_cast<size_t>(index));
+    preset.scene.palette_list.clear(); // A scene preset carries one palette.
     preset.name = preset.scene.name;
     if (!project.palettes.empty()) {
         preset.palette = project.palettes[static_cast<size_t>(

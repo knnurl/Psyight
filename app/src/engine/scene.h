@@ -361,8 +361,11 @@ struct Layer {
 
 struct Scene {
     std::string name;
-    std::vector<Layer> layers;         // Bottom first.
-    int palette = 0;                   // Into the palette list.
+    std::vector<Layer> layers; // Bottom first.
+    int palette = 0;           // Into the palette list.
+    // The palettes this scene rotates through (PaletteRotation::scene_list): a phrase shift of k
+    // takes palette_list[k mod size]; empty: `palette` only. Indices into the palette list.
+    std::vector<int> palette_list;
     std::vector<std::string> sections; // Section labels this scene suits (automation, SPEC 7.6).
     std::vector<ModRoute> routes;      // Modulation (SPEC 7.4).
 };

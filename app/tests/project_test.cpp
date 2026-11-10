@@ -79,6 +79,8 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.automation.energy_dim = 0.4;
     p.automation.energy_scenes = false;
     p.automation.hold_rule = HoldRule::strict;
+    p.automation.palette_rotation = PaletteRotation::scene_list;
+    p.scenes[0].palette_list = {1, 0};
     p.show_pack = "Hexagon";
     p.group_caps = {{"booth", 0.4}, {"canopy", 0.75}};
     p.macro_values[1] = 0.25;
@@ -131,6 +133,9 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.automation.energy_dim == 0.4);
     CHECK_FALSE(q.automation.energy_scenes);
     CHECK(q.automation.hold_rule == HoldRule::strict);
+    CHECK(q.automation.palette_rotation == PaletteRotation::scene_list);
+    CHECK(q.scenes[0].palette_list == std::vector<int>{1, 0});
+    CHECK(q.scenes[1].palette_list.empty());
     CHECK(q.show_pack == "Hexagon");
     REQUIRE(q.group_caps.size() == 2);
     CHECK(q.group_caps[1].group == "canopy");
