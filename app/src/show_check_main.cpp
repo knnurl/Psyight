@@ -17,6 +17,8 @@
 // --pack applies a built-in show pack to the project in memory (as the Show tab does); the
 // project file is not written.
 // --dump writes one CSV row per frame (bytes after to_bytes).
+// --scene holds one scene by name (as the operator does by hand); --at t1,t2,... with
+// --frames-out <file> writes the bytes sent at those times (JSON lines), for contact sheets.
 // --record writes the show as a session folder (io/session_record.h, as the app records one, with
 // the project's macro values), for psyight_replay; the folder must not exist yet.
 // --groups reports each strip group's mean and brightest byte and the share of frames it is dark.
@@ -27,6 +29,7 @@
 #include "audio/audio_file.h"
 #include "core/paths.h"
 #include "engine/inputs.h"
+#include "engine/limiters.h"
 #include "engine/presets.h"
 #include "io/labels.h"
 #include "io/presets.h"
@@ -37,6 +40,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cwchar>
 #include <filesystem>
 #include <fstream>
@@ -55,6 +59,9 @@ struct Options {
     bool groups = false;
     std::filesystem::path dump;
     std::filesystem::path record;
+    std::string scene;        // Hold this scene (by name) as the operator does by hand.
+    std::vector<double> at_s; // Frames to write to frames_out.
+    std::filesystem::path frames_out;
 };
 
 int check(const std::filesystem::path &audio_path, const Project &project,
@@ -99,6 +106,18 @@ int check(const std::filesystem::path &audio_path, const Project &project,
             *analysis, config.grid, engine_sections(labels.sections, analysis->duration_s)));
     }
 
+    if (!opt.scene.empty()) {
+        for (size_t i = 0; i < config.scenes.size(); ++i) {
+            if (config.scenes[i].name == opt.scene) {
+                config.manual_scene = static_cast<int>(i);
+            }
+        }
+        if (config.manual_scene < 0) {
+            std::fprintf(stderr, "no scene named %s\n", opt.scene.c_str());
+            return 2;
+        }
+    }
+
     ShowCheckOptions options;
     options.fps = opt.fps;
     options.per_layer = opt.per_layer;
@@ -115,6 +134,46 @@ int check(const std::filesystem::path &audio_path, const Project &project,
             f.config_version = config.version;
             f.rgb = shown.node_rgb;
             append_frame(recorded, f);
+        };
+    }
+    // The frames asked for with --at: the bytes as sent (after the limiters and gamma, before
+    // the patch's colour order), one JSON line each, after a line with the pixels' positions.
+    std::ofstream frames_file;
+    if (!opt.frames_out.empty()) {
+        frames_file.open(opt.frames_out);
+        frames_file << "{\"pixels\": [";
+        for (size_t i = 0; i < config.rig.pixels.size(); ++i) {
+            const Pixel &p = config.rig.pixels[i];
+            char item[96];
+            std::snprintf(item, sizeof item, "%s[%.4f, %.4f, %d]", i == 0 ? "" : ", ", p.position.x,
+                          p.position.y, p.strip);
+            frames_file << item;
+        }
+        frames_file << "]}\n";
+        std::vector<long long> wanted;
+        for (const double t : opt.at_s) {
+            wanted.push_back(std::llround(t * opt.fps));
+        }
+        const auto previous = options.on_frame;
+        options.on_frame = [&, wanted, previous](const ShowFrame &shown) {
+            if (previous) {
+                previous(shown);
+            }
+            const long long f = std::llround(shown.t_s * opt.fps);
+            if (std::find(wanted.begin(), wanted.end(), f) == wanted.end()) {
+                return;
+            }
+            const std::vector<std::uint8_t> bytes =
+                to_bytes(shown.frame, config.limiter.gamma, config.limiter.dither, shown.index);
+            char head[160];
+            std::snprintf(head, sizeof head,
+                          "{\"t_s\": %.4f, \"scene\": %d, \"section\": \"%s\", \"rgb\": [",
+                          shown.t_s, shown.mix.to, shown.section.c_str());
+            frames_file << head;
+            for (size_t i = 0; i < bytes.size(); ++i) {
+                frames_file << (i == 0 ? "" : ",") << static_cast<int>(bytes[i]);
+            }
+            frames_file << "]}\n";
         };
     }
     const ShowCheckResult r = run_show_check(config, analysis->duration_s, options);
@@ -237,6 +296,18 @@ int wmain(int argc, wchar_t **argv) {
             opt.detected_sections = true;
         } else if (std::wcscmp(argv[i], L"--groups") == 0) {
             opt.groups = true;
+        } else if (std::wcscmp(argv[i], L"--scene") == 0 && i + 1 < argc) {
+            opt.scene = path_to_utf8(std::filesystem::path(argv[++i]));
+        } else if (std::wcscmp(argv[i], L"--frames-out") == 0 && i + 1 < argc) {
+            opt.frames_out = argv[++i];
+        } else if (std::wcscmp(argv[i], L"--at") == 0 && i + 1 < argc) {
+            const std::string list = path_to_utf8(std::filesystem::path(argv[++i]));
+            size_t from = 0;
+            while (from < list.size()) {
+                const size_t to = std::min(list.find(',', from), list.size());
+                opt.at_s.push_back(std::strtod(list.substr(from, to - from).c_str(), nullptr));
+                from = to + 1;
+            }
         } else if (std::wcscmp(argv[i], L"--record") == 0 && i + 1 < argc) {
             opt.record = argv[++i];
         } else if (std::wcscmp(argv[i], L"--dump") == 0 && i + 1 < argc) {
