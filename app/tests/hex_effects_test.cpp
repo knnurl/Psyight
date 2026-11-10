@@ -104,6 +104,37 @@ TEST_CASE("hex pulse: from the first pixels the inner ring lights on the kick; a
     CHECK(render({p}, rig, in) == render({p}, rig, in)); // Deterministic.
 }
 
+TEST_CASE("along, by length: u in lengths of the longest strip, so every strip runs at one "
+          "speed") {
+    const Rig rig = mandala();
+    const std::vector<double> u = map_pixels(rig, Mapping::along_length, 0);
+    const std::vector<double> along = map_pixels(rig, Mapping::along_strip, 0);
+    size_t longest = 0;
+    for (size_t s = 0; s < rig.strips.size(); ++s) {
+        const double m = rig.strips[s].count / rig.strips[s].pixels_per_m;
+        if (m > rig.strips[longest].count / rig.strips[longest].pixels_per_m) {
+            longest = s;
+        }
+    }
+    const double longest_m = rig.strips[longest].count / rig.strips[longest].pixels_per_m;
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        const Pixel &p = rig.pixels[i];
+        const StripSpec &s = rig.strips[static_cast<size_t>(p.strip)];
+        CHECK(u[i] == doctest::Approx((p.index + 0.5) / s.pixels_per_m / longest_m));
+        if (static_cast<size_t>(p.strip) == longest) {
+            CHECK(u[i] == doctest::Approx(along[i])); // The longest strip runs 0 to 1.
+        }
+    }
+    // A spoke ends early: its last pixel is far below 1.
+    const std::vector<size_t> spoke = pixels_of(rig, 3);
+    REQUIRE_FALSE(spoke.empty());
+    CHECK(u[spoke.back()] < 0.5);
+    // The option's name, and the mapping fields reach it.
+    const std::vector<EffectParamInfo> infos = effect_param_infos(EffectType::chase);
+    CHECK(effect_option_name(infos[0], 8) == "Along, by length");
+    CHECK(infos[0].max == 8.0);
+}
+
 TEST_CASE("cube: three faces in three shades, flipping every bar") {
     const Rig rig = mandala();
     CubeParams p;

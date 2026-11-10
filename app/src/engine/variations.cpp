@@ -12,6 +12,10 @@ namespace {
 
 enum class Kind { reverse, remap, retime, mirror, mute };
 
+// A remap picks among the mappings that existed before "Along, by length", so the variations of
+// existing shows stay as they were when the mapping was added.
+constexpr int kRemapMappingCount = 8;
+
 struct Change {
     Kind kind;
     size_t layer;
@@ -89,7 +93,8 @@ void apply(Scene &scene, const Change &c, std::uint64_t pick) {
         next = std::string(info.id) == "direction" ? 1.0 - v : -v;
         break;
     case Kind::remap: { // Another mapping.
-        const auto count = static_cast<std::uint64_t>(info.max - info.min) + 1;
+        const auto count = std::min<std::uint64_t>(
+            static_cast<std::uint64_t>(info.max - info.min) + 1, kRemapMappingCount);
         if (count > 1) {
             next = info.min +
                    static_cast<double>(

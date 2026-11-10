@@ -12,11 +12,21 @@
 
 namespace psyight {
 
-enum class Mapping { along_strip, across_x, across_y, radial, by_strip, random, hex_rings, around };
-inline constexpr int kMappingCount = 8;
+enum class Mapping {
+    along_strip,
+    across_x,
+    across_y,
+    radial,
+    by_strip,
+    random,
+    hex_rings,
+    around,
+    along_length
+};
+inline constexpr int kMappingCount = 9;
 // Option names for the effects' settings (EffectParamInfo::options), in enum order.
 inline constexpr const char *kMappingOptions =
-    "Along strip|Across x|Across y|Radial|By strip|Random|Hex rings|Around";
+    "Along strip|Across x|Across y|Radial|By strip|Random|Hex rings|Around|Along, by length";
 
 // The rig seen as a hexagon (the hexagon effects and mappings): its centre (the bounding box's
 // middle in x and y), the direction of a corner, and the hex distance of its outermost pixel.
@@ -46,8 +56,10 @@ double hash_unit(std::uint64_t a, std::uint64_t b, std::uint64_t c);
 // u for every pixel of the rig, 0 to 1: along its strip (from the first pixel), across the rig's
 // bounding box in x or y, radial from its centre (0 at the centre, 1 at the farthest corner), by
 // strip (each strip one value, in strip order), a seeded random value per pixel, the hex distance
-// (hex rings: each hexagon about the centre one value) or the turn round the centre (around: 0
-// at the top, clockwise).
+// (hex rings: each hexagon about the centre one value), the turn round the centre (around: 0
+// at the top, clockwise), or along its strip in units of the rig's longest strip (along, by
+// length: 0 to 1 only on the longest; shorter strips end early, so a pattern runs at one
+// physical speed and size on every strip).
 std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t seed);
 
 // u folded into `wings` mirrored copies: 1 leaves it, 2 runs 0 to 1 and back, and so on.

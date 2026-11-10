@@ -64,7 +64,8 @@ TEST_CASE("space: mappings span 0 to 1; wings mirror; option names") {
     CHECK(effect_option_name(infos[0], 0) == "Along strip");
     CHECK(effect_option_name(infos[0], 5) == "Random");
     CHECK(effect_option_name(infos[0], 6) == "Hex rings");
-    CHECK(effect_option_name(infos[0], 8).empty());
+    CHECK(effect_option_name(infos[0], 8) == "Along, by length");
+    CHECK(effect_option_name(infos[0], 9).empty()); // Out of range.
     CHECK(effect_option_name(infos[3], 0).empty()); // Rate: no names.
 }
 

@@ -82,6 +82,15 @@ std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t se
     const auto strips = static_cast<double>(std::max<size_t>(1, rig.strips.size()));
     const HexFrame hex =
         mapping == Mapping::hex_rings || mapping == Mapping::around ? hex_frame(rig) : HexFrame{};
+    // Along, by length: the longest strip's length in metres.
+    double longest_m = 0.0;
+    if (mapping == Mapping::along_length) {
+        for (const StripSpec &s : rig.strips) {
+            if (s.pixels_per_m > 0.0) {
+                longest_m = std::max(longest_m, s.count / s.pixels_per_m);
+            }
+        }
+    }
     for (size_t i = 0; i < rig.pixels.size(); ++i) {
         const Pixel &p = rig.pixels[i];
         switch (mapping) {
@@ -117,6 +126,13 @@ std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t se
         case Mapping::around:
             u[i] = hex_turn(hex, p.position.x, p.position.y);
             break;
+        case Mapping::along_length: {
+            const double per_m = static_cast<size_t>(p.strip) < rig.strips.size()
+                                     ? rig.strips[p.strip].pixels_per_m
+                                     : 0.0;
+            u[i] = per_m > 0.0 && longest_m > 0.0 ? (p.index + 0.5) / per_m / longest_m : 0.0;
+            break;
+        }
         }
     }
     return u;

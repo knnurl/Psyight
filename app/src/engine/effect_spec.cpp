@@ -137,8 +137,9 @@ template <> const std::vector<Field<DropBurstParams>> &fields<DropBurstParams>()
 template <typename P> Field<P> mapping_field() {
     return {{"mapping", "Mapping", "", 0.0, kMappingCount - 1.0, true,
              "How pixels map to the pattern: along each strip, across the rig, from its centre, "
-             "by strip, at random, by hexagon ring (each hexagon about the centre at once) or "
-             "round the centre",
+             "by strip, at random, by hexagon ring (each hexagon about the centre at once), "
+             "round the centre, or along each strip in lengths of the longest (one speed and "
+             "size on every strip)",
              kMappingOptions},
             nullptr,
             &P::mapping};
