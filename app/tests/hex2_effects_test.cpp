@@ -437,3 +437,44 @@ TEST_CASE("corner sparks: near the corners and spoke ends, seeded per hat") {
     CHECK(all_black(render({p}, rig, hats(30, 2.0))));
     check_sane({echoes}, rig, hats(30, 0.03));
 }
+
+TEST_CASE("polar noise: seamless round the top, still without flow, never all dark") {
+    const Rig rig = mandala();
+    const HexTopology t = hex_topology(rig);
+    const PolarNoiseParams p; // Rings 2, lobes 3.
+    EngineInputs in = grid_at(40, 0.3);
+    in.t_s = 16.12;
+    const Frame out = render({p}, rig, in);
+    // The outer ring's two pixels either side of the top differ by under 0.05.
+    const std::vector<size_t> outer = pixels_of(rig, t.rings.back());
+    const size_t right = *std::min_element(
+        outer.begin(), outer.end(), [&](size_t a, size_t b) { return t.turn[a] < t.turn[b]; });
+    const size_t left = *std::max_element(
+        outer.begin(), outer.end(), [&](size_t a, size_t b) { return t.turn[a] < t.turn[b]; });
+    CHECK(turn_distance(t.turn[left], t.turn[right]) < 0.03);
+    CHECK(std::abs(level(out[left]) - level(out[right])) < 0.05f);
+    // No flow on a free clock: it does not move.
+    PolarNoiseParams still = p;
+    still.flow = 0.0;
+    still.clock = 0;
+    EngineInputs later = in;
+    later.t_s += 7.3;
+    later.beat_index += 18;
+    CHECK(render({still}, rig, in) == render({still}, rig, later));
+    // It moves with flow.
+    CHECK(render({p}, rig, in) != render({p}, rig, later));
+    // Over 60 s, sampled every 0.5 s, the three rings are never all dark at once.
+    for (int k = 0; k < 120; ++k) {
+        EngineInputs at = grid_at(k * 5 / 4, 0.25 * (k % 4));
+        at.t_s = 0.5 * k;
+        const Frame frame = render({p}, rig, at);
+        float ring_most = 0.0f;
+        for (const int r : t.rings) {
+            for (const size_t i : pixels_of(rig, r)) {
+                ring_most = std::max(ring_most, level(frame[i]));
+            }
+        }
+        CHECK(ring_most > 0.0f);
+    }
+    check_sane({p}, rig, in);
+}

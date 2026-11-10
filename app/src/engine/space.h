@@ -45,6 +45,9 @@ HexFrame hex_frame(const Rig &rig, int corners = 0);
 double hex_radius(const HexFrame &frame, double x, double y);
 // The angle round the centre in turns, 0 at the top and growing clockwise.
 double hex_turn(const HexFrame &frame, double x, double y);
+// Every pixel's hex_radius, the normals computed once (cheaper than hex_topology when only the
+// radius is needed).
+std::vector<double> hex_radii(const Rig &rig, const HexFrame &frame);
 // The turn of the hexagon's k-th corner (k = 0..5, clockwise from the corner at or after the top).
 double corner_turn(const HexFrame &frame, int k);
 

@@ -592,6 +592,30 @@ template <> const std::vector<Field<CornerSparksParams>> &fields<CornerSparksPar
     return f;
 }
 
+template <> const std::vector<Field<PolarNoiseParams>> &fields<PolarNoiseParams>() {
+    using P = PolarNoiseParams;
+    static const std::vector<Field<P>> f = {
+        {{"rings_scale", "Rings", "", 0.25, 8.0, false,
+          "Noise periods from the centre to the edge"},
+         &P::rings_scale},
+        {{"lobes", "Lobes", "", 1.0, 12.0, false, "Noise periods round the circle"}, &P::lobes},
+        clock_field<P>(),
+        {{"flow", "Flow", "", -2.0, 2.0, false,
+          "Radii the field flows per clock division (Hz when free); negative: inwards"},
+         &P::flow},
+        {{"octaves", "Detail", "", 1.0, 4.0, true, "Octaves of finer noise"}, nullptr, &P::octaves},
+        {{"contrast", "Contrast", "x", 0.5, 4.0, false, "Contrast of the field"}, &P::contrast},
+        {{"floor", "Floor", "", 0.0, 0.5, false, "The darkest the field goes"}, &P::floor},
+        {{"brightness_colour", "Timbre", "", 0.0, 1.0, false,
+          "Palette shift with the residual's brightness (spectral centroid)"},
+         &P::brightness_colour},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span over the field"},
+         &P::colour_spread},
+        {{"level", "Level", "", 0.0, 1.0, false, "Field brightness"}, &P::level},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -665,6 +689,8 @@ EffectSpec default_spec(EffectType type) {
         return {SpokeKickParams{}};
     case EffectType::corner_sparks:
         return {CornerSparksParams{}};
+    case EffectType::polar_noise:
+        return {PolarNoiseParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -719,8 +745,10 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_note_arcs(p);
             } else if constexpr (std::is_same_v<P, SpokeKickParams>) {
                 return make_spoke_kick(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, CornerSparksParams>) {
                 return make_corner_sparks(p);
+            } else {
+                return make_polar_noise(p);
             }
         },
         spec.params);
@@ -780,6 +808,8 @@ const char *effect_type_id(EffectType type) {
         return "spoke_kick";
     case EffectType::corner_sparks:
         return "corner_sparks";
+    case EffectType::polar_noise:
+        return "polar_noise";
     }
     return "plasma";
 }

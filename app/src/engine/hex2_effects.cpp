@@ -381,7 +381,42 @@ class CornerSparks final : public Effect {
     CornerSparksParams p_;
 };
 
+class PolarNoise final : public Effect {
+  public:
+    explicit PolarNoise(const PolarNoiseParams &p) : p_(p) {}
+    const char *name() const override { return "Polar noise"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        const HexFrame frame = hex_frame(c.rig);
+        const std::vector<double> radius = hex_radii(c.rig, frame);
+        const Clock clock = static_cast<Clock>(std::clamp(p_.clock, 0, kClockCount - 1));
+        const double shift = p_.flow * clock_cycles(c.in, clock, 1.0);
+        const double lobes = p_.lobes / (2.0 * kPi);
+        const double timbre =
+            p_.brightness_colour * std::clamp(c.in.residual_centroid_hz / 6000.0, 0.0, 1.0);
+        for (size_t i = 0; i < out.size(); ++i) {
+            const double r = radius[i] * p_.rings_scale - shift;
+            // The cosine and sine of the turn (0 at the top, clockwise) from the position.
+            const double dx = c.rig.pixels[i].position.x - frame.cx;
+            const double dy = c.rig.pixels[i].position.y - frame.cy;
+            const double d = std::hypot(dx, dy);
+            const double cos_a = d > 1e-12 ? dy / d : 1.0;
+            const double sin_a = d > 1e-12 ? dx / d : 0.0;
+            const double n = fbm(r, lobes * cos_a, lobes * sin_a, p_.octaves, c.seed);
+            const double shown =
+                std::max(p_.floor, std::clamp(0.5 + (n - 0.5) * p_.contrast, 0.0, 1.0));
+            out[i] = scaled(c.palette.at(p_.colour_spread * n + timbre), p_.level * shown);
+        }
+    }
+
+  private:
+    PolarNoiseParams p_;
+};
+
 } // namespace
+
+std::unique_ptr<Effect> make_polar_noise(const PolarNoiseParams &params) {
+    return std::make_unique<PolarNoise>(params);
+}
 
 std::unique_ptr<Effect> make_corner_sparks(const CornerSparksParams &params) {
     return std::make_unique<CornerSparks>(params);

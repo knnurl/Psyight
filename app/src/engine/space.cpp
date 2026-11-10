@@ -81,6 +81,16 @@ double hex_turn(const HexFrame &frame, double x, double y) {
     return t - std::floor(t);
 }
 
+std::vector<double> hex_radii(const Rig &rig, const HexFrame &frame) {
+    const HexNormals n = normals_of(frame);
+    std::vector<double> out(rig.pixels.size());
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        out[i] =
+            hex_raw(frame, n, rig.pixels[i].position.x, rig.pixels[i].position.y) / frame.reach_m;
+    }
+    return out;
+}
+
 double corner_turn(const HexFrame &frame, int k) {
     const double t = (90.0 - frame.corner_deg) / 360.0 + static_cast<double>(k) / 6.0;
     return t - std::floor(t);
