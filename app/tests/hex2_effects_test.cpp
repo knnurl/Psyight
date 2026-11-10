@@ -224,3 +224,61 @@ TEST_CASE("hexagon visuals: cost per frame on 1,500 pixels" * doctest::skip()) {
         MESSAGE(std::string(effect_type_id(type)) << ": " << ms << " ms per frame");
     }
 }
+
+namespace {
+
+size_t lit_count(const Frame &out) {
+    return static_cast<size_t>(
+        std::count_if(out.begin(), out.end(), [](const Rgb &c) { return level(c) > 0.01f; }));
+}
+
+} // namespace
+
+TEST_CASE("note arcs: a note's arc is as long as it is held") {
+    const Rig rig = mandala();
+    const HexTopology t = hex_topology(rig);
+    NoteArcsParams p;
+    p.ring_mode = 2; // The outer ring, so the arcs are long enough to count.
+    p.arc_per_16th = 0.25;
+    // An ended note just after its offset: gate 0.5 draws half the arc of gate 1.0.
+    EngineInputs ended = note(35, 0.0, 0.12);
+    ended.bass_active = false;
+    ended.since_bass_offset_s = 0.001;
+    ended.bass_gate_ratio = 1.0;
+    const size_t full = lit_count(render({p}, rig, ended));
+    ended.bass_gate_ratio = 0.5;
+    const size_t half = lit_count(render({p}, rig, ended));
+    CHECK(full > 20);
+    CHECK(static_cast<double>(half) == doctest::Approx(0.5 * full).epsilon(0.1));
+    // A sounding note's arc grows with the time since its onset, on one ring only.
+    size_t previous = 0;
+    for (int k = 1; k <= 12; ++k) {
+        const Frame out = render({p}, rig, note(35, 0.0, 0.025 * k));
+        const size_t now = lit_count(out);
+        CHECK(now >= previous);
+        previous = now;
+        CHECK(lit_strips(rig, out).size() <= 1);
+    }
+    // At the defaults, at most one ring is lit, never more than 40% of the rig.
+    const NoteArcsParams defaults;
+    for (int k = 0; k < 24; ++k) {
+        EngineInputs in = note(28 + k % 12, 0.0, 0.05 * k);
+        in.bass_notes_so_far = 100 + k;
+        const Frame out = render({defaults}, rig, in);
+        CHECK(lit_strips(rig, out).size() <= 1);
+        CHECK(static_cast<double>(lit_count(out)) <= 0.4 * static_cast<double>(rig.pixels.size()));
+    }
+    // Cycle: successive notes on successive rings, starting at successive corners.
+    NoteArcsParams cycle;
+    EngineInputs a = note(35, 0.0, 0.1);
+    a.bass_notes_so_far = 3; // n = 2: the outer ring.
+    CHECK(lit_strips(rig, render({cycle}, rig, a)) == std::vector<int>{t.rings[2]});
+    a.bass_notes_so_far = 4; // n = 3: the inner ring.
+    CHECK(lit_strips(rig, render({cycle}, rig, a)) == std::vector<int>{t.rings[0]});
+    // Released: fades out after the note.
+    EngineInputs gone = ended;
+    gone.since_bass_offset_s = 2.0;
+    CHECK(lit_count(render({p}, rig, gone)) == 0);
+    check_sane({p}, rig, note(35, 0.0, 0.3));
+    check_sane({NoteArcsParams{}}, rig, note(35, 0.0, 0.6));
+}

@@ -502,6 +502,40 @@ template <> const std::vector<Field<PitchClockParams>> &fields<PitchClockParams>
     return f;
 }
 
+template <> const std::vector<Field<NoteArcsParams>> &fields<NoteArcsParams>() {
+    using P = NoteArcsParams;
+    static const std::vector<Field<P>> f = {
+        {{"ring_mode", "Rings", "", 0.0, 2.0, true,
+          "Which ring a note draws on: the next each note, by its 16th in the beat, or the outer",
+          "Cycle|By slot|Outer only"},
+         nullptr,
+         &P::ring_mode},
+        {{"arc_per_16th", "Length", "turns", 0.02, 0.5, false,
+          "Arc drawn per 16th the note is held (a sixth: one side)"},
+         &P::arc_per_16th},
+        {{"direction", "Direction", "", 0.0, 2.0, true, "Which way the arcs run",
+          "Clockwise|Anticlockwise|Alternate per bar"},
+         nullptr,
+         &P::direction},
+        {{"release_s", "Release", "s", 0.0, 1.0, false, "Fade after the note ends"}, &P::release_s},
+        {{"breathe", "Long notes", "", 0.0, 1.0, false,
+          "Depth of a 2 Hz swell once a note has run two 16ths"},
+         &P::breathe},
+        {{"history", "Notes shown", "", 1.0, 8.0, true, "Past notes drawn, each on its own ring"},
+         nullptr,
+         &P::history},
+        {{"colours", "Colour", "", 0.0, 1.0, true, "Hue from pitch, or a palette step per corner",
+          "Pitch hue|Palette"},
+         nullptr,
+         &P::colours},
+        {{"confidence", "Doubt", "", 0.0, 1.0, false,
+          "How much a note the bass tracker doubts is dimmed"},
+         &P::confidence},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -569,6 +603,8 @@ EffectSpec default_spec(EffectType type) {
         return {InterferenceParams{}};
     case EffectType::pitch_clock:
         return {PitchClockParams{}};
+    case EffectType::note_arcs:
+        return {NoteArcsParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -617,8 +653,10 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_sectors(p);
             } else if constexpr (std::is_same_v<P, InterferenceParams>) {
                 return make_interference(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, PitchClockParams>) {
                 return make_pitch_clock(p);
+            } else {
+                return make_note_arcs(p);
             }
         },
         spec.params);
@@ -672,6 +710,8 @@ const char *effect_type_id(EffectType type) {
         return "interference";
     case EffectType::pitch_clock:
         return "pitch_clock";
+    case EffectType::note_arcs:
+        return "note_arcs";
     }
     return "plasma";
 }
