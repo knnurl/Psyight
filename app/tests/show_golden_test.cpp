@@ -1,4 +1,5 @@
-// Show baseline (docs/PLAN_HEX_VISUALS.md phase 1): the Hexagon, Psy club and Dark forest packs
+// Show baseline (docs/PLAN_HEX_VISUALS.md phase 1): the Hexagon, Psy club, Dark forest and
+// Hexagon 2 packs
 // rendered as a show on the hexagon mandala over a synthetic track with hand-set sections (one of
 // each label, a one-bar build among them), measured by run_show_check (output/show_check.h) and
 // compared with tests/golden/show_baseline.json. Any change fails, so every phase that changes
@@ -180,11 +181,12 @@ TEST_CASE("golden show: the three packs on the hexagon over a synthetic track ma
           "baseline") {
     nlohmann::json current;
     for (const ShowPack &pack : builtin_show_packs()) {
-        if (pack.name == "Hexagon" || pack.name == "Psy club" || pack.name == "Dark forest") {
+        if (pack.name == "Hexagon" || pack.name == "Psy club" || pack.name == "Dark forest" ||
+            pack.name == "Hexagon 2") {
             current[pack.name] = measure(pack);
         }
     }
-    REQUIRE(current.size() == 3);
+    REQUIRE(current.size() == 4);
     if (update_requested()) {
         std::filesystem::create_directories(golden_path().parent_path());
         std::ofstream(golden_path()) << current.dump(2) << "\n";

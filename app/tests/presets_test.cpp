@@ -2,11 +2,13 @@
 
 #include "engine/effect_spec.h"
 #include "engine/presets.h"
+#include "engine/rig_templates.h"
 #include "io/presets.h"
 
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -176,7 +178,7 @@ TEST_CASE("presets: the user's presets are files beside the project") {
 }
 
 TEST_CASE("presets: the choreographed packs cover every section, grooves by energy") {
-    for (const char *name : {"Psy club", "Dark forest"}) {
+    for (const char *name : {"Psy club", "Dark forest", "Hexagon 2"}) {
         CAPTURE(name);
         const std::vector<ShowPack> packs = builtin_show_packs();
         const auto pack = std::find_if(packs.begin(), packs.end(),
@@ -228,4 +230,76 @@ TEST_CASE("presets: the user's rigs are files in presets/rigs, geometry and grou
     REQUIRE(again.errors.size() == 1);
     CHECK(again.errors[0].find("empty.json") != std::string::npos);
     std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("presets: Hexagon 2 renders every scene on the mandala, lit over a bar, no NaN") {
+    const std::vector<ShowPack> packs = builtin_show_packs();
+    const auto pack = std::find_if(packs.begin(), packs.end(),
+                                   [](const ShowPack &p) { return p.name == "Hexagon 2"; });
+    REQUIRE(pack != packs.end());
+    CHECK(pack == packs.end() - 1); // Appended after the older packs.
+    CHECK(pack->scenes.size() == 14);
+    CHECK(pack->automation.palette_rotation == PaletteRotation::scene_list);
+    CHECK(pack->macro_names[0] == "Darkness");
+    Rig rig;
+    for (const RigPreset &p : builtin_rig_presets()) {
+        if (p.name == "Hexagon mandala") {
+            rig = build_rig(p.strips);
+        }
+    }
+    REQUIRE_FALSE(rig.pixels.empty());
+    for (const Scene &scene : pack->scenes) {
+        CAPTURE(scene.name);
+        CHECK_FALSE(scene.palette_list.empty());
+        for (const int i : scene.palette_list) {
+            CHECK(i >= 0);
+            CHECK(i < static_cast<int>(pack->palettes.size()));
+        }
+        float most = 0.0f;
+        for (int k = 0; k < 16; ++k) { // A bar at 150 BPM, on 16ths and between.
+            EngineInputs in;
+            in.beat_s = 0.4;
+            in.t_s = 40.0 + 0.1 * k + 0.03;
+            in.beat_index = 100 + k / 4;
+            in.beat_phase = (k % 4) * 0.25 + 0.075;
+            in.bar_index = 25;
+            in.bar_phase = in.t_s / 1.6 - std::floor(in.t_s / 1.6);
+            in.phrase_index = 3;
+            in.phrase_phase = 0.3 + 0.01 * k;
+            in.section = scene.sections.front();
+            in.since_section_s = 0.05 + 0.1 * k;
+            in.section_length_s = 12.8;
+            in.section_end_known = true;
+            in.section_progress = in.since_section_s / 12.8;
+            in.since_build_s = in.since_section_s;
+            in.build_length_s = 12.8;
+            in.build_end_known = true;
+            in.build_progress = in.section_progress;
+            in.riser = 0.3;
+            in.kicks_so_far = 100 + k / 4;
+            in.since_kick_s = (k % 4) * 0.1 + 0.03;
+            in.hats_so_far = 200 + k / 2;
+            in.since_hat_s = (k % 2) * 0.1 + 0.02;
+            in.hat_ages_s = {in.since_hat_s, in.since_hat_s + 0.2, in.since_hat_s + 0.4,
+                             in.since_hat_s + 0.6};
+            in.bass_notes_so_far = 300 + k;
+            in.bass_active = k % 4 != 0;
+            in.bass_midi = 35;
+            in.bass_velocity = 0.9;
+            in.bass_confidence = 0.8;
+            in.bass_gate_ratio = 0.8;
+            in.since_bass_onset_s = 0.04;
+            in.bass_onset_ages_s = {0.04, 0.14, 0.24, 0.34};
+            in.residual_centroid_hz = 2500.0;
+            in.residual_level = 0.4;
+            const Frame frame = render_scene(scene, rig, in, pack->palettes, 1);
+            for (const Rgb &c : frame) {
+                REQUIRE(std::isfinite(c.r));
+                REQUIRE(std::isfinite(c.g));
+                REQUIRE(std::isfinite(c.b));
+                most = std::max({most, c.r, c.g, c.b});
+            }
+        }
+        CHECK(most > 0.05f);
+    }
 }

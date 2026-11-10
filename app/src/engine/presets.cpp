@@ -1,6 +1,7 @@
 #include "engine/presets.h"
 
 #include "engine/effect_spec.h"
+#include "engine/space.h"
 
 #include <algorithm>
 
@@ -613,6 +614,259 @@ std::vector<ScenePreset> builtin_scene_presets() {
                                        "", ModQuantise::off, 0.0, 0.15));
         looks.push_back(std::move(p));
     }
+    // The hexagon-visuals looks (docs/PLAN_HEX_VISUALS.md sections 11 and 11b.4), for the
+    // Hexagon 2 pack: each sound gets its own strips (groups the hexagon templates create:
+    // inner, middle, outer, spokes). Starting points to tune on the piece.
+    const auto on = [](const EffectSpec &spec, BlendMode blend, float opacity, const char *group) {
+        Layer l = make_layer(spec, blend, opacity);
+        l.group = group;
+        return l;
+    };
+    { // Grooves: the bass note as a clock hand, kicks along the spokes, hats at the inner corners.
+        ScenePreset p{"Pitch tunnel",
+                      "The bass note round the rings like a clock, its octave choosing the ring; "
+                      "each kick runs out along the spokes; hats spark at the inner corners.",
+                      {},
+                      palette_named("UV violet")};
+        p.scene.sections = {"groove", "low", "mid"};
+        p.scene.layers.push_back(on({PitchClockParams{}}, BlendMode::add, 1.0f, ""));
+        p.scene.layers.push_back(on({SpokeKickParams{}}, BlendMode::screen, 1.0f, "spokes"));
+        p.scene.layers.push_back(on({CornerSparksParams{}}, BlendMode::add, 0.6f, "inner"));
+        looks.push_back(std::move(p));
+    }
+    { // Grooves: every note an arc as long as it is held, each note on the next ring.
+        ScenePreset p{"Note rings",
+                      "Each bass note draws an arc from a corner as long as it is held, the next "
+                      "note on the next ring; kicks run out along the spokes.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"groove", "low", "mid"};
+        p.scene.layers.push_back(on({NoteArcsParams{}}, BlendMode::add, 1.0f, ""));
+        p.scene.layers.push_back(on({SpokeKickParams{}}, BlendMode::screen, 0.8f, "spokes"));
+        looks.push_back(std::move(p));
+    }
+    { // Grooves, high: twelve sectors stepping with the bass round the outside.
+        ScenePreset p{"Radar 2",
+                      "Twelve slices stepping round the outer ring with the bass notes; the "
+                      "pitch clock on the inner rings; kicks along the spokes.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "high"};
+        SectorsParams radar;
+        radar.count = 12;
+        radar.clock = 5; // Bass note.
+        p.scene.layers.push_back(on({radar}, BlendMode::add, 1.0f, "outer"));
+        p.scene.layers.push_back(on({PitchClockParams{}}, BlendMode::add, 1.0f, "inner"));
+        p.scene.layers.push_back(on({PitchClockParams{}}, BlendMode::add, 1.0f, "middle"));
+        p.scene.layers.push_back(on({SpokeKickParams{}}, BlendMode::screen, 1.0f, "spokes"));
+        looks.push_back(std::move(p));
+    }
+    { // Breakdowns: a cellular automaton growing round the rings through the phrase.
+        ScenePreset p{"Automaton",
+                      "Each ring a row of cells running rule 90 from its corners, a step each "
+                      "16th of the phrase; hats spark at the corners.",
+                      {},
+                      palette_named("Mono violet")};
+        p.scene.sections = {"breakdown", "low"};
+        RingAutomatonParams cells;
+        cells.generations = 32;
+        p.scene.layers.push_back(on({cells}, BlendMode::add, 1.0f, ""));
+        p.scene.layers.push_back(on({CornerSparksParams{}}, BlendMode::add, 0.4f, ""));
+        looks.push_back(std::move(p));
+    }
+    { // Intros and breakdowns: smoke flowing in, bass notes as hexagons from the inner ring.
+        ScenePreset p{"Smoke",
+                      "Polar noise drifting in towards the centre; each bass note sends a "
+                      "hexagon out from the inner ring.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"intro", "breakdown"};
+        PolarNoiseParams smoke;
+        smoke.flow = -0.125;
+        HexPulseParams notes;
+        notes.trigger = 3; // Bass note.
+        notes.start = 1;
+        p.scene.layers.push_back(on({smoke}, BlendMode::alpha, 1.0f, ""));
+        p.scene.layers.push_back(on({notes}, BlendMode::screen, 0.5f, ""));
+        looks.push_back(std::move(p));
+    }
+    { // Builds: the rig fills from the inside through the phrase, dark before the drop.
+        ScenePreset p{"Pressure 2",
+                      "The rig fills from the centre out through the phrase, hexagons falling "
+                      "in on the beats, kicks along the spokes; brighter as the build climbs, "
+                      "dark for the last beat of the whole build.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        PhraseFillParams fill;
+        fill.order = 1; // Inner to outer.
+        HexPulseParams falling;
+        falling.trigger = 1;   // Beat.
+        falling.direction = 1; // In.
+        StutterParams gap;
+        gap.mode = 4; // Pre-drop gap, joined builds.
+        p.scene.layers.push_back(on({fill}, BlendMode::add, 0.7f, ""));
+        p.scene.layers.push_back(on({falling}, BlendMode::screen, 0.5f, ""));
+        p.scene.layers.push_back(on({SpokeKickParams{}}, BlendMode::screen, 1.0f, "spokes"));
+        p.scene.layers.push_back(on({gap}, BlendMode::multiply, 1.0f, ""));
+        p.scene.routes.push_back(route(ModSource::build_progress, ModTarget::brightness, 0, 0.5));
+        looks.push_back(std::move(p));
+    }
+    { // Drops: white kicks with ring flashes, the burst and the strobe, bass arcs outside.
+        ScenePreset p{"Bloom 2",
+                      "The drop's burst and white flashes, then white kicks running out along "
+                      "the spokes and flashing each ring; bass arcs round the outer ring.",
+                      {},
+                      palette_named("Magenta storm")};
+        p.scene.sections = {"drop"};
+        NoteArcsParams outer;
+        outer.ring_mode = 2; // Outer only.
+        SpokeKickParams white;
+        white.colours = 1;
+        white.rings = 1;
+        p.scene.layers.push_back(on({outer}, BlendMode::add, 1.0f, "outer"));
+        p.scene.layers.push_back(on({white}, BlendMode::screen, 1.0f, ""));
+        p.scene.layers.push_back(on({DropBurstParams{}}, BlendMode::screen, 1.0f, ""));
+        p.scene.layers.push_back(on({StrobeParams{}}, BlendMode::screen, 1.0f, ""));
+        looks.push_back(std::move(p));
+    }
+    { // Outros: a slow automaton glowing out.
+        ScenePreset p{"Embers",
+                      "Rule 150 stepping slowly round the rings, leaving an afterglow.",
+                      {},
+                      palette_named("Mono violet")};
+        p.scene.sections = {"outro"};
+        RingAutomatonParams cells;
+        cells.rule = 150;
+        cells.generations = 16;
+        p.scene.layers.push_back(on({cells}, BlendMode::add, 0.6f, ""));
+        p.scene.post.push_back({AfterglowParams{2.0, 1.0}, true});
+        looks.push_back(std::move(p));
+    }
+    // The Psy club and Dark forest looks for the hexagon (section 11b.4).
+    { // From Scanner: one comet round the outer ring each bar over the conveyor.
+        ScenePreset p{"Scanner 2",
+                      "A comet round the outer ring each bar over faint smoke, the bass "
+                      "conveyor on the middle ring, kicks along the spokes.",
+                      {},
+                      palette_named("UV violet")};
+        p.scene.sections = {"groove", "mid"};
+        PolarNoiseParams smoke;
+        smoke.level = 0.2;
+        ChaseParams scan;
+        scan.mapping = static_cast<int>(Mapping::around);
+        scan.clock = 3; // Bar.
+        scan.count = 1;
+        ConveyorParams belt;
+        belt.segment_units = 1;
+        p.scene.layers.push_back(on({smoke}, BlendMode::alpha, 1.0f, ""));
+        p.scene.layers.push_back(on({scan}, BlendMode::add, 1.0f, "outer"));
+        p.scene.layers.push_back(on({belt}, BlendMode::add, 0.7f, "middle"));
+        p.scene.layers.push_back(on({SpokeKickParams{}}, BlendMode::screen, 1.0f, "spokes"));
+        looks.push_back(std::move(p));
+    }
+    { // From Kick pulse: kicks out along the spokes, flashing each ring.
+        ScenePreset p{"Kick pulse 2",
+                      "Kicks running out along the spokes and flashing each ring over smoke; "
+                      "the conveyor on the outer ring.",
+                      {},
+                      palette_named("Ice")};
+        p.scene.sections = {"groove", "high"};
+        SpokeKickParams kick;
+        kick.rings = 1;
+        ConveyorParams belt;
+        belt.segment_units = 1;
+        p.scene.layers.push_back(on({PolarNoiseParams{}}, BlendMode::alpha, 0.4f, ""));
+        p.scene.layers.push_back(on({kick}, BlendMode::screen, 1.0f, ""));
+        p.scene.layers.push_back(on({belt}, BlendMode::add, 0.5f, "outer"));
+        looks.push_back(std::move(p));
+    }
+    { // From Forest floor: slow organic smoke, bass arcs outside, hats inside.
+        ScenePreset p{"Forest floor 2",
+                      "Slow, finer smoke drifting out; bass arcs round the outer ring; hats "
+                      "spark at the inner corners.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "low", "mid"};
+        PolarNoiseParams smoke;
+        smoke.rings_scale = 3.0;
+        smoke.lobes = 5.0;
+        smoke.flow = 0.06;
+        p.scene.layers.push_back(on({smoke}, BlendMode::alpha, 1.0f, ""));
+        p.scene.layers.push_back(on({NoteArcsParams{}}, BlendMode::add, 0.6f, "outer"));
+        p.scene.layers.push_back(on({CornerSparksParams{}}, BlendMode::add, 0.4f, "inner"));
+        looks.push_back(std::move(p));
+    }
+    { // From Pitch meter: the phrase filling, the pitch clock with a trail.
+        ScenePreset p{"Pitch meter 2",
+                      "The rig filling from the centre through each phrase; the bass note on "
+                      "the pitch clock with its last three notes trailing; kicks along the "
+                      "spokes.",
+                      {},
+                      palette_named("Aurora")};
+        p.scene.sections = {"groove"};
+        PhraseFillParams fill;
+        fill.order = 1;
+        fill.hold_level = 0.15;
+        PitchClockParams clock;
+        clock.trail = 3;
+        p.scene.layers.push_back(on({fill}, BlendMode::add, 0.5f, ""));
+        p.scene.layers.push_back(on({clock}, BlendMode::add, 1.0f, ""));
+        p.scene.layers.push_back(on({SpokeKickParams{}}, BlendMode::screen, 0.6f, "spokes"));
+        looks.push_back(std::move(p));
+    }
+    { // From Acid gate: the 16th ramps confined to the outer ring.
+        ScenePreset p{"Acid gate 2",
+                      "Ramps racing round the outer ring on the 16ths, opened and closed by the "
+                      "bassline's gate; hue follows the acid's brightness; kicks along the "
+                      "spokes.",
+                      {},
+                      palette_named("Toxic")};
+        p.scene.sections = {"groove", "high"};
+        WaveParams ramps;
+        ramps.mapping = 0;
+        ramps.wings = 2;
+        ramps.clock = 1; // 16th.
+        ramps.rate = 0.25;
+        ramps.shape = 2; // Ramp.
+        ramps.spread = 3.0;
+        ramps.level = 0.9;
+        StutterParams gate;
+        gate.mode = 1;
+        gate.release_s = 0.03;
+        p.scene.layers.push_back(on({ramps}, BlendMode::add, 1.0f, "outer"));
+        p.scene.layers.push_back(on({gate}, BlendMode::multiply, 1.0f, "outer"));
+        p.scene.layers.push_back(on({SpokeKickParams{}}, BlendMode::screen, 0.7f, "spokes"));
+        p.scene.routes.push_back(route(ModSource::residual_brightness, ModTarget::hue_shift, 0,
+                                       90.0, ModCurve::linear, "", ModQuantise::off, 0.05, 0.3));
+        looks.push_back(std::move(p));
+    }
+    { // From Fire riser and Strobe roll: smoke flowing out faster with the build.
+        ScenePreset p{"Riser 2",
+                      "Smoke flowing outwards faster as the whole build climbs, automata on the "
+                      "inner rings, a strobe roll on the spokes at the build's end, then dark "
+                      "for its last beat.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        RingAutomatonParams cells;
+        cells.generations = 128;
+        StrobeParams roll;
+        roll.trigger = 1; // Build end.
+        roll.flashes = 4;
+        roll.colour = 1;
+        roll.level = 0.8;
+        StutterParams gap;
+        gap.mode = 4;
+        p.scene.layers.push_back(on({PolarNoiseParams{}}, BlendMode::alpha, 1.0f, ""));
+        p.scene.layers.push_back(on({cells}, BlendMode::add, 1.0f, "inner"));
+        p.scene.layers.push_back(on({cells}, BlendMode::add, 1.0f, "middle"));
+        p.scene.layers.push_back(on({roll}, BlendMode::screen, 1.0f, "spokes"));
+        p.scene.layers.push_back(on({gap}, BlendMode::multiply, 1.0f, ""));
+        p.scene.routes.push_back(route(ModSource::build_progress, ModTarget::setting, 0, 0.15,
+                                       ModCurve::linear, "flow"));
+        looks.push_back(std::move(p));
+    }
     for (ScenePreset &p : looks) {
         p.scene.name = p.name;
         p.scene.palette = 0;
@@ -699,6 +953,73 @@ std::vector<ShowPack> builtin_show_packs() {
         }
     }
     packs.push_back(std::move(hexagon));
+
+    // Hexagon 2 (docs/PLAN_HEX_VISUALS.md section 11): the hexagon-visuals effects, each sound on
+    // its own strips, each scene rotating through its own palettes.
+    ShowPack hex2 = pack_of(
+        "Hexagon 2",
+        "For hexagonal rigs with rings and spokes: the bass note as a clock and as arcs, kicks "
+        "running out along the spokes, hats at the corners, automata and a filling phrase in "
+        "breakdowns and builds, smoke in intros; each scene keeps its own colours.",
+        {find(looks, "Pitch tunnel"), find(looks, "Note rings"), find(looks, "Scanner 2"),
+         find(looks, "Forest floor 2"), find(looks, "Pitch meter 2"), find(looks, "Radar 2"),
+         find(looks, "Kick pulse 2"), find(looks, "Acid gate 2"), find(looks, "Automaton"),
+         find(looks, "Smoke"), find(looks, "Pressure 2"), find(looks, "Riser 2"),
+         find(looks, "Bloom 2"), find(looks, "Embers")});
+    hex2.automation.palette_every_phrases = 2;
+    hex2.automation.palette_rotation = PaletteRotation::scene_list;
+    hex2.automation.hold_rule = HoldRule::tolerant;
+    // Each scene's palettes (its own first), added to the pack as needed.
+    const auto palette_in = [&](const std::string &name) {
+        for (size_t i = 0; i < hex2.palettes.size(); ++i) {
+            if (hex2.palettes[i].name == name) {
+                return static_cast<int>(i);
+            }
+        }
+        hex2.palettes.push_back(palette_named(name));
+        return static_cast<int>(hex2.palettes.size()) - 1;
+    };
+    const std::vector<std::pair<std::string, std::vector<std::string>>> lists = {
+        {"Pitch tunnel", {"UV violet", "Magenta storm"}},
+        {"Note rings", {"Ocean UV", "UV violet"}},
+        {"Automaton", {"Mono violet", "Ocean UV"}}};
+    for (Scene &s : hex2.scenes) {
+        s.palette_list = {s.palette};
+        for (const auto &[name, palettes] : lists) {
+            if (s.name == name) {
+                s.palette_list.clear();
+                for (const std::string &pal : palettes) {
+                    s.palette_list.push_back(palette_in(pal));
+                }
+            }
+        }
+    }
+    // Macros in every scene where the target exists: 1 darkness (inverted, so 0 leaves the scene
+    // at full brightness), 2 kick punch, 3 bass size, 4 hue.
+    hex2.macro_names = {"Darkness", "Kick punch", "Bass size", "Hue", "", "", "", ""};
+    for (Scene &s : hex2.scenes) {
+        ModRoute darkness = route(ModSource::macro_1, ModTarget::brightness, 0, 1.0,
+                                  ModCurve::linear, "", ModQuantise::off, 0.05, 0.05);
+        darkness.invert = true;
+        s.routes.push_back(darkness);
+        for (size_t k = 0; k < s.layers.size(); ++k) {
+            const auto layer = static_cast<int>(k);
+            const EffectType type = s.layers[k].spec.type();
+            if (type == EffectType::spoke_kick) {
+                s.routes.push_back(route(ModSource::macro_2, ModTarget::opacity, layer, 0.5));
+            } else if (type == EffectType::note_arcs) {
+                s.routes.push_back(route(ModSource::macro_3, ModTarget::setting, layer, 0.5,
+                                         ModCurve::linear, "arc_per_16th"));
+            } else if (type == EffectType::pitch_clock) {
+                s.routes.push_back(route(ModSource::macro_3, ModTarget::setting, layer, 0.3,
+                                         ModCurve::linear, "width"));
+            }
+            if (s.layers[k].blend != BlendMode::multiply) {
+                s.routes.push_back(route(ModSource::macro_4, ModTarget::hue_shift, layer, 180.0));
+            }
+        }
+    }
+    packs.push_back(std::move(hex2));
     return packs;
 }
 

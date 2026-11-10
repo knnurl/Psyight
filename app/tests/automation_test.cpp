@@ -322,7 +322,9 @@ TEST_CASE("automation: with every palette, render_mix shows each built-in pack a
     const Rig rig = default_rig();
     for (const ShowPack &pack : builtin_show_packs()) {
         CAPTURE(pack.name);
-        REQUIRE(pack.automation.palette_rotation == PaletteRotation::all);
+        if (pack.automation.palette_rotation != PaletteRotation::all) {
+            continue; // Hexagon 2: each scene's own list.
+        }
         const TrackAnalysis a = arrangement();
         for (int k = 0; k < 20; ++k) {
             const double t = 5.0 * k + 0.37;

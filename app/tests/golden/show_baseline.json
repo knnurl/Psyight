@@ -219,6 +219,168 @@
       }
     }
   },
+  "Hexagon 2": {
+    "current_max_a": 3.72921568627451,
+    "current_mean_a": 1.4346684530645257,
+    "dark_before_mean": 0.4234477996227831,
+    "dark_mean": 0.8020717365438983,
+    "flashes_after": 33,
+    "flashes_before": 69,
+    "groups": {
+      "hex": {
+        "dark_share": 0.008676789587852495,
+        "max_byte": 34,
+        "mean_byte": 1.9913442520094726
+      },
+      "inner": {
+        "dark_share": 0.31073752711496744,
+        "max_byte": 33,
+        "mean_byte": 1.9410033323902027
+      },
+      "left": {
+        "dark_share": 0.008676789587852495,
+        "max_byte": 34,
+        "mean_byte": 1.9400090487714174
+      },
+      "middle": {
+        "dark_share": 0.3546637744034707,
+        "max_byte": 33,
+        "mean_byte": 1.8262969031245644
+      },
+      "outer": {
+        "dark_share": 0.3009761388286334,
+        "max_byte": 34,
+        "mean_byte": 1.978972533683664
+      },
+      "right": {
+        "dark_share": 0.008676789587852495,
+        "max_byte": 34,
+        "mean_byte": 1.9854911413990708
+      },
+      "spokes": {
+        "dark_share": 0.009219088937093275,
+        "max_byte": 34,
+        "mean_byte": 2.1953746384671025
+      }
+    },
+    "max_after_in_1s": 3,
+    "max_before_in_1s": 5,
+    "power_limited_frames": 3,
+    "scenes": {
+      "Acid gate 2": {
+        "flashes_alone": 262,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Automaton": {
+        "flashes_alone": 11,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 2,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Bloom 2": {
+        "flashes_alone": 229,
+        "max_byte": 34,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 516.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.8
+      },
+      "Embers": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Forest floor 2": {
+        "flashes_alone": 1,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 1,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Kick pulse 2": {
+        "flashes_alone": 228,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Note rings": {
+        "flashes_alone": 0,
+        "max_byte": 21,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 106.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.75
+      },
+      "Pitch meter 2": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Pitch tunnel": {
+        "flashes_alone": 0,
+        "max_byte": 34,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 140.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.2
+      },
+      "Pressure 2": {
+        "flashes_alone": 56,
+        "max_byte": 28,
+        "max_flashes_alone_in_1s": 2,
+        "median_lit_pixels": 465.0,
+        "quarter_above_20": 0.0,
+        "seconds": 1.65
+      },
+      "Radar 2": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Riser 2": {
+        "flashes_alone": 0,
+        "max_byte": 33,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 1134.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.35
+      },
+      "Scanner 2": {
+        "flashes_alone": 0,
+        "max_byte": 34,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 1100.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.7
+      },
+      "Smoke": {
+        "flashes_alone": 236,
+        "max_byte": 17,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 1134.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.75
+      }
+    }
+  },
   "Psy club": {
     "current_max_a": 3.717450980392157,
     "current_mean_a": 1.6928332695334112,
