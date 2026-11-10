@@ -68,6 +68,9 @@
 // - phrase fill: the rig fills unit by unit through each phrase (hexagon sides, rings, spokes or
 //   pixels), the newest bright and the rest held dim, clearing on the phrase line: the phrase
 //   gets a shape.
+// - ring automaton: each hexagon ring is a row of cells running an elementary cellular
+//   automaton (rule 90, 150...), a generation per step through the phrase, reseeded each phrase
+//   (corners, seeded random, one cell); positions, not gradients, so it reads at low levels.
 #pragma once
 
 #include "engine/colour.h"
@@ -387,6 +390,19 @@ struct PhraseFillParams {
     double level = 0.8;
 };
 
+// Ring automaton (phrase scale): each hexagon ring is a row of cells running an elementary
+// cellular automaton, one generation per step through the phrase, reseeded each phrase.
+struct RingAutomatonParams {
+    int rule = 90;           // Wolfram's rule number.
+    int generations = 64;    // Generations a phrase.
+    int seed_mode = 0;       // Corners, random, one cell.
+    double density = 0.15;   // Random seeds: share of cells alive.
+    int spokes = 0;          // Off, carry their corner's cell.
+    double crossfade = 0.25; // Share of a step spent fading to the next generation.
+    double colour_spread = 0.6;
+    double level = 0.8;
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -415,7 +431,8 @@ enum class EffectType {
     spoke_kick,
     corner_sparks,
     polar_noise,
-    phrase_fill
+    phrase_fill,
+    ring_automaton
 };
 using EffectParams =
     std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
@@ -423,7 +440,7 @@ using EffectParams =
                  NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams,
                  HexPulseParams, CubeParams, SectorsParams, InterferenceParams, PitchClockParams,
                  NoteArcsParams, SpokeKickParams, CornerSparksParams, PolarNoiseParams,
-                 PhraseFillParams>;
+                 PhraseFillParams, RingAutomatonParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -455,6 +472,7 @@ std::unique_ptr<Effect> make_spoke_kick(const SpokeKickParams &params = {});
 std::unique_ptr<Effect> make_corner_sparks(const CornerSparksParams &params = {});
 std::unique_ptr<Effect> make_polar_noise(const PolarNoiseParams &params = {});
 std::unique_ptr<Effect> make_phrase_fill(const PhraseFillParams &params = {});
+std::unique_ptr<Effect> make_ring_automaton(const RingAutomatonParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

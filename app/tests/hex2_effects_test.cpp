@@ -223,6 +223,25 @@ TEST_CASE("hexagon visuals: cost per frame on 1,500 pixels" * doctest::skip()) {
             kFrames;
         MESSAGE(std::string(effect_type_id(type)) << ": " << ms << " ms per frame");
     }
+    { // The ring automaton's worst case: 256 generations, at the phrase's end.
+        RingAutomatonParams worst;
+        worst.generations = 256;
+        const auto effect = make_effect({worst});
+        Frame out(rig.pixels.size());
+        constexpr int kFrames = 500;
+        EngineInputs in = grid_at(80, 0.0);
+        in.phrase_index = 2;
+        in.phrase_phase = 0.999;
+        const auto start = std::chrono::steady_clock::now();
+        for (int f = 0; f < kFrames; ++f) {
+            effect->render({rig, in, palette, 7}, out);
+        }
+        MESSAGE("ring_automaton, 256 generations: " << std::chrono::duration<double, std::milli>(
+                                                           std::chrono::steady_clock::now() - start)
+                                                               .count() /
+                                                           kFrames
+                                                    << " ms per frame");
+    }
 }
 
 namespace {
@@ -525,4 +544,70 @@ TEST_CASE("phrase fill: fills through the phrase, never unfills, clears on the l
     EngineInputs early = grid_at(10, 0.5); // Bar 2, half way.
     early.phrase_index = -1;
     CHECK_FALSE(all_black(render({sides}, rig, early)));
+}
+
+TEST_CASE("ring automaton: rule 90 from the corners stays six-fold; a generation per step") {
+    const Rig rig = mandala();
+    const HexTopology t = hex_topology(rig);
+    RingAutomatonParams p; // Rule 90, 64 generations, corners.
+    p.crossfade = 0.0;
+    // Generation 0 is the seed: six cells a ring.
+    const Frame seed = render({p}, rig, in_phrase(0.0));
+    for (const int r : t.rings) {
+        size_t alive = 0;
+        for (const size_t i : pixels_of(rig, r)) {
+            alive += level(seed[i]) > 0.0f;
+        }
+        CHECK(alive == 6);
+    }
+    CHECK(lit_strips(rig, seed).size() == 3); // Spokes off.
+    // Six-fold for 64 generations: cell j equals cell j + count / 6 on every ring.
+    for (int g = 0; g < 64; ++g) {
+        const Frame out = render({p}, rig, in_phrase((g + 0.5) / 64.0));
+        for (const int r : t.rings) {
+            const std::vector<size_t> ring = pixels_of(rig, r);
+            const size_t n = ring.size();
+            REQUIRE(n % 6 == 0);
+            for (size_t j = 0; j < n; ++j) {
+                CHECK((level(out[ring[j]]) > 0.0f) == (level(out[ring[(j + n / 6) % n]]) > 0.0f));
+            }
+        }
+    }
+    // Phase 0.5 with 64 generations is generation 32 of rule 90 from the seed.
+    const Frame half = render({p}, rig, in_phrase(0.5));
+    for (const int r : t.rings) {
+        const std::vector<size_t> ring = pixels_of(rig, r);
+        const size_t n = ring.size();
+        std::vector<int> cells(n);
+        for (size_t j = 0; j < n; ++j) {
+            cells[j] = level(seed[ring[j]]) > 0.0f;
+        }
+        for (int g = 0; g < 32; ++g) {
+            std::vector<int> next(n);
+            for (size_t j = 0; j < n; ++j) {
+                next[j] = cells[(j + n - 1) % n] ^ cells[(j + 1) % n]; // Rule 90.
+            }
+            cells = next;
+        }
+        for (size_t j = 0; j < n; ++j) {
+            CHECK((level(half[ring[j]]) > 0.0f) == (cells[j] == 1));
+        }
+    }
+    // Crossfade: part way into a step, between the two generations.
+    RingAutomatonParams fade;
+    const Frame mid = render({fade}, rig, in_phrase((10 + 0.1) / 64.0));
+    bool partial = false;
+    for (const Rgb &c : mid) {
+        partial |= level(c) > 0.0f && level(c) < 0.75f * static_cast<float>(fade.level);
+    }
+    CHECK(partial);
+    // Random seeds by phrase; spokes carry a cell.
+    RingAutomatonParams random = p;
+    random.seed_mode = 1;
+    CHECK(render({random}, rig, in_phrase(0.0, 3)) != render({random}, rig, in_phrase(0.0, 4)));
+    RingAutomatonParams spokes = p;
+    spokes.spokes = 1;
+    CHECK(lit_strips(rig, render({spokes}, rig, in_phrase(0.0))).size() > 3);
+    check_sane({fade}, rig, in_phrase(0.37));
+    CHECK(all_black(render({p}, default_rig(), in_phrase(0.5))));
 }

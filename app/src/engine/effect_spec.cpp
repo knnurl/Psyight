@@ -643,6 +643,36 @@ template <> const std::vector<Field<PhraseFillParams>> &fields<PhraseFillParams>
     return f;
 }
 
+template <> const std::vector<Field<RingAutomatonParams>> &fields<RingAutomatonParams>() {
+    using P = RingAutomatonParams;
+    static const std::vector<Field<P>> f = {
+        {{"rule", "Rule", "", 0.0, 255.0, true,
+          "The cellular automaton's rule (Wolfram's number: 90, 150, 30...)"},
+         nullptr,
+         &P::rule},
+        {{"generations", "Steps a phrase", "", 8.0, 256.0, true, "Generations each phrase"},
+         nullptr,
+         &P::generations},
+        {{"seed_mode", "Seed", "", 0.0, 2.0, true, "The cells alive at the phrase's start",
+          "Corners|Random|One cell"},
+         nullptr,
+         &P::seed_mode},
+        {{"density", "Density", "", 0.02, 0.5, false, "Random seed: share of cells alive"},
+         &P::density},
+        {{"spokes", "Spokes", "", 0.0, 1.0, true,
+          "Spokes dark, or each showing the cell at its corner", "Off|Carry their corner's cell"},
+         nullptr,
+         &P::spokes},
+        {{"crossfade", "Crossfade", "", 0.0, 1.0, false,
+          "Share of a step spent fading into the next generation"},
+         &P::crossfade},
+        {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span over the rings"},
+         &P::colour_spread},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -720,6 +750,8 @@ EffectSpec default_spec(EffectType type) {
         return {PolarNoiseParams{}};
     case EffectType::phrase_fill:
         return {PhraseFillParams{}};
+    case EffectType::ring_automaton:
+        return {RingAutomatonParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -778,8 +810,10 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_corner_sparks(p);
             } else if constexpr (std::is_same_v<P, PolarNoiseParams>) {
                 return make_polar_noise(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, PhraseFillParams>) {
                 return make_phrase_fill(p);
+            } else {
+                return make_ring_automaton(p);
             }
         },
         spec.params);
@@ -843,6 +877,8 @@ const char *effect_type_id(EffectType type) {
         return "polar_noise";
     case EffectType::phrase_fill:
         return "phrase_fill";
+    case EffectType::ring_automaton:
+        return "ring_automaton";
     }
     return "plasma";
 }

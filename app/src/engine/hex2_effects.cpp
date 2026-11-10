@@ -8,6 +8,7 @@
 #include "engine/space.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace psyight {
@@ -531,7 +532,186 @@ class PhraseFill final : public Effect {
     PhraseFillParams p_;
 };
 
+constexpr int kMaxGenerations = 512; // Cap on generations run per render.
+
+// A ring of n cells as bits, 64 to a word (bits past n kept 0), stepped bit-parallel.
+class CellRing {
+  public:
+    explicit CellRing(int n) : n_(n), words_(static_cast<size_t>((n + 63) / 64), 0) {}
+    void set(int j) { words_[static_cast<size_t>(j / 64)] |= 1ull << (j % 64); }
+    bool get(int j) const { return (words_[static_cast<size_t>(j / 64)] >> (j % 64)) & 1ull; }
+
+    // One generation of the elementary automaton `rule` (Wolfram's numbering), periodic.
+    void step(unsigned rule) {
+        const size_t w = words_.size();
+        left_.resize(w);  // Cell j-1 at bit j.
+        right_.resize(w); // Cell j+1 at bit j.
+        const std::uint64_t last_bit = get(n_ - 1) ? 1ull : 0ull;
+        const std::uint64_t first_bit = get(0) ? 1ull : 0ull;
+        for (size_t k = 0; k < w; ++k) {
+            left_[k] = (words_[k] << 1) | (k > 0 ? words_[k - 1] >> 63 : last_bit);
+            right_[k] = (words_[k] >> 1) | (k + 1 < w ? words_[k + 1] << 63 : 0ull);
+        }
+        right_[w - 1] |= first_bit << ((n_ - 1) % 64);
+        for (size_t k = 0; k < w; ++k) {
+            const std::uint64_t l = left_[k];
+            const std::uint64_t m = words_[k];
+            const std::uint64_t r = right_[k];
+            std::uint64_t next = 0;
+            for (unsigned pattern = 0; pattern < 8; ++pattern) {
+                if ((rule >> pattern) & 1u) {
+                    next |= ((pattern & 4u) ? l : ~l) & ((pattern & 2u) ? m : ~m) &
+                            ((pattern & 1u) ? r : ~r);
+                }
+            }
+            words_[k] = next;
+        }
+        if (n_ % 64 != 0) {
+            words_[w - 1] &= (1ull << (n_ % 64)) - 1;
+        }
+    }
+
+  private:
+    int n_;
+    std::vector<std::uint64_t> words_;
+    std::vector<std::uint64_t> left_;
+    std::vector<std::uint64_t> right_;
+};
+
+class RingAutomaton final : public Effect {
+  public:
+    explicit RingAutomaton(const RingAutomatonParams &p) : p_(p) {}
+    const char *name() const override { return "Ring automaton"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        std::fill(out.begin(), out.end(), Rgb{});
+        const HexTopology t = hex_topology(c.rig);
+        const auto rings = static_cast<int>(t.rings.size());
+        if (rings == 0) {
+            return;
+        }
+        const int generations = std::clamp(p_.generations, 8, 256);
+        const double at = phrase_position(c.in) * generations;
+        const int g = std::min(static_cast<int>(std::floor(at)), kMaxGenerations);
+        const double f = at - std::floor(at);
+        const double mix = p_.crossfade > 0.0 && f < p_.crossfade && g > 0 ? f / p_.crossfade : 1.0;
+        const auto rule = static_cast<unsigned>(std::clamp(p_.rule, 0, 255));
+        const auto phrase = static_cast<std::uint64_t>(std::max(0, c.in.phrase_index));
+        std::vector<double> value(out.size(), 0.0); // Per pixel: its cell's value.
+        for (int r = 0; r < rings; ++r) {
+            const auto strip = static_cast<size_t>(t.rings[static_cast<size_t>(r)]);
+            const int first = t.first_pixel[strip];
+            int n = 0;
+            while (first + n < static_cast<int>(out.size()) &&
+                   c.rig.pixels[static_cast<size_t>(first + n)].strip == static_cast<int>(strip)) {
+                ++n;
+            }
+            if (n < 3) {
+                continue;
+            }
+            // The cell nearest each corner, in one pass (and the top is corner 0's turn when the
+            // corners point up and down).
+            std::array<int, 6> corner_cell{};
+            std::array<double, 6> corner_distance;
+            corner_distance.fill(1.0);
+            const double corner0 = corner_turn(t.frame, 0);
+            for (int j = 0; j < n; ++j) {
+                const double from = frac(t.turn[static_cast<size_t>(first + j)] - corner0) * 6.0;
+                const auto k = static_cast<int>(std::lround(from)) % 6;
+                const double d = std::fabs(from - std::round(from));
+                if (d < corner_distance[static_cast<size_t>(k)]) {
+                    corner_distance[static_cast<size_t>(k)] = d;
+                    corner_cell[static_cast<size_t>(k)] = j;
+                }
+            }
+            CellRing cells(n);
+            if (p_.seed_mode == 0) {
+                // The corners: a sixth of the ring apart when it divides by six (a corner's
+                // joint gap leaves two pixels equally near it), else each nearest its corner.
+                for (int k = 0; k < 6; ++k) {
+                    cells.set(n % 6 == 0 ? (corner_cell[0] + k * n / 6) % n
+                                         : corner_cell[static_cast<size_t>(k)]);
+                }
+            } else if (p_.seed_mode == 1) {
+                for (int j = 0; j < n; ++j) {
+                    if (hash_unit(c.seed, phrase,
+                                  1000 * static_cast<std::uint64_t>(r) +
+                                      static_cast<std::uint64_t>(j)) < p_.density) {
+                        cells.set(j);
+                    }
+                }
+            } else { // One cell: the one nearest the top.
+                int top = 0;
+                for (int j = 1; j < n; ++j) {
+                    if (turn_distance(t.turn[static_cast<size_t>(first + j)], 0.0) <
+                        turn_distance(t.turn[static_cast<size_t>(first + top)], 0.0)) {
+                        top = j;
+                    }
+                }
+                cells.set(top);
+            }
+            for (int step = 0; step + 1 < g; ++step) {
+                cells.step(rule);
+            }
+            const CellRing previous = cells; // Generation g - 1 (the seed when g is 0).
+            if (g > 0) {
+                cells.step(rule);
+            }
+            const Rgb colour = c.palette.at(p_.colour_spread * r / rings);
+            for (int j = 0; j < n; ++j) {
+                const auto i = static_cast<size_t>(first + j);
+                const double before = previous.get(j) ? 1.0 : 0.0;
+                const double now = cells.get(j) ? 1.0 : 0.0;
+                value[i] = before + (now - before) * mix;
+                if (value[i] > 0.0) {
+                    out[i] = scaled(colour, p_.level * value[i]);
+                }
+            }
+        }
+        if (p_.spokes == 1) {
+            for (const int sp : t.spokes) {
+                const auto s = static_cast<size_t>(sp);
+                // The spoke's inner end, the ring nearest it, and that ring's cell at its turn.
+                double inner = 1e9;
+                for (size_t i = 0; i < out.size(); ++i) {
+                    if (c.rig.pixels[i].strip == sp) {
+                        inner = std::min(inner, t.radius[i]);
+                    }
+                }
+                size_t cell = out.size();
+                double best = 1e9;
+                for (size_t i = 0; i < out.size(); ++i) {
+                    const auto rs = static_cast<size_t>(c.rig.pixels[i].strip);
+                    if (t.ring_of_strip[rs] < 0) {
+                        continue;
+                    }
+                    const double d =
+                        std::abs(t.radius[i] - inner) + turn_distance(t.turn[i], t.strip_turn[s]);
+                    if (d < best) {
+                        best = d;
+                        cell = i;
+                    }
+                }
+                if (cell == out.size() || value[cell] <= 0.0) {
+                    continue;
+                }
+                for (size_t i = 0; i < out.size(); ++i) {
+                    if (c.rig.pixels[i].strip == sp) {
+                        out[i] = out[cell];
+                    }
+                }
+            }
+        }
+    }
+
+  private:
+    RingAutomatonParams p_;
+};
+
 } // namespace
+
+std::unique_ptr<Effect> make_ring_automaton(const RingAutomatonParams &params) {
+    return std::make_unique<RingAutomaton>(params);
+}
 
 std::unique_ptr<Effect> make_phrase_fill(const PhraseFillParams &params) {
     return std::make_unique<PhraseFill>(params);
