@@ -179,7 +179,7 @@ TEST_CASE("presets: the user's presets are files beside the project") {
 
 TEST_CASE("presets: the choreographed packs cover every section, grooves by energy") {
     for (const char *name : {"Psy club", "Dark forest", "Hexagon 2", "Hexagon 3: Tunnel",
-                             "Hexagon 3: Geometry", "Hexagon 3: Pulse"}) {
+                             "Hexagon 3: Geometry", "Hexagon 3: Pulse", "Hexagon 4"}) {
         CAPTURE(name);
         const std::vector<ShowPack> packs = builtin_show_packs();
         const auto pack = std::find_if(packs.begin(), packs.end(),
@@ -245,13 +245,15 @@ TEST_CASE("presets: Hexagon 2 and 3 render every scene on the mandala, lit over 
     CHECK(index_of("Hexagon 3: Tunnel") == index_of("Hexagon 2") + 1);
     CHECK(index_of("Hexagon 3: Geometry") == index_of("Hexagon 2") + 2);
     CHECK(index_of("Hexagon 3: Pulse") == index_of("Hexagon 2") + 3);
-    CHECK(static_cast<size_t>(index_of("Hexagon 3: Pulse")) == packs.size() - 1);
-    for (const char *name :
-         {"Hexagon 2", "Hexagon 3: Tunnel", "Hexagon 3: Geometry", "Hexagon 3: Pulse"}) {
+    CHECK(index_of("Hexagon 4") == index_of("Hexagon 2") + 4);
+    CHECK(static_cast<size_t>(index_of("Hexagon 4")) == packs.size() - 1);
+    for (const char *name : {"Hexagon 2", "Hexagon 3: Tunnel", "Hexagon 3: Geometry",
+                             "Hexagon 3: Pulse", "Hexagon 4"}) {
         CAPTURE(name);
         const auto pack = packs.begin() + index_of(name);
         REQUIRE(pack != packs.end());
-        CHECK(pack->scenes.size() == (std::string(name) == "Hexagon 2" ? 14u : 8u));
+        const std::string n = name;
+        CHECK(pack->scenes.size() == (n == "Hexagon 2" ? 14u : n == "Hexagon 4" ? 20u : 8u));
         CHECK(pack->automation.palette_rotation == PaletteRotation::scene_list);
         Rig rig;
         for (const RigPreset &p : builtin_rig_presets()) {
@@ -314,5 +316,70 @@ TEST_CASE("presets: Hexagon 2 and 3 render every scene on the mandala, lit over 
             }
             CHECK(most > 0.05f);
         }
+    }
+}
+
+TEST_CASE("presets: Hexagon 4 rotates several scenes per section, the Hexagon pack untouched") {
+    const std::vector<ShowPack> packs = builtin_show_packs();
+    const auto named = [&](const char *name) {
+        return *std::find_if(packs.begin(), packs.end(),
+                             [&](const ShowPack &p) { return p.name == name; });
+    };
+    const ShowPack hex4 = named("Hexagon 4");
+    const ShowPack hexagon = named("Hexagon");
+    // The Hexagon pack's scenes are all in it, their layers and routes as they are.
+    for (const Scene &original : hexagon.scenes) {
+        CAPTURE(original.name);
+        const auto copy = std::find_if(hex4.scenes.begin(), hex4.scenes.end(),
+                                       [&](const Scene &s) { return s.name == original.name; });
+        REQUIRE(copy != hex4.scenes.end());
+        REQUIRE(copy->layers.size() == original.layers.size());
+        for (size_t k = 0; k < original.layers.size(); ++k) {
+            const Layer &c = copy->layers[k];
+            const Layer &o = original.layers[k];
+            REQUIRE(c.spec.type() == o.spec.type());
+            for (size_t i = 0; i < effect_param_infos(o.spec.type()).size(); ++i) {
+                CHECK(effect_param(c.spec, i) == effect_param(o.spec, i));
+            }
+            CHECK(c.blend == o.blend);
+            CHECK(c.opacity == o.opacity);
+            CHECK(c.group == o.group);
+        }
+        CHECK(copy->routes == original.routes);
+    }
+    // Every energy of a groove and a drop has several scenes to rotate among, each of them
+    // reachable (the rotation walks through all candidates).
+    for (const char *label : {"groove", "drop"}) {
+        for (int energy = 0; energy < 3; ++energy) {
+            CAPTURE(label);
+            CAPTURE(energy);
+            std::vector<int> seen;
+            for (size_t occurrence = 0; occurrence < 40; ++occurrence) {
+                const int s = scene_for_label(hex4.scenes, label, occurrence, energy);
+                if (std::find(seen.begin(), seen.end(), s) == seen.end()) {
+                    seen.push_back(s);
+                }
+            }
+            CHECK(seen.size() >= 2);
+        }
+    }
+    // The original Hex tunnel and Hex radar take part in the groove rotation.
+    std::vector<std::string> grooves;
+    for (int energy = 0; energy < 3; ++energy) {
+        for (size_t occurrence = 0; occurrence < 40; ++occurrence) {
+            grooves.push_back(hex4.scenes[static_cast<size_t>(scene_for_label(hex4.scenes, "groove",
+                                                                              occurrence, energy))]
+                                  .name);
+        }
+    }
+    for (const char *name :
+         {"Hex tunnel", "Hex radar", "Tunnel 3", "Pitch tunnel", "Note rings", "Cube 3", "Lattice",
+          "Radar 3", "Ring rain", "Star radar", "Hammer", "Comet rain"}) {
+        CAPTURE(name);
+        CHECK(std::find(grooves.begin(), grooves.end(), name) != grooves.end());
+    }
+    for (const char *label : {"intro", "outro"}) {
+        CAPTURE(label);
+        CHECK(scene_for_label(hex4.scenes, label, 0) != scene_for_label(hex4.scenes, label, 1));
     }
 }

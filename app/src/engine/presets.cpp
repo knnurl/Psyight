@@ -1672,6 +1672,53 @@ std::vector<ShowPack> builtin_show_packs() {
                        {"Heartbeat", {"Ocean UV"}},
                        {"Afterglow", {"Mono violet"}}}));
     // END Hexagon 3 packs
+
+    // Hexagon 4: the Hexagon pack's eight scenes as they are, with the owner's picks from Hexagon
+    // 2 and 3 alongside, several scenes for each section so long sets rotate among them. Copies
+    // in this pack get energy tags (the scenes and the other packs are untouched): an untagged
+    // scene only plays when no scene carries the section's energy, so the original Hex tunnel
+    // and Hex radar would never play among tagged ones, and Comet rain alone would take every
+    // high drop.
+    ShowPack hex4 = rotating_pack(
+        "Hexagon 4",
+        "The Hexagon pack with more to rotate through: hex tunnels, radar sweeps, the cube, the "
+        "lattice, the pitch tunnel and note rings in grooves; comet and ring rain, star radar and "
+        "the hammer when the energy rises; two blooms for drops, two intros, two outros.",
+        {find(looks, "Hex tunnel"),   find(looks, "Hex radar"),    find(looks, "Comet rain"),
+         find(looks, "Nebula"),       find(looks, "Hex pressure"), find(looks, "Drop bloom"),
+         find(looks, "Hex echoes"),   find(looks, "Deep space"),   find(looks, "Tunnel 3"),
+         find(looks, "Pitch tunnel"), find(looks, "Note rings"),   find(looks, "Cube 3"),
+         find(looks, "Lattice"),      find(looks, "Radar 3"),      find(looks, "Ring rain"),
+         find(looks, "Star radar"),   find(looks, "Hammer"),       find(looks, "Bloom 3"),
+         find(looks, "Facet intro"),  find(looks, "Deep tunnel")},
+        {{"Tunnel 3", {"UV violet", "Magenta storm"}},
+         {"Pitch tunnel", {"UV violet", "Magenta storm"}},
+         {"Note rings", {"Ocean UV", "UV violet"}},
+         {"Cube 3", {"UV violet", "Ocean UV"}},
+         {"Lattice", {"Ocean UV", "Toxic"}},
+         {"Radar 3", {"Toxic", "Ocean UV"}},
+         {"Ring rain", {"Magenta storm", "UV violet"}},
+         {"Star radar", {"Toxic", "Magenta storm"}},
+         {"Hammer", {"Toxic", "Ember"}},
+         {"Deep tunnel", {"Mono violet", "Ocean UV"}}});
+    // The next scene for a section every phrase (the Hexagon pack: every two), so even a
+    // two-phrase intro or outro shows both of its scenes and long sections change more often.
+    hex4.automation.rotate_every_phrases = 1;
+    for (Scene &s : hex4.scenes) {
+        if (s.palette_list.empty()) { // The Hexagon pack's scenes keep their own palette.
+            s.palette_list = {s.palette};
+        }
+        if (s.name == "Hex tunnel") {
+            s.sections = {"groove", "low", "mid"};
+        } else if (s.name == "Hex radar") {
+            s.sections = {"groove", "mid", "high"};
+        } else if (s.name == "Drop bloom" || s.name == "Bloom 3") {
+            s.sections = {"drop", "low", "mid", "high"};
+        } else if (s.name == "Deep space") {
+            s.sections = {"outro"}; // As in the Hexagon pack: Hex echoes takes the intros.
+        }
+    }
+    packs.push_back(std::move(hex4));
     return packs;
 }
 
