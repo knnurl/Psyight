@@ -61,6 +61,7 @@ struct HexTopology {
     std::vector<double> radius;     // Per pixel: hex_radius.
     std::vector<double> turn;       // Per pixel: hex_turn, 0 at the top, clockwise.
     std::vector<int> first_pixel;   // Per strip: index of its first pixel in rig.pixels (-1: none).
+    std::vector<double> strip_turn; // Per strip: the turn of its mean position (a spoke's way).
 };
 HexTopology hex_topology(const Rig &rig, int corners = 0);
 

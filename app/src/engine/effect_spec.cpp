@@ -471,6 +471,37 @@ template <> const std::vector<Field<InterferenceParams>> &fields<InterferencePar
     return f;
 }
 
+template <> const std::vector<Field<PitchClockParams>> &fields<PitchClockParams>() {
+    using P = PitchClockParams;
+    static const std::vector<Field<P>> f = {
+        {{"low_midi", "Lowest", "MIDI", 0.0, 96.0, true, "Where the lowest octave starts"},
+         nullptr,
+         &P::low_midi},
+        {{"ring_order", "Low notes", "", 0.0, 1.0, true, "Which ring the lowest octave takes",
+          "Inside|Outside"},
+         nullptr,
+         &P::ring_order},
+        {{"width", "Width", "turns", 0.01, 0.25, false, "Half-width of the marker"}, &P::width},
+        {{"top_pitch", "At the top", "", 0.0, 11.0, true,
+          "The pitch class at the top corner (0 = C, 11 = B)"},
+         nullptr,
+         &P::top_pitch},
+        {{"spokes", "Spokes", "", 0.0, 1.0, true, "Light the spoke nearest the note", "Off|On"},
+         nullptr,
+         &P::spokes},
+        {{"release_s", "Release", "s", 0.0, 1.0, false, "Fade after the note ends"}, &P::release_s},
+        {{"colours", "Colour", "", 0.0, 1.0, true, "Hue from pitch, or the palette round the clock",
+          "Pitch hue|Palette"},
+         nullptr,
+         &P::colours},
+        {{"confidence", "Doubt", "", 0.0, 1.0, false,
+          "How much a note the bass tracker doubts is dimmed"},
+         &P::confidence},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+    };
+    return f;
+}
+
 } // namespace
 
 BlendMode default_blend(EffectType type) {
@@ -536,6 +567,8 @@ EffectSpec default_spec(EffectType type) {
         return {SectorsParams{}};
     case EffectType::interference:
         return {InterferenceParams{}};
+    case EffectType::pitch_clock:
+        return {PitchClockParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -582,8 +615,10 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_cube(p);
             } else if constexpr (std::is_same_v<P, SectorsParams>) {
                 return make_sectors(p);
-            } else {
+            } else if constexpr (std::is_same_v<P, InterferenceParams>) {
                 return make_interference(p);
+            } else {
+                return make_pitch_clock(p);
             }
         },
         spec.params);
@@ -635,6 +670,8 @@ const char *effect_type_id(EffectType type) {
         return "sectors";
     case EffectType::interference:
         return "interference";
+    case EffectType::pitch_clock:
+        return "pitch_clock";
     }
     return "plasma";
 }

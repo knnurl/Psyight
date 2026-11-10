@@ -24,17 +24,34 @@ double steps(long long so_far, double since_s) {
 
 constexpr double kPi = 3.14159265358979323846;
 
+// The hexagon's three flat normals, computed once for many pixels.
+struct HexNormals {
+    double c[3];
+    double s[3];
+};
+
+HexNormals normals_of(const HexFrame &f) {
+    HexNormals n{};
+    for (int k = 0; k < 3; ++k) {
+        const double a = (f.corner_deg - 90.0 + 60.0 * k) * kPi / 180.0;
+        n.c[k] = std::cos(a);
+        n.s[k] = std::sin(a);
+    }
+    return n;
+}
+
 // Distance to the hexagon's flat sides' direction: the largest of the three flat normals.
-double hex_raw(const HexFrame &f, double x, double y) {
+double hex_raw(const HexFrame &f, const HexNormals &n, double x, double y) {
     const double dx = x - f.cx;
     const double dy = y - f.cy;
     double most = 0.0;
     for (int k = 0; k < 3; ++k) {
-        const double a = (f.corner_deg - 90.0 + 60.0 * k) * kPi / 180.0;
-        most = std::max(most, std::fabs(dx * std::cos(a) + dy * std::sin(a)));
+        most = std::max(most, std::fabs(dx * n.c[k] + dy * n.s[k]));
     }
     return most;
 }
+
+double hex_raw(const HexFrame &f, double x, double y) { return hex_raw(f, normals_of(f), x, y); }
 
 } // namespace
 
@@ -45,9 +62,10 @@ HexFrame hex_frame(const Rig &rig, int corners) {
     const bool up =
         corners == 1 || (corners != 2 && rig.max.y - rig.min.y >= rig.max.x - rig.min.x);
     f.corner_deg = up ? 90.0 : 0.0;
+    const HexNormals n = normals_of(f);
     double reach = 0.0;
     for (const Pixel &p : rig.pixels) {
-        reach = std::max(reach, hex_raw(f, p.position.x, p.position.y));
+        reach = std::max(reach, hex_raw(f, n, p.position.x, p.position.y));
     }
     f.reach_m = reach > 1e-9 ? reach : 1.0;
     return f;
@@ -82,10 +100,13 @@ HexTopology hex_topology(const Rig &rig, int corners) {
     std::vector<double> hi(strips, -1e9);
     std::vector<double> sum(strips, 0.0);
     std::vector<int> count(strips, 0);
+    std::vector<double> dx_sum(strips, 0.0);
+    std::vector<double> dy_sum(strips, 0.0);
+    const HexNormals n = normals_of(t.frame);
     t.u_min = rig.pixels.empty() ? 0.0 : 1e9;
     for (size_t i = 0; i < rig.pixels.size(); ++i) {
         const Pixel &p = rig.pixels[i];
-        t.radius[i] = hex_radius(t.frame, p.position.x, p.position.y);
+        t.radius[i] = hex_raw(t.frame, n, p.position.x, p.position.y) / t.frame.reach_m;
         t.turn[i] = hex_turn(t.frame, p.position.x, p.position.y);
         t.u_min = std::min(t.u_min, t.radius[i]);
         const auto s = static_cast<size_t>(p.strip);
@@ -97,7 +118,13 @@ HexTopology hex_topology(const Rig &rig, int corners) {
             hi[s] = std::max(hi[s], t.radius[i]);
             sum[s] += t.radius[i];
             ++count[s];
+            dx_sum[s] += p.position.x - t.frame.cx;
+            dy_sum[s] += p.position.y - t.frame.cy;
         }
+    }
+    t.strip_turn.assign(strips, 0.0);
+    for (size_t s = 0; s < strips; ++s) { // The turn of the strip's mean position.
+        t.strip_turn[s] = hex_turn(t.frame, t.frame.cx + dx_sum[s], t.frame.cy + dy_sum[s]);
     }
     std::vector<std::pair<double, int>> rings;
     for (size_t s = 0; s < strips; ++s) {

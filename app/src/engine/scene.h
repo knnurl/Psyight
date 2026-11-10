@@ -51,6 +51,11 @@
 //   seeded slice stepping on a clock (the 16ths of a rolling bassline);
 // - interference: three waves at 120 degrees summed into a hexagonal lattice of light drifting
 //   with a clock, its contrast pumped by each kick.
+// Hexagon-visuals effects (engine/hex2_effects.cpp), on the rig's hexagon rings and spokes
+// (engine/space.h hex_topology):
+// - pitch clock: the bass note as a marker round a ring, twelve pitch classes round the hexagon,
+//   the octave picking the ring; the spoke at the note lights too; dimmed when the tracker
+//   doubts the note.
 #pragma once
 
 #include "engine/colour.h"
@@ -287,6 +292,19 @@ struct InterferenceParams {
     int size_units = 1; // 0 metres, 1 per metre of the rig's reach (engine/shape.h).
 };
 
+// Pitch clock (bass): twelve pitch classes round the hexagon, the octave picks the ring.
+struct PitchClockParams {
+    int low_midi = 23;   // Octave 0 starts here (B0).
+    int ring_order = 0;  // Which ring the lowest octave takes: inside, outside.
+    double width = 0.04; // Half-width of the marker, in turns.
+    int top_pitch = 0;   // Pitch class at the top corner (0 = C).
+    int spokes = 1;      // Light the spoke within `width` of the note.
+    double release_s = 0.08;
+    int colours = 0;         // Pitch hue (as Bass bars), palette.
+    double confidence = 0.5; // Doubtful notes dimmer: level times 1 - this * (1 - confidence).
+    double level = 1.0;
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -309,13 +327,14 @@ enum class EffectType {
     hex_pulse,
     cube,
     sectors,
-    interference
+    interference,
+    pitch_clock
 };
 using EffectParams =
     std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
                  BuildParams, DropBurstParams, ChaseParams, WaveParams, StrobeParams, StutterParams,
                  NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams,
-                 HexPulseParams, CubeParams, SectorsParams, InterferenceParams>;
+                 HexPulseParams, CubeParams, SectorsParams, InterferenceParams, PitchClockParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -341,6 +360,7 @@ std::unique_ptr<Effect> make_hex_pulse(const HexPulseParams &params = {});
 std::unique_ptr<Effect> make_cube(const CubeParams &params = {});
 std::unique_ptr<Effect> make_sectors(const SectorsParams &params = {});
 std::unique_ptr<Effect> make_interference(const InterferenceParams &params = {});
+std::unique_ptr<Effect> make_pitch_clock(const PitchClockParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,
