@@ -1,6 +1,7 @@
 // The hexagon-visuals effects (docs/PLAN_HEX_VISUALS.md phases 5 to 9) and the hexagon topology
 // they share (engine/space.h hex_topology), on the hexagon mandala preset.
 
+#include "analysis/track_analysis.h"
 #include "effect_test_helpers.h"
 #include "engine/shape.h"
 #include "engine/space.h"
@@ -610,4 +611,63 @@ TEST_CASE("ring automaton: rule 90 from the corners stays six-fold; a generation
     CHECK(lit_strips(rig, render({spokes}, rig, in_phrase(0.0))).size() > 3);
     check_sane({fade}, rig, in_phrase(0.37));
     CHECK(all_black(render({p}, default_rig(), in_phrase(0.5))));
+}
+
+TEST_CASE("note history: newest first, entry 0 agreeing with the bass fields; arcs and trails") {
+    TrackAnalysis a;
+    a.sample_rate_hz = 48000;
+    a.duration_s = 10.0;
+    a.grid = {150.0, 0, 48000};
+    for (int k = 0; k < 12; ++k) { // A 16th apart, half a 16th long, rising.
+        BassNote n;
+        n.onset_s = 1.0 + 0.1 * k;
+        n.offset_s = n.onset_s + 0.05;
+        n.pitch_midi = 28 + k;
+        n.gate_ratio = 0.5;
+        n.velocity = 0.9;
+        n.confidence = 0.8;
+        n.decay_tau_ms = 150.0;
+        a.bass.notes.push_back(n);
+    }
+    const EngineInputs in = inputs_at(a, a.grid, 2.12); // 0.02 s into note 11.
+    REQUIRE(in.bass_notes_so_far == 12);
+    const NoteEvent &e0 = in.notes[0];
+    CHECK(e0.age_s == doctest::Approx(in.since_bass_onset_s));
+    CHECK(e0.sounding == in.bass_active);
+    CHECK(e0.midi == in.bass_midi);
+    CHECK(e0.gate_ratio == in.bass_gate_ratio);
+    CHECK(e0.velocity == in.bass_velocity);
+    CHECK(e0.confidence == in.bass_confidence);
+    CHECK(e0.length_s == doctest::Approx(0.02));
+    CHECK(in.notes[1].midi == 38);
+    CHECK(in.notes[1].age_s == doctest::Approx(0.12));
+    CHECK(in.notes[1].length_s == doctest::Approx(0.05));
+    CHECK_FALSE(in.notes[1].sounding);
+    CHECK(in.notes[7].midi == 32);
+    // Before the first note: no history.
+    CHECK_FALSE(std::isfinite(inputs_at(a, a.grid, 0.5).notes[0].age_s));
+
+    const Rig rig = mandala();
+    EngineInputs on_grid = in;
+    on_grid.beat_s = 0.4;
+    // One note shown: the history is not read.
+    NoteArcsParams one;
+    EngineInputs no_history = on_grid;
+    no_history.notes = {};
+    CHECK(render({one}, rig, on_grid) == render({one}, rig, no_history));
+    // Three: more is lit, on more rings.
+    NoteArcsParams three = one;
+    three.history = 3;
+    three.release_s = 0.5;
+    CHECK(lit_count(render({three}, rig, on_grid)) > lit_count(render({one}, rig, on_grid)));
+    CHECK(lit_strips(rig, render({three}, rig, on_grid)).size() >= 2);
+    check_sane({three}, rig, on_grid);
+    // Pitch clock trail: earlier notes as dimmer markers.
+    PitchClockParams clock;
+    EngineInputs sure = on_grid;
+    sure.bass_confidence = 1.0;
+    const size_t alone = lit_count(render({clock}, rig, sure));
+    clock.trail = 3;
+    CHECK(lit_count(render({clock}, rig, sure)) > alone);
+    check_sane({clock}, rig, sure);
 }

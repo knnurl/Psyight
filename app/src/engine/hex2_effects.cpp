@@ -66,6 +66,31 @@ class PitchClock final : public Effect {
                 out[i] = scaled(colour, v0 * std::exp(-d * d));
             }
         }
+        // The trail: earlier notes as markers at half the level each step back.
+        for (int k = 1; k <= std::clamp(p_.trail, 0, kNoteHistory - 1); ++k) {
+            const NoteEvent &e = in.notes[static_cast<size_t>(k)];
+            if (!std::isfinite(e.age_s) || e.age_s <= 0.0 || in.bass_notes_so_far <= k) {
+                break;
+            }
+            const double trail_pitch = e.midi + e.cents / 100.0;
+            const double trail_angle = frac((trail_pitch - p_.top_pitch) / 12.0);
+            const int trail_octave = std::clamp(
+                static_cast<int>(std::floor((e.midi - p_.low_midi) / 12.0)), 0, rings - 1);
+            const int trail_strip = t.rings[static_cast<size_t>(
+                p_.ring_order == 0 ? trail_octave : rings - 1 - trail_octave)];
+            const double v = v0 * std::pow(0.5, k);
+            const Rgb trail_colour = p_.colours == 0 ? hsv(270.0 + 28.0 * trail_pitch, 1.0, 1.0)
+                                                     : c.palette.at(trail_angle);
+            for (size_t i = 0; i < out.size(); ++i) {
+                if (c.rig.pixels[i].strip != trail_strip) {
+                    continue;
+                }
+                const double d = turn_distance(t.turn[i], trail_angle) / width;
+                if (d < 3.0) {
+                    max_into(out[i], scaled(trail_colour, v * std::exp(-d * d)));
+                }
+            }
+        }
         if (p_.spokes == 1) {
             std::vector<Rgb> spoke(c.rig.strips.size());
             bool any = false;
@@ -113,25 +138,69 @@ class NoteArcs final : public Effect {
         const double beat_s = in.beat_s > 0.0 ? in.beat_s : 0.4;
         const double slot_s = in.beat_s > 0.0 ? in.beat_s / 4.0 : 0.1;
         const long long n = in.bass_notes_so_far - 1;
-        int ring = 0;
-        switch (p_.ring_mode) {
-        case 0: // Cycle.
-            ring = static_cast<int>(n % rings);
-            break;
-        case 1: { // By the onset's 16th within its beat: 1..3 to rings 0..2, the downbeat to 0.
-            const double bar_start_s = in.t_s - in.bar_phase * 4.0 * beat_s;
-            const double onset_s = in.t_s - in.since_bass_onset_s;
-            const auto slot =
-                static_cast<long long>(std::llround((onset_s - bar_start_s) / slot_s));
-            const long long in_beat = ((slot % 4) + 4) % 4;
-            ring = std::min(rings - 1, static_cast<int>(std::max(0LL, in_beat - 1)));
-            break;
+        // The ring for note number `note` whose onset was age_s ago.
+        const auto ring_for = [&](long long note, double age_s) {
+            switch (p_.ring_mode) {
+            case 0: // Cycle.
+                return static_cast<int>(((note % rings) + rings) % rings);
+            case 1: { // By the onset's 16th within its beat: 1..3 to rings 0..2, the downbeat 0.
+                const double bar_start_s = in.t_s - in.bar_phase * 4.0 * beat_s;
+                const double onset_s = in.t_s - age_s;
+                const auto slot =
+                    static_cast<long long>(std::llround((onset_s - bar_start_s) / slot_s));
+                const long long in_beat = ((slot % 4) + 4) % 4;
+                return std::min(rings - 1, static_cast<int>(std::max(0LL, in_beat - 1)));
+            }
+            default: // Outer only.
+                return rings - 1;
+            }
+        };
+        const double dir = p_.direction == 0   ? 1.0
+                           : p_.direction == 1 ? -1.0
+                                               : (in.bar_index % 2 == 0 ? 1.0 : -1.0);
+        // One note's arc: `len` turns from its corner, combined with max.
+        const auto draw = [&](int ring, long long note, double len, double v0, double midi) {
+            if (v0 < 1e-4 || len <= 0.0) {
+                return;
+            }
+            const double start = corner_turn(t.frame, static_cast<int>(((note % 6) + 6) % 6));
+            const int strip = t.rings[static_cast<size_t>(ring)];
+            const int ring_pixels = std::max(1, c.rig.strips[static_cast<size_t>(strip)].count);
+            const double pitch_turns = 1.0 / ring_pixels; // One pixel, for the soft ends.
+            const Rgb colour = p_.colours == 0
+                                   ? hsv(270.0 + 28.0 * midi, 1.0, 1.0)
+                                   : c.palette.at(static_cast<double>(((note % 6) + 6) % 6) / 6.0);
+            for (size_t i = 0; i < out.size(); ++i) {
+                if (c.rig.pixels[i].strip != strip) {
+                    continue;
+                }
+                const double a = frac((t.turn[i] - start) * dir);
+                if (a >= len) {
+                    continue;
+                }
+                const double edge = smoothstep(pitch_turns, a) * smoothstep(pitch_turns, len - a);
+                max_into(out[i], scaled(colour, std::min(1.0, v0 * edge)));
+            }
+        };
+        // Earlier notes from the history (note_history > 1): each on its ring, by its length.
+        for (int k = std::min(std::clamp(p_.history, 1, kNoteHistory), static_cast<int>(n + 1)) - 1;
+             k >= 1; --k) {
+            const NoteEvent &e = in.notes[static_cast<size_t>(k)];
+            if (e.length_s <= 0.0 || !std::isfinite(e.age_s)) {
+                continue;
+            }
+            const double len = std::clamp(p_.arc_per_16th * e.length_s / slot_s, 0.0, 1.0);
+            const double tau_s = e.decay_tau_ms > 0.0 ? e.decay_tau_ms * 1e-3 : 0.0;
+            const double fade = e.sounding ? 1.0
+                                           : std::exp(-std::max(0.0, e.age_s - e.length_s) /
+                                                      std::max({1e-3, p_.release_s, tau_s}));
+            const double conf = 1.0 - std::clamp(p_.confidence, 0.0, 1.0) *
+                                          (1.0 - std::clamp(e.confidence, 0.0, 1.0));
+            draw(ring_for(n - k, e.age_s), n - k, len,
+                 p_.level * conf * std::clamp(e.velocity, 0.0, 1.0) * fade,
+                 e.midi + e.cents / 100.0);
         }
-        default: // Outer only.
-            ring = rings - 1;
-            break;
-        }
-        const double start = corner_turn(t.frame, static_cast<int>(n % 6));
+        // The latest note, from the bass fields.
         const double held_s =
             in.bass_active ? in.since_bass_onset_s : std::max(0.0, in.bass_gate_ratio) * slot_s;
         const double len = std::clamp(p_.arc_per_16th * held_s / slot_s, 0.0, 1.0);
@@ -143,31 +212,9 @@ class NoteArcs final : public Effect {
         const double swell = held_s > 2.0 * slot_s
                                  ? 1.0 + p_.breathe * std::sin(2.0 * kPi * 2.0 * in.t_s) * 0.5
                                  : 1.0;
-        const double dir = p_.direction == 0   ? 1.0
-                           : p_.direction == 1 ? -1.0
-                                               : (in.bar_index % 2 == 0 ? 1.0 : -1.0);
         const double v0 = p_.level * confidence_scale(p_.confidence, in) *
                           std::clamp(in.bass_velocity, 0.0, 1.0) * env * swell;
-        if (v0 < 1e-4 || len <= 0.0) {
-            return;
-        }
-        const int strip = t.rings[static_cast<size_t>(ring)];
-        const int ring_pixels = std::max(1, c.rig.strips[static_cast<size_t>(strip)].count);
-        const double pitch_turns = 1.0 / ring_pixels; // One pixel, for the soft ends.
-        const double note_pitch = in.bass_midi + in.bass_cents / 100.0;
-        const Rgb colour = p_.colours == 0 ? hsv(270.0 + 28.0 * note_pitch, 1.0, 1.0)
-                                           : c.palette.at(static_cast<double>(n % 6) / 6.0);
-        for (size_t i = 0; i < out.size(); ++i) {
-            if (c.rig.pixels[i].strip != strip) {
-                continue;
-            }
-            const double a = frac((t.turn[i] - start) * dir);
-            if (a >= len) {
-                continue;
-            }
-            const double edge = smoothstep(pitch_turns, a) * smoothstep(pitch_turns, len - a);
-            out[i] = scaled(colour, std::min(1.0, v0 * edge));
-        }
+        draw(ring_for(n, in.since_bass_onset_s), n, len, v0, in.bass_midi + in.bass_cents / 100.0);
     }
 
   private:

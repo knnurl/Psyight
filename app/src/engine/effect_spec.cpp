@@ -504,6 +504,9 @@ template <> const std::vector<Field<PitchClockParams>> &fields<PitchClockParams>
           "How much a note the bass tracker doubts is dimmed"},
          &P::confidence},
         {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+        {{"trail", "Trail", "", 0.0, 7.0, true, "Earlier notes shown, each at half the level"},
+         nullptr,
+         &P::trail},
     };
     return f;
 }

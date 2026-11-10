@@ -321,6 +321,7 @@ struct PitchClockParams {
     int colours = 0;         // Pitch hue (as Bass bars), palette.
     double confidence = 0.5; // Doubtful notes dimmer: level times 1 - this * (1 - confidence).
     double level = 1.0;
+    int trail = 0; // Earlier notes (EngineInputs::notes) as markers, each half the one after.
 };
 
 // Note arcs (bass): each note draws an arc round a hexagon ring from a corner, as long as the note

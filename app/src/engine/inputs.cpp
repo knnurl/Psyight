@@ -99,6 +99,21 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
             in.bass_onset_ages_s[static_cast<size_t>(k)] =
                 t_s - notes[static_cast<size_t>(note - k)].onset_s;
         }
+        for (long long k = 0; k < kNoteHistory && note - k >= 0; ++k) {
+            const BassNote &h = notes[static_cast<size_t>(note - k)];
+            NoteEvent &e = in.notes[static_cast<size_t>(k)];
+            e.age_s = t_s - h.onset_s;
+            e.sounding = t_s < h.offset_s;
+            e.length_s = e.sounding ? e.age_s : h.offset_s - h.onset_s;
+            e.midi = h.pitch_midi;
+            e.cents = h.cents;
+            e.gate_ratio = h.gate_ratio;
+            e.velocity = h.velocity;
+            e.confidence = h.confidence;
+            e.decay_tau_ms = h.decay_tau_ms;
+            e.slide = h.slide_in;
+            e.long_note = h.is_long;
+        }
     }
 
     // Section.
@@ -214,6 +229,21 @@ EngineInputs inputs_at(const LiveState &s, double t_s) {
             in.since_bass_offset_s = std::max(0.0, t_s - s.bass_end_s);
             in.bass_note_phase = 1.0;
             in.bass_gate_ratio = slot_s > 0.0 ? (s.bass_end_s - s.bass_onset_s) / slot_s : 0.0;
+        }
+        // The note history: the latest from the fields above; three earlier onsets, ages only.
+        NoteEvent &latest = in.notes[0];
+        latest.age_s = in.since_bass_onset_s;
+        latest.sounding = in.bass_active;
+        latest.length_s =
+            in.bass_active ? in.since_bass_onset_s : std::max(0.0, s.bass_end_s - s.bass_onset_s);
+        latest.midi = in.bass_midi;
+        latest.gate_ratio = in.bass_gate_ratio;
+        latest.velocity = in.bass_velocity;
+        latest.confidence = in.bass_confidence;
+        for (size_t k = 1; k < s.recent_bass_onsets_s.size() && k < in.notes.size(); ++k) {
+            if (s.recent_bass_onsets_s[k] > kLiveNever && t_s >= s.recent_bass_onsets_s[k]) {
+                in.notes[k].age_s = t_s - s.recent_bass_onsets_s[k];
+            }
         }
     }
 

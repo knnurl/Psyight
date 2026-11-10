@@ -21,6 +21,22 @@ inline constexpr int kEventHistory = 4; // Recent hats and bass onsets kept (Eng
 using EventAges = std::array<double, kEventHistory>;
 inline constexpr EventAges kNoEvents = {kNever, kNever, kNever, kNever};
 
+// A bass note in the history (EngineInputs::notes): the latest few, newest first.
+inline constexpr int kNoteHistory = 8;
+struct NoteEvent {
+    double age_s = kNever; // Since its onset.
+    double length_s = 0.0; // Sounding: the time so far. Ended: its duration. 0: unknown.
+    bool sounding = false;
+    int midi = 0;
+    double cents = 0.0;
+    double gate_ratio = 0.0;
+    double velocity = 0.0;
+    double confidence = 0.0;
+    double decay_tau_ms = 0.0;
+    bool slide = false;
+    bool long_note = false;
+};
+
 struct EngineInputs {
     double t_s = 0.0;
     // Grid (constant tempo).
@@ -70,6 +86,9 @@ struct EngineInputs {
     double since_build_s = 0.0;
     double build_length_s = 0.0;
     bool build_end_known = false; // As section_end_known.
+    // The last kNoteHistory bass notes, newest first; entry 0 agrees with the bass fields above.
+    // Live mode knows the latest note and only the onset times of three before it (length 0).
+    std::array<NoteEvent, kNoteHistory> notes{};
     // Residual and hats.
     double residual_level = 0.0; // 0 to 1 (-90 to 0 dB).
     double residual_centroid_hz = 0.0;
