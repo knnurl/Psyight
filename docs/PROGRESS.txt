@@ -1,6 +1,6 @@
 # Psyight progress and handoff
 
-Last updated: 2026-11-09. Written so another agent can pick up without the original session.
+Last updated: 2026-11-10. Written so another agent can pick up without the original session.
 
 ## Read first
 - `CLAUDE.md` (process, conventions, commands), `docs/SPEC.md` (requirements; decision log in section 16).
@@ -8,7 +8,19 @@ Last updated: 2026-11-09. Written so another agent can pick up without the origi
 - Private audio and labels live in `data/` (gitignored): `OculusDrift.mp3`, `Hagios.mp3`, `Hall of Purity.wav`, `Phase Change.mp3`.
 
 ## Hexagon visuals (branch `hex-visuals`, from 2026-11-10; spec docs/PLAN_HEX_VISUALS.md)
-- Not merged or pushed to main: the owner watches the piece first. One commit per phase, in the plan's order.
+- STATUS 2026-11-10: every phase of the plan is committed on `hex-visuals` (23 commits after e63d608), not merged or pushed: the owner watches the piece first. Release build clean, `ctest --preset windows-msvc-release` passes (410 doctest cases). The pre-branch recording replays identically.
+- Not done from the plan: the contact sheets with a pack argument (captures/review/alien/sheets.py drives the GUI's capture mode; evidence for the owner, not a test) and a look at the new Show tab controls in the running app (built, not seen).
+- FOR THE OWNER, on the piece, per phase:
+  - Power estimate: the drop and white hits now near byte 30 instead of 4 to 13; measure All on at 25, 44, 70, 100% against a meter and set current_per_channel_ma and quiescent_ma.
+  - Sizes and times: Nebula, Comet rain, Drop bloom and every white shockwave (now a ring about 5 cm wide crossing in about 170 ms on the 0.2 m hexagon). If a scene looks worse, set that layer's Sizes or Times back. Confirm the 1 m reference reach on the Hive stage preview (sizes there grow by its reach).
+  - Hex tunnel: the inner ring lights on the kick (Start: First pixels).
+  - Grooves after one-bar builds (Alien Army 131, 142 and 194 s) now play groove and breakdown scenes.
+  - Hexagon 2, every scene; whether Pitch meter 2 should get an energy tag (the only untagged groove scene, as the plan grouped them, so it never plays), whether Embers is bright enough (byte 5 at most), and the ring flashes of Kick pulse 2 and Bloom 2 (9 to 11 flashes a second alone, limiter off).
+  - Spatial dithering (off): turn on in Limiters (Engineer) and judge flicker on dim scenes.
+  - Palette rotation by scene list, peak hold, post-effects: optional, to try.
+- Open points (plan section 14): quiescent_ma and current_per_channel_ma unmeasured; kReferenceReachM = 1 m; whether the Hive stage's hexagon (two open halves, no rings: ring effects stay dark on it) should carry inner, middle, outer and spokes tags; dithering stays off until seen.
+- Hexagon 2 on the owner's tracks (psyight.psyproj, labelled sections; captures/review/hexagon2): Alien Army and OculusDrift, no power limiting, dark pixels after the cap 76% and 80% (before the limiters 43%, 46%), mean current 0.5 A; over a quarter of the rig above byte 20 only in Kick pulse 2 (2 to 3% of its frames) and Bloom 2 (3 to 8%); groups dark 19 to 39% of frames (inner, middle, outer), spokes 9 to 15%. Flashes with the limiter off, most in any 1 s: 10 and 9 (the Hexagon pack after the fixes: 5 and 7).
+- One commit per phase, in the plan's order.
 - Phase 1, measuring tools (no behaviour change): `psyight_show_check` now builds the labels' edited sections as the app does (`--detected-sections`: the old behaviour; its figures are identical to main's on Alien Army), `--dump <csv>` (per frame: max byte, lit pixels, mean byte, current, power scale, flash-limited), `--groups` (per strip group: mean and max byte, share of frames fully dark), `--pack <name>` (a built-in pack applied in memory), `--record <folder>` (a session folder for psyight_replay), a dark share before the limiters by largest channel, and per scene: max byte, median lit pixels, share of frames with over a quarter of the rig above byte 20, flashes with the scene alone. The loop lives in `output/show_check.*`.
 - Show baseline test: `golden show` renders Hexagon, Psy club and Dark forest on the mandala over a 57-bar synthetic track with hand-set sections (a one-bar build among them) and compares with `tests/golden/show_baseline.json`; any change fails. Rewrite with `PSYIGHT_UPDATE_GOLDEN=1 psyight_tests -tc="golden*"` and explain the diff in the commit.
 - Owner-track baselines (not in the repo): `captures/review/baseline/{alien,oculus}_<pack>.{txt,csv}`, the owner's psyight.psyproj with each pack, labelled sections. With the labels, Alien Army's Hexagon pack plays Hex pressure in the labelled groove at 131 s (finding L3) and Deep space only 4% of the time (48% with the detected sections).
@@ -21,7 +33,7 @@ Last updated: 2026-11-09. Written so another agent can pick up without the origi
 
 - Phase 4, hex pulse (L2, on by default): `HexPulseParams::start` (Centre|First pixels, default First pixels: the front runs from the rig's smallest hex radius) and `hold_s` (0 to 0.2 s, default 0, through hit_envelope). Recordings without `start` replay from the centre. Baseline: Hex tunnel's lit pixels median 675 to 757, its brightest byte 27 to 34; Hex pressure 518 to 707 lit and 16 to 103 flashes alone.
 
-- Phase 5, mapping (L9): `Mapping::along_length` ("Along, by length", value 8, kMappingCount 9); variations cap a remap at `kRemapMappingCount = 8`. Compatibility golden `tests/golden/presets_baseline.json` (golden presets test): every built-in scene preset, show pack and pack variation as main serialised them, compared on the keys main had (new keys ignored). It was written by main's own code: a worktree of main at C:\Users\ses634\pw with this test file added (`git worktree remove C:\Users\ses634\pw` when done with it). Mutation check: without the cap the golden fails.
+- Phase 5, mapping (L9): `Mapping::along_length` ("Along, by length", value 8, kMappingCount 9); variations cap a remap at `kRemapMappingCount = 8`. Compatibility golden `tests/golden/presets_baseline.json` (golden presets test): every built-in scene preset, show pack and pack variation as main serialised them, compared on the keys main had (new keys ignored). It was written by main's own code (a scratch worktree of main with this test file added, since removed). Mutation check: without the cap the golden fails.
 
 - Phase 6, hold rule (L3, on by default): `AutomationParams::hold_rule` (tolerant default, strict the older), project key `automation.hold_rule`, Show > Automation "Short sections". Tolerant: held only when shorter than a phrase by over 50 ms (kPhraseToleranceS), and own_section walks back past a short build that is not the section it started from. Recordings without the key replay strict. automate_live unchanged. Baseline: build scenes play 8 s of the synthetic track's 8 s of build (was 20.75 s).
 
