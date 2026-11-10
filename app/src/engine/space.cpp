@@ -63,6 +63,63 @@ double hex_turn(const HexFrame &frame, double x, double y) {
     return t - std::floor(t);
 }
 
+double corner_turn(const HexFrame &frame, int k) {
+    const double t = (90.0 - frame.corner_deg) / 360.0 + static_cast<double>(k) / 6.0;
+    return t - std::floor(t);
+}
+
+HexTopology hex_topology(const Rig &rig, int corners) {
+    constexpr double kClosedM = 1e-3;
+    constexpr double kRingSpread = 0.1;
+    HexTopology t;
+    t.frame = hex_frame(rig, corners);
+    const size_t strips = rig.strips.size();
+    t.ring_of_strip.assign(strips, -1);
+    t.first_pixel.assign(strips, -1);
+    t.radius.resize(rig.pixels.size());
+    t.turn.resize(rig.pixels.size());
+    std::vector<double> lo(strips, 1e9);
+    std::vector<double> hi(strips, -1e9);
+    std::vector<double> sum(strips, 0.0);
+    std::vector<int> count(strips, 0);
+    t.u_min = rig.pixels.empty() ? 0.0 : 1e9;
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        const Pixel &p = rig.pixels[i];
+        t.radius[i] = hex_radius(t.frame, p.position.x, p.position.y);
+        t.turn[i] = hex_turn(t.frame, p.position.x, p.position.y);
+        t.u_min = std::min(t.u_min, t.radius[i]);
+        const auto s = static_cast<size_t>(p.strip);
+        if (s < strips) {
+            if (t.first_pixel[s] < 0) {
+                t.first_pixel[s] = static_cast<int>(i);
+            }
+            lo[s] = std::min(lo[s], t.radius[i]);
+            hi[s] = std::max(hi[s], t.radius[i]);
+            sum[s] += t.radius[i];
+            ++count[s];
+        }
+    }
+    std::vector<std::pair<double, int>> rings;
+    for (size_t s = 0; s < strips; ++s) {
+        const std::vector<Vec3> &line = rig.strips[s].polyline;
+        const bool closed =
+            line.size() > 2 &&
+            std::hypot(line.front().x - line.back().x, line.front().y - line.back().y,
+                       line.front().z - line.back().z) <= kClosedM;
+        if (count[s] > 0 && closed && hi[s] - lo[s] < kRingSpread) {
+            rings.emplace_back(sum[s] / count[s], static_cast<int>(s));
+        } else if (count[s] > 0) {
+            t.spokes.push_back(static_cast<int>(s));
+        }
+    }
+    std::sort(rings.begin(), rings.end());
+    for (size_t k = 0; k < rings.size(); ++k) {
+        t.rings.push_back(rings[k].second);
+        t.ring_of_strip[static_cast<size_t>(rings[k].second)] = static_cast<int>(k);
+    }
+    return t;
+}
+
 double hash_unit(std::uint64_t a, std::uint64_t b, std::uint64_t c) {
     std::uint64_t z = a * 0x9E3779B97F4A7C15ull ^
                       (b + 0x632BE59BD9B4E019ull) * 0xBF58476D1CE4E5B9ull ^

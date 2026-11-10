@@ -45,6 +45,24 @@ HexFrame hex_frame(const Rig &rig, int corners = 0);
 double hex_radius(const HexFrame &frame, double x, double y);
 // The angle round the centre in turns, 0 at the top and growing clockwise.
 double hex_turn(const HexFrame &frame, double x, double y);
+// The turn of the hexagon's k-th corner (k = 0..5, clockwise from the corner at or after the top).
+double corner_turn(const HexFrame &frame, int k);
+
+// The rig seen as nested hexagon rings and spokes (the hexagon-visuals effects): a strip is a
+// ring when its polyline is closed (first and last points within 1 mm) and its pixels' hex
+// radius spreads by under 0.1; every other strip is a spoke. Group names are not used, so any
+// hexagonal rig works; a rig with no rings has an empty `rings`. O(pixels).
+struct HexTopology {
+    HexFrame frame;
+    double u_min = 0.0;             // Smallest hex radius of any pixel.
+    std::vector<int> ring_of_strip; // Per strip: 0 innermost ring, 1, ...; -1 for a spoke.
+    std::vector<int> rings;         // Strip indices of the rings, innermost first.
+    std::vector<int> spokes;        // Strip indices of the other strips.
+    std::vector<double> radius;     // Per pixel: hex_radius.
+    std::vector<double> turn;       // Per pixel: hex_turn, 0 at the top, clockwise.
+    std::vector<int> first_pixel;   // Per strip: index of its first pixel in rig.pixels (-1: none).
+};
+HexTopology hex_topology(const Rig &rig, int corners = 0);
 
 enum class Clock { free, sixteenth, beat, bar, phrase, bass_note, kick };
 inline constexpr int kClockCount = 7;
