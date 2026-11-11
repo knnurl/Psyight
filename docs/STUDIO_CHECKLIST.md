@@ -45,6 +45,7 @@ Not checked yet. Psyight's follow-mode code reads these packets already, but the
   - [ ] write down which track was on which deck, and roughly when.
 - [ ] Check the logger's console during the capture: each player listed with a name and number, beats arriving, and "position (CDJ-3000)" packets arriving. *Settles: whether a passive listener gets absolute positions (the basis of follow mode).*
 - [ ] Check whether "on air" packets arrive from the mixer. *Settles: whether the link can tell which deck is audible (else MIDI faders).*
+- [ ] During the pitch change, note the pitch shown on the CDJ and the BPM on its screen. *Settles: whether the position packet's BPM is the track's or the tempo heard (marked [Verify] in the code).*
 - [ ] Keep the log (`data/djlink/`) and the recording (`data/recordings/`) together: they share one clock.
 
 ## CDJs through PRO DJ LINK Bridge (TCNet)
