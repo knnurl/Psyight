@@ -70,7 +70,7 @@ add_library(psyight_lib STATIC src/core/params.cpp src/core/pitch.cpp src/io/lab
                                src/engine/scene.cpp src/engine/rig_templates.cpp src/engine/strip_edit.cpp src/engine/presets.cpp src/engine/limiters.cpp
                                src/engine/automation.cpp src/engine/modulation.cpp
                                src/engine/effect_spec.cpp src/engine/space.cpp
-                               src/engine/pattern_effects.cpp src/engine/hex_effects.cpp src/engine/hex2_effects.cpp src/engine/post.cpp src/engine/shape.cpp src/engine/aurora.cpp src/engine/variations.cpp
+                               src/engine/pattern_effects.cpp src/engine/hex_effects.cpp src/engine/hex2_effects.cpp src/engine/post.cpp src/link/packet.cpp src/link/prodjlink.cpp src/link/tcnet.cpp src/engine/shape.cpp src/engine/aurora.cpp src/engine/variations.cpp
                                src/io/text_file.cpp src/io/session_record.cpp
                                src/output/recorder.cpp src/analysis/student_data.cpp
                                src/io/project.cpp
@@ -204,7 +204,7 @@ add_executable(psyight_tests tests/test_main.cpp tests/dependency_smoke_test.cpp
                              tests/svg_rig_test.cpp tests/dxf_rig_test.cpp
                              tests/rig_export_test.cpp tests/strip_edit_test.cpp tests/joints_test.cpp
                              tests/hex_effects_test.cpp
-                             tests/show_golden_test.cpp tests/shape_test.cpp tests/presets_golden_test.cpp tests/hex2_effects_test.cpp tests/inputs_golden_test.cpp tests/post_test.cpp
+                             tests/show_golden_test.cpp tests/shape_test.cpp tests/presets_golden_test.cpp tests/hex2_effects_test.cpp tests/inputs_golden_test.cpp tests/post_test.cpp tests/link_test.cpp
                              tests/build_kit_test.cpp
                              ../firmware/node-f767/src/core/protocol.c
                              ../firmware/node-f767/src/core/node_core.c
