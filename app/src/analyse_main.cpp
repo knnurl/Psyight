@@ -36,12 +36,13 @@
 // --json <file> writes the --param overrides, one row per track (its set, tempo band and every
 // score) and the totals for all, tune and held out, under the printed names in snake case, so
 // two runs can be diffed by a script.
-// --labels-stats <audio or folder> [more...] reads the labels of the tracks marked done, without
-// analysis (the audio is decoded only for its length): per track its tempo, sections per minute,
-// what else is labelled and its set (T or H); then, over all tracks and per tempo band (under
-// 160, 160 to 175, over 175 BPM, a stand-in for subgenre), the median sections per minute,
-// section lengths in bars per label (bars between nearest downbeats), the bars since the
-// previous boundary (from bar 1 for the first) by their place on the 4 and 8-bar lines,
+// --exclude <audio> (repeatable) leaves a file out of --sections-eval and --labels-stats (a
+// second labelled copy of a track). --labels-stats <audio or folder> [more...] reads the labels of
+// the tracks marked done, without analysis (the audio is decoded only for its length): per track
+// its tempo, sections per minute, what else is labelled and its set (T or H); then, over all tracks
+// and per tempo band (under 160, 160 to 175, over 175 BPM, a stand-in for subgenre), the median
+// sections per minute, section lengths in bars per label (bars between nearest downbeats), the bars
+// since the previous boundary (from bar 1 for the first) by their place on the 4 and 8-bar lines,
 // breakdown lengths by what follows once builds and pre-drops are passed, and how many tracks
 // carry a labelled phrase grid, phases, roles and events.
 // --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
@@ -703,8 +704,10 @@ void print_boundary_scores(const char *set, const EvalTotals &t) {
                 100.0 * b.confusion[kGroove][kDrop] / std::max(1, row(kGroove)), row(kGroove));
 }
 
-// The tracks named, then those under the folders (searched as the labelling mode does).
-std::vector<TrackEntry> tracks_from(const std::vector<std::wstring> &paths) {
+// The tracks named, then those under the folders (searched as the labelling mode does), less
+// the excluded files (--exclude, the same file by any path).
+std::vector<TrackEntry> tracks_from(const std::vector<std::wstring> &paths,
+                                    const std::vector<std::filesystem::path> &excludes) {
     std::vector<std::filesystem::path> folders;
     std::vector<TrackEntry> tracks;
     for (const std::wstring &p : paths) {
@@ -722,13 +725,20 @@ std::vector<TrackEntry> tracks_from(const std::vector<std::wstring> &paths) {
     for (TrackEntry &t : scan_track_folders(folders)) {
         tracks.push_back(std::move(t));
     }
+    std::erase_if(tracks, [&](const TrackEntry &t) {
+        return std::any_of(excludes.begin(), excludes.end(), [&](const std::filesystem::path &x) {
+            std::error_code error;
+            return std::filesystem::equivalent(t.path, x, error);
+        });
+    });
     return tracks;
 }
 
 int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags,
-                  const SectionParams &section_params, const ParamValues &overrides) {
+                  const SectionParams &section_params, const ParamValues &overrides,
+                  const std::vector<std::filesystem::path> &excludes) {
     nlohmann::json json_tracks = nlohmann::json::array();
-    const std::vector<TrackEntry> tracks = tracks_from(paths);
+    const std::vector<TrackEntry> tracks = tracks_from(paths, excludes);
     std::array<EvalTotals, 3> totals; // All, tune, held out.
     DetailScore detail_total;
     for (const TrackEntry &track : tracks) {
@@ -1028,9 +1038,10 @@ void print_label_stats(const char *set, const LabelStats &st) {
                 st.phrase_grids, st.phases, st.roles, st.events);
 }
 
-int labels_stats(const std::vector<std::wstring> &paths) {
+int labels_stats(const std::vector<std::wstring> &paths,
+                 const std::vector<std::filesystem::path> &excludes) {
     std::array<LabelStats, 4> stats; // All, then per tempo band.
-    for (const TrackEntry &track : tracks_from(paths)) {
+    for (const TrackEntry &track : tracks_from(paths, excludes)) {
         if (track.status != LabelStatus::done) {
             continue;
         }
@@ -1084,6 +1095,7 @@ int wmain(int argc, wchar_t **argv) {
     bool evaluate = false;
     bool label_statistics = false;
     EvalFlags eval_flags;
+    std::vector<std::filesystem::path> excludes;
     TrackAnalysisOptions options;
     ParamValues overrides;
     std::optional<double> texture_step;
@@ -1109,6 +1121,8 @@ int wmain(int argc, wchar_t **argv) {
             eval_flags.detail = true;
         } else if (std::wcscmp(argv[i], L"--split") == 0) {
             eval_flags.split = true;
+        } else if (std::wcscmp(argv[i], L"--exclude") == 0 && i + 1 < argc) {
+            excludes.emplace_back(argv[++i]);
         } else if (std::wcscmp(argv[i], L"--scores") == 0) {
             eval_flags.scores = true;
         } else if (std::wcscmp(argv[i], L"--json") == 0 && i + 1 < argc) {
@@ -1148,10 +1162,10 @@ int wmain(int argc, wchar_t **argv) {
         return sections_report(paths, options.sections);
     }
     if (label_statistics) {
-        return labels_stats(paths);
+        return labels_stats(paths, excludes);
     }
     if (evaluate) {
-        return sections_eval(paths, eval_flags, options.sections, overrides);
+        return sections_eval(paths, eval_flags, options.sections, overrides, excludes);
     }
     int status = 0;
     for (const std::wstring &path : paths) {
