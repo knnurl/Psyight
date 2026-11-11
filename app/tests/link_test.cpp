@@ -2,6 +2,7 @@
 // Decoders are checked against packets built byte by byte at the documented offsets, not only
 // against the encoders, so a change of layout shows here.
 
+#include "link/decks.h"
 #include "link/packet.h"
 #include "link/prodjlink.h"
 #include "link/tcnet.h"
@@ -213,4 +214,113 @@ TEST_CASE("tcnet: the time packet's playheads, totals and states") {
     CHECK(decode_header(t).has_value());
     t[5] = 'X';
     CHECK_FALSE(decode_header(t).has_value());
+}
+
+namespace {
+
+constexpr std::int64_t kMs = 1'000'000;
+
+LinkPacket on_port(int port, std::vector<std::uint8_t> bytes, std::int64_t t_ns) {
+    LinkPacket p;
+    p.t_ns = t_ns;
+    p.port = port;
+    p.src = "169.254.1.2";
+    p.bytes = std::move(bytes);
+    return p;
+}
+
+LinkPacket position(int device, double playhead_ms, std::int64_t t_ns, double pitch = 0.0,
+                    double length_s = 400.0, double bpm = 150.0) {
+    return on_port(prodjlink::kBeatPort,
+                   prodjlink::encode(prodjlink::Position{"CDJ-3000", device, length_s, playhead_ms,
+                                                         pitch, bpm * (1 + pitch)}),
+                   t_ns);
+}
+
+} // namespace
+
+TEST_CASE("decks: positions say playing, paused and cued; the playhead extrapolates") {
+    DeckSet decks;
+    std::int64_t t = 1000 * kMs;
+    // Deck 2 playing at +2%: positions every 30 ms advance by 30.6 ms.
+    double head = 60000.0;
+    for (int k = 0; k < 10; ++k) {
+        REQUIRE(decks.apply(position(2, head, t, 0.02)));
+        head += 30.0 * 1.02;
+        t += 30 * kMs;
+    }
+    const DeckState &d = *decks.deck(2);
+    CHECK(d.present);
+    CHECK(d.playing);
+    CHECK(d.has_position);
+    CHECK(d.track_length_s == 400.0);
+    CHECK(d.pitch == doctest::Approx(0.02));
+    CHECK(d.track_bpm == doctest::Approx(150.0).epsilon(0.002));
+    CHECK(d.started_ns == 1030 * kMs);
+    // 100 ms after the last report: 102 ms further.
+    CHECK(deck_position_ms(d, d.position_ns + 100 * kMs) == doctest::Approx(d.playhead_ms + 102.0));
+    // Paused: the playhead stops; after 150 ms without movement the deck stops.
+    const double held = d.playhead_ms;
+    for (int k = 0; k < 8; ++k) {
+        decks.apply(position(2, held, t, 0.02));
+        t += 30 * kMs;
+    }
+    CHECK_FALSE(decks.deck(2)->playing);
+    CHECK(deck_position_ms(*decks.deck(2), t + 500 * kMs) == doctest::Approx(held));
+    // Cued back to 0 (a jump backwards): stopped; then plays again from there.
+    decks.apply(position(2, 0.0, t, 0.02));
+    CHECK_FALSE(decks.deck(2)->playing);
+    t += 30 * kMs;
+    decks.apply(position(2, 30.6, t, 0.02));
+    CHECK(decks.deck(2)->playing);
+    CHECK(decks.deck(2)->started_ns == t);
+    // Other decks untouched; silence clears the deck.
+    CHECK_FALSE(decks.deck(1)->present);
+    decks.expire(t + 4000 * kMs);
+    CHECK_FALSE(decks.deck(2)->present);
+    CHECK(decks.deck(2)->number == 2);
+}
+
+TEST_CASE("decks: beats alone, the mixer's on-air flags, TCNet layers") {
+    DeckSet decks;
+    // A CDJ-2000NXS2 sends beats but no position: playing, position unknown.
+    const prodjlink::Beat beat{"CDJ-2000NXS2", 1, 140.0, 0.0, 1, 428, 1714};
+    decks.apply(on_port(prodjlink::kBeatPort, prodjlink::encode(beat), 100 * kMs));
+    CHECK(decks.deck(1)->playing);
+    CHECK_FALSE(decks.deck(1)->has_position);
+    CHECK(decks.deck(1)->track_bpm == 140.0);
+    decks.expire(600 * kMs); // Under two beats (0.86 s): still playing.
+    CHECK(decks.deck(1)->playing);
+    decks.expire(1100 * kMs); // Over two beats without one: stopped.
+    CHECK_FALSE(decks.deck(1)->playing);
+
+    // The mixer: channels 2 and 3 on air.
+    prodjlink::OnAir air{"DJM-A9", 33, 4, {false, true, true, false, false, false}};
+    decks.apply(on_port(prodjlink::kBeatPort, prodjlink::encode(air), 1200 * kMs));
+    CHECK(decks.mixer_name() == "DJM-A9");
+    CHECK(decks.deck(2)->on_air_known);
+    CHECK(decks.deck(2)->on_air);
+    CHECK_FALSE(decks.deck(1)->on_air);
+    CHECK(decks.deck(1)->on_air_known);
+
+    // TCNet: layer 3 playing at 12.5 s of 380 s; layer 4 paused.
+    tcnet::Time t;
+    t.header.node_name = "BRIDGE";
+    t.playhead_ms[2] = 12500;
+    t.total_ms[2] = 380000;
+    t.state[2] = tcnet::LayerState::playing;
+    t.playhead_ms[3] = 4000;
+    t.total_ms[3] = 300000;
+    t.state[3] = tcnet::LayerState::paused;
+    decks.apply(on_port(tcnet::kTimePort, tcnet::encode_time(t), 1300 * kMs));
+    CHECK(decks.deck(3)->playing);
+    CHECK(decks.deck(3)->track_length_s == 380.0);
+    CHECK(deck_position_ms(*decks.deck(3), 1400 * kMs) == doctest::Approx(12600.0));
+    CHECK_FALSE(decks.deck(4)->playing);
+    CHECK(decks.deck(4)->present);
+    CHECK_FALSE(decks.deck(5)->present); // Empty layers are not decks.
+    // The mixer gone quiet: on-air no longer known.
+    decks.expire(5000 * kMs);
+    CHECK(decks.mixer_name().empty());
+    CHECK_FALSE(decks.deck(2)->on_air_known);
 }
