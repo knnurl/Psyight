@@ -80,6 +80,10 @@ Last updated: 2026-11-10. Written so another agent can pick up without the origi
   - The Hive stage's hexagon is two open half-strips tagged stage and hexagon: no rings, so the ring effects are dark on it. Left untagged (the plan's open point for the owner).
   - Show baseline (synthetic, mandala): only additions; no Hexagon 2 scene has over a quarter of the rig above byte 20 in any frame (SPEC 7.2); most flashes alone in 1 s 5 (Acid gate 2, Smoke).
 
+## Sections round 2 (planned 2026-11-11, nothing built)
+- docs/PLAN_SECTIONS_EFFECTS.md revised: a status table, an assessment (the first plan only rewarded fewer sections; Alien Army is under-segmented, 11 detected against 36 labelled), revised "done when" targets (proposals, to confirm after the baseline), and the open work.
+- docs/PLAN_SECTIONS_BATCHES.md: the implementation spec in six batches (A measuring tools, B boundary placement, C block novelty, D breaks, fills, pre-drops and phases to the engine, E live scene dwell and tension, F breakdown and build scene candidates). Each batch ends with a stop for the owner; B and C change a default only through the gate in its section 1.2. Branch `sections-2` in its own worktree, from the commit that holds both files (uncommitted on `follow-mode` when written).
+
 ## Studio day: what to check with the DJM-A9 and the CDJs
 - docs/STUDIO_CHECKLIST.md (2026-11-11): the A9's audio (mic-free send, output level, the 54-minute USB dropouts), its MIDI faders (not checked: the mixer was disconnected), the CDJs' Pro DJ Link and TCNet captures for follow mode, and the tracks to bring. Check scripts in tools/studio/.
 - Follow mode (branch `follow-mode`, docs/PLAN_FOLLOW_MODE.md): phases 1 and 2 done (packet log, decoders, deck state); the rest in progress.
