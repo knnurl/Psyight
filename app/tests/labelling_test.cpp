@@ -219,6 +219,16 @@ TEST_CASE("section marks: scoring detected sections against labelled ones") {
     CHECK(sum.bars == 100);
 }
 
+TEST_CASE("section marks: the tune and held-out split hashes the lower-cased file name") {
+    // FNV-1a 32-bit reference values.
+    CHECK(fnv1a_32("") == 0x811c9dc5u);
+    CHECK(fnv1a_32("a") == 0xe40c292cu);
+    CHECK(fnv1a_32("foobar") == 0xbf9cf968u);
+    CHECK_FALSE(held_out_track("a")); // 0xe40c292c is even.
+    CHECK(held_out_track("A") == held_out_track("a"));
+    CHECK(held_out_track("Track.MP3") == ((fnv1a_32("track.mp3") & 1u) != 0));
+}
+
 TEST_CASE("labelling: bar 1 may lie before the audio; analyses start at the first bar in it") {
     // 192 BPM (1.25 s bars) with bar 27 at 31.6 s: bar 1 at -0.9 s.
     const LabelGrid grid{192.0, 31.6 - 26 * 1.25};

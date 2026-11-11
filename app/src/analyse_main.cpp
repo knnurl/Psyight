@@ -23,7 +23,9 @@
 // --sections-eval scores the detection against the sections labelled in the labelling mode, for
 // every track marked done (folders searched as the labelling mode does): boundary precision,
 // recall and F within one bar, the share of bars with the same label, and whether the detected
-// phrase grid lines up with a labelled one; then the totals over the tracks.
+// phrase grid lines up with a labelled one; then the totals over the tracks. With --split, each
+// track line ends in T (tune) or H (held out), the fixed split of docs/PLAN_SECTIONS_BATCHES.md 1.1
+// (held_out_track), and the totals follow for each set with its tracks per tempo band.
 // --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
 // declare_section_params, for example --param section.texture_step=1.2; an unknown id or a value
 // outside the declared range is an error. The overrides are printed on the first line.
@@ -524,7 +526,26 @@ void print_boundary_detail(const Labels &l, const std::vector<SectionLabel> &det
     print('D', detected, l.sections);
 }
 
-int sections_eval(const std::vector<std::wstring> &paths, bool detail,
+// Tempo bands, as a stand-in for subgenre: under 160, 160 to 175, over 175 BPM.
+constexpr const char *kTempoBands[] = {"under 160 BPM", "160 to 175 BPM", "over 175 BPM"};
+int tempo_band(double bpm) { return bpm < 160.0 ? 0 : bpm <= 175.0 ? 1 : 2; }
+
+// --sections-eval's sums over a set of tracks: all, tune or held out (--split).
+struct EvalTotals {
+    int tracks = 0;
+    SectionScore score;
+    int phrase_tracks = 0;
+    int phrase_agree = 0;
+    std::array<int, 3> tempo_bands{}; // Tracks per kTempoBands, by the labelled tempo.
+};
+constexpr const char *kSetNames[] = {"All", "Tune", "Held out"};
+
+struct EvalFlags {
+    bool detail = false; // --detail
+    bool split = false;  // --split
+};
+
+int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags,
                   const SectionParams &section_params) {
     std::vector<std::filesystem::path> folders;
     std::vector<TrackEntry> tracks;
@@ -543,11 +564,8 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
     for (TrackEntry &t : scan_track_folders(folders)) {
         tracks.push_back(std::move(t));
     }
-    SectionScore total;
+    std::array<EvalTotals, 3> totals; // All, tune, held out.
     DetailScore detail_total;
-    int phrase_tracks = 0;
-    int phrase_agree = 0;
-    int scored = 0;
     for (const TrackEntry &track : tracks) {
         if (track.status != LabelStatus::done) {
             continue;
@@ -570,8 +588,13 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
         const TrackAnalysis &a = analysis.value();
         const std::vector<SectionLabel> detected = sections_from_detection(a.sections, l.grid);
         const SectionScore s = score_sections(l.sections, detected, l.grid, a.duration_s);
-        total += s;
-        ++scored;
+        const bool held_out = held_out_track(path_to_utf8(track.path.filename()));
+        EvalTotals *const sets[] = {&totals[0], &totals[held_out ? 2 : 1]};
+        for (EvalTotals *t : sets) {
+            t->score += s;
+            ++t->tracks;
+            ++t->tempo_bands[static_cast<size_t>(tempo_band(l.grid.bpm))];
+        }
         std::string phrase = "phrase grid not labelled";
         if (l.phrases.set && a.beats.bpm > 0.0) {
             const double bar_s = 4.0 * 60.0 / a.beats.bpm;
@@ -583,16 +606,21 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
             const long long bars = std::max(1, l.phrases.bars);
             const long long wrapped = ((off % bars) + bars) % bars;
             const long long shift = wrapped > bars / 2 ? wrapped - bars : wrapped;
-            ++phrase_tracks;
-            phrase_agree += shift == 0;
+            for (EvalTotals *t : sets) {
+                ++t->phrase_tracks;
+                t->phrase_agree += shift == 0;
+            }
             phrase = shift == 0 ? "phrase grid agrees"
                                 : "phrase grid off by " + std::to_string(shift) + " bars";
         }
         std::printf("%-50s  boundaries P %.2f R %.2f F %.2f (%d labelled, %d detected)  bars %.0f%%"
-                    "  %s  (%s)\n",
+                    "  %s  (%s)%s\n",
                     track.name.substr(0, 50).c_str(), s.precision(), s.recall(), s.f1(),
                     s.labelled_boundaries, s.detected_boundaries, 100.0 * s.bar_accuracy(),
-                    phrase.c_str(), options.source == AnalysisSource::stems ? "stems" : "mix");
+                    phrase.c_str(), options.source == AnalysisSource::stems ? "stems" : "mix",
+                    !flags.split ? ""
+                    : held_out   ? "  H"
+                                 : "  T");
         {
             std::vector<EventLabel> found;
             for (const DetectedEvent &e : a.events) {
@@ -609,20 +637,34 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
                             d.detected_events);
             }
         }
-        if (detail) {
+        if (flags.detail) {
             print_boundary_detail(l, detected, a);
         }
         std::fflush(stdout);
     }
-    if (scored == 0) {
+    const EvalTotals &all = totals[0];
+    if (all.tracks == 0) {
         std::printf("No track marked done (label sections in the app: View > Label sections, then "
                     "Done).\n");
         return 1;
     }
     std::printf("\nOver %d track%s: boundaries within a bar P %.2f R %.2f F %.2f; %.0f%% of bars "
                 "labelled alike; phrase grid agrees on %d of %d labelled\n",
-                scored, scored == 1 ? "" : "s", total.precision(), total.recall(), total.f1(),
-                100.0 * total.bar_accuracy(), phrase_agree, phrase_tracks);
+                all.tracks, all.tracks == 1 ? "" : "s", all.score.precision(), all.score.recall(),
+                all.score.f1(), 100.0 * all.score.bar_accuracy(), all.phrase_agree,
+                all.phrase_tracks);
+    if (flags.split) {
+        for (size_t set = 1; set < totals.size(); ++set) {
+            const EvalTotals &t = totals[set];
+            std::printf("%s, %d track%s (%s %d, %s %d, %s %d): boundaries within a bar P %.2f "
+                        "R %.2f F %.2f; %.0f%% of bars labelled alike; phrase grid agrees on %d of "
+                        "%d labelled\n",
+                        kSetNames[set], t.tracks, t.tracks == 1 ? "" : "s", kTempoBands[0],
+                        t.tempo_bands[0], kTempoBands[1], t.tempo_bands[1], kTempoBands[2],
+                        t.tempo_bands[2], t.score.precision(), t.score.recall(), t.score.f1(),
+                        100.0 * t.score.bar_accuracy(), t.phrase_agree, t.phrase_tracks);
+        }
+    }
     if (detail_total.labelled()) {
         std::printf("Finer detail: phases %.2f agree, roles %.0f%% of %d bars, events P %.2f "
                     "R %.2f (%d labelled)\n",
@@ -668,7 +710,7 @@ int wmain(int argc, wchar_t **argv) {
     bool bar_table = false;
     bool report = false;
     bool evaluate = false;
-    bool detail = false;
+    EvalFlags eval_flags;
     TrackAnalysisOptions options;
     ParamValues overrides;
     std::optional<double> texture_step;
@@ -689,7 +731,9 @@ int wmain(int argc, wchar_t **argv) {
         } else if (std::wcscmp(argv[i], L"--texture-step") == 0 && i + 1 < argc) {
             texture_step = std::wcstod(argv[++i], nullptr);
         } else if (std::wcscmp(argv[i], L"--detail") == 0) {
-            detail = true;
+            eval_flags.detail = true;
+        } else if (std::wcscmp(argv[i], L"--split") == 0) {
+            eval_flags.split = true;
         } else if (std::wcscmp(argv[i], L"--bars") == 0) {
             bar_table = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
@@ -725,7 +769,7 @@ int wmain(int argc, wchar_t **argv) {
         return sections_report(paths, options.sections);
     }
     if (evaluate) {
-        return sections_eval(paths, detail, options.sections);
+        return sections_eval(paths, eval_flags, options.sections);
     }
     int status = 0;
     for (const std::wstring &path : paths) {

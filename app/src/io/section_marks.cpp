@@ -233,6 +233,25 @@ SectionScore score_sections(const std::vector<SectionLabel> &labelled,
     return score;
 }
 
+std::uint32_t fnv1a_32(std::string_view bytes) {
+    std::uint32_t hash = 2166136261u;
+    for (const char c : bytes) {
+        hash ^= static_cast<unsigned char>(c);
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+bool held_out_track(std::string_view file_name_utf8) {
+    std::string lower(file_name_utf8);
+    for (char &c : lower) {
+        if (c >= 'A' && c <= 'Z') {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+    }
+    return (fnv1a_32(lower) & 1u) != 0;
+}
+
 DetailScore &DetailScore::operator+=(const DetailScore &o) {
     phase_pairs += o.phase_pairs;
     phase_pairs_agreeing += o.phase_pairs_agreeing;

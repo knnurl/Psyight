@@ -7,8 +7,10 @@
 #include "analysis/sections.h"
 #include "io/labels.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace psyight {
@@ -82,6 +84,12 @@ struct SectionScore {
 SectionScore score_sections(const std::vector<SectionLabel> &labelled,
                             const std::vector<SectionLabel> &detected, const LabelGrid &grid,
                             double duration_s, double tolerance_bars = 1.0);
+
+// The fixed split of the labelled tracks (docs/PLAN_SECTIONS_BATCHES.md 1.1): a track is held out
+// when the FNV-1a 32-bit hash of its file name (UTF-8, without the folder, extension included,
+// ASCII letters lower-cased) is odd, else it is in the tune set.
+std::uint32_t fnv1a_32(std::string_view bytes);
+bool held_out_track(std::string_view file_name_utf8);
 
 // The finer detail (SPEC 6.6.1) against the labels, per bar of the grid: phases by pairs of bars
 // (both labelled with a phase: the labels and the detection agree on same or different, which
