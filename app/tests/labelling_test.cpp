@@ -219,6 +219,110 @@ TEST_CASE("section marks: scoring detected sections against labelled ones") {
     CHECK(sum.bars == 100);
 }
 
+TEST_CASE("section marks: right bar, seconds, offsets, kinds, transitions and confusion") {
+    const LabelGrid g{150.0, 0.0}; // Bars of 1.6 s from 0.
+    const std::vector<SectionLabel> labelled = {
+        {0.0, "intro"}, {16.0, "groove"}, {48.0, "breakdown"}, {64.0, "drop"}};
+    // 16.0 exact; an extra at 32.0; 48.0 a bar late; 64.0 two bars late.
+    const std::vector<SectionLabel> detected = {
+        {0.0, "intro"}, {16.0, "groove"}, {32.0, "groove"}, {49.6, "breakdown"}, {67.2, "drop"}};
+    const auto kick_change_at = [](double t) { return t >= 40.0; }; // 48 and 64.
+    const BoundaryScores s = score_boundaries(labelled, detected, g, 80.0, kick_change_at);
+    CHECK(s.right_bar.labelled == 3);
+    CHECK(s.right_bar.detected == 4);
+    CHECK(s.right_bar.matched == 1); // Only 16.0: a bar late is the wrong bar.
+    CHECK(s.right_bar.precision() == doctest::Approx(0.25));
+    CHECK(s.right_bar.recall() == doctest::Approx(1.0 / 3.0));
+    CHECK(s.within_half_s.matched == 1);
+    CHECK(s.within_3_s.matched == 2); // 1.6 s in, 3.2 s out.
+    // Within a bar (as score_sections): 16.0 and 48.0.
+    CHECK(s.all.labelled == 3);
+    CHECK(s.all.matched == score_sections(labelled, detected, g, 80.0).matched);
+    CHECK(s.all.matched == 2);
+    // Offsets, detected minus labelled: 0, +1, +2.
+    CHECK(s.all.bars[kOffsetBars] == 1);
+    CHECK(s.all.bars[kOffsetBars + 1] == 1);
+    CHECK(s.all.bars[kOffsetBars + 2] == 1);
+    CHECK(s.all.none == 0);
+    // Kinds.
+    CHECK(s.kick_change.labelled == 2);
+    CHECK(s.kick_change.matched == 1);
+    CHECK(s.kick_change.bars[kOffsetBars + 1] == 1);
+    CHECK(s.kick_change.bars[kOffsetBars + 2] == 1);
+    CHECK(s.kick_continuous.labelled == 1);
+    CHECK(s.kick_continuous.matched == 1);
+    CHECK(s.kick_continuous.bars[kOffsetBars] == 1);
+    CHECK(s.kick_continuous.recall() == doctest::Approx(1.0));
+    // Transitions: {labelled, matched within a bar}.
+    CHECK(s.transitions.size() == 3);
+    CHECK(s.transitions.at("intro to groove") == std::pair<int, int>{1, 1});
+    CHECK(s.transitions.at("groove to breakdown") == std::pair<int, int>{1, 1});
+    CHECK(s.transitions.at("breakdown to drop") == std::pair<int, int>{1, 0});
+    // Confusion over the 50 bars: rows labelled, columns detected (intro, groove, breakdown,
+    // build, drop, outro).
+    CHECK(s.confusion[0][0] == 10);
+    CHECK(s.confusion[1][1] == 20);
+    CHECK(s.confusion[2][1] == 1); // Bar 30: labelled breakdown, detected groove.
+    CHECK(s.confusion[2][2] == 9);
+    CHECK(s.confusion[4][2] == 2); // Bars 40 and 41.
+    CHECK(s.confusion[4][4] == 8);
+    int bars = 0;
+    for (const auto &row : s.confusion) {
+        for (const int n : row) {
+            bars += n;
+        }
+    }
+    CHECK(bars == 50);
+
+    BoundaryScores sum = s;
+    sum += s;
+    CHECK(sum.right_bar.matched == 2);
+    CHECK(sum.all.bars[kOffsetBars + 2] == 2);
+    CHECK(sum.transitions.at("breakdown to drop") == std::pair<int, int>{2, 0});
+    CHECK(sum.confusion[4][4] == 16);
+}
+
+TEST_CASE("section marks: boundary scores at the edges") {
+    const LabelGrid g{150.0, 0.0};
+    const auto never = [](double) { return false; };
+    // A boundary a bar early: within a bar, not on the right bar, offset -1.
+    const std::vector<SectionLabel> labelled = {{0.0, "intro"}, {16.0, "groove"}};
+    const BoundaryScores early =
+        score_boundaries(labelled, {{0.0, "intro"}, {14.4, "groove"}}, g, 32.0, never);
+    CHECK(early.right_bar.matched == 0);
+    CHECK(early.all.matched == 1);
+    CHECK(early.all.bars[kOffsetBars - 1] == 1);
+    // A label placed a beat before the downbeat still marks the bar it leads into.
+    const BoundaryScores beat_early = score_boundaries(
+        {{0.0, "intro"}, {15.6, "groove"}}, {{0.0, "intro"}, {16.0, "groove"}}, g, 32.0, never);
+    CHECK(beat_early.right_bar.matched == 1);
+    CHECK(beat_early.all.bars[kOffsetBars] == 1);
+    // Five bars off is beyond the histogram.
+    const BoundaryScores far =
+        score_boundaries(labelled, {{0.0, "intro"}, {24.0, "groove"}}, g, 32.0, never);
+    CHECK(far.all.none == 1);
+    CHECK(far.kick_continuous.none == 1);
+    // No detected boundary.
+    const BoundaryScores none = score_boundaries(labelled, {{0.0, "intro"}}, g, 32.0, never);
+    CHECK(none.right_bar.detected == 0);
+    CHECK(none.right_bar.matched == 0);
+    CHECK(none.right_bar.recall() == doctest::Approx(0.0));
+    CHECK(none.all.none == 1);
+    CHECK(none.confusion[0][0] == 10);
+    CHECK(none.confusion[1][0] == 10);
+    // No labelled boundary.
+    const BoundaryScores unlabelled = score_boundaries({{0.0, "intro"}}, labelled, g, 32.0, never);
+    CHECK(unlabelled.right_bar.labelled == 0);
+    CHECK(unlabelled.right_bar.detected == 1);
+    CHECK(unlabelled.right_bar.precision() == doctest::Approx(0.0));
+    CHECK(unlabelled.all.labelled == 0);
+    CHECK(unlabelled.transitions.empty());
+    // A predrop counts as the section before it in the confusion.
+    const BoundaryScores predrop =
+        score_boundaries({{0.0, "groove"}, {16.0, "predrop"}}, {{0.0, "groove"}}, g, 32.0, never);
+    CHECK(predrop.confusion[1][1] == 20);
+}
+
 TEST_CASE("section marks: the tune and held-out split hashes the lower-cased file name") {
     // FNV-1a 32-bit reference values.
     CHECK(fnv1a_32("") == 0x811c9dc5u);

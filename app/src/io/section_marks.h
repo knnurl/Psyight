@@ -7,7 +7,10 @@
 #include "analysis/sections.h"
 #include "io/labels.h"
 
+#include <array>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -84,6 +87,60 @@ struct SectionScore {
 SectionScore score_sections(const std::vector<SectionLabel> &labelled,
                             const std::vector<SectionLabel> &detected, const LabelGrid &grid,
                             double duration_s, double tolerance_bars = 1.0);
+
+// More boundary scores (docs/PLAN_SECTIONS_BATCHES.md A2), beside SectionScore. A boundary's bar is
+// the bar of the grid starting at its nearest downbeat (a label placed a beat early still marks
+// the bar it leads into). One-to-one matching is score_sections' (each labelled boundary in turn
+// takes the nearest unused detected one that qualifies).
+struct BoundaryHits {
+    int labelled = 0;
+    int detected = 0;
+    int matched = 0;
+    double precision() const { return detected > 0 ? 1.0 * matched / detected : 1.0; }
+    double recall() const { return labelled > 0 ? 1.0 * matched / labelled : 1.0; }
+    double f1() const {
+        const double p = precision();
+        const double r = recall();
+        return p + r > 0.0 ? 2.0 * p * r / (p + r) : 0.0;
+    }
+    BoundaryHits &operator+=(const BoundaryHits &o);
+};
+
+// Labelled boundaries: how many were matched within a bar, and the signed offset (detected minus
+// labelled, whole bars) of the nearest detected boundary within kOffsetBars bars (none beyond).
+inline constexpr int kOffsetBars = 4;
+struct BoundaryOffsets {
+    int labelled = 0;
+    int matched = 0;                             // Within a bar.
+    std::array<int, 2 * kOffsetBars + 1> bars{}; // Index offset + kOffsetBars.
+    int none = 0;                                // No detected boundary within kOffsetBars.
+    double recall() const { return labelled > 0 ? 1.0 * matched / labelled : 1.0; }
+    BoundaryOffsets &operator+=(const BoundaryOffsets &o);
+};
+
+// The six section kinds the confusion counts (kSectionNames without predrop, which counts as the
+// section it belongs to: the one before it).
+inline constexpr size_t kSectionKinds = 6;
+
+struct BoundaryScores {
+    BoundaryHits right_bar;     // Matched only on the labelled boundary's own bar.
+    BoundaryHits within_half_s; // Within 0.5 s.
+    BoundaryHits within_3_s;    // Within 3 s.
+    BoundaryOffsets all;
+    BoundaryOffsets kick_change;     // The kick state differs between the bars either side...
+    BoundaryOffsets kick_continuous; // ...or not.
+    // Per labelled transition ("groove to breakdown"): {labelled, matched within a bar}.
+    std::map<std::string, std::pair<int, int>> transitions;
+    // Bars (score_sections' bars) by labelled kind (row) and detected kind (column).
+    std::array<std::array<int, kSectionKinds>, kSectionKinds> confusion{};
+    BoundaryScores &operator+=(const BoundaryScores &o);
+};
+
+// kick_change_at(t_s): whether the kick state of the bar before t_s and the bar after differ.
+BoundaryScores score_boundaries(const std::vector<SectionLabel> &labelled,
+                                const std::vector<SectionLabel> &detected, const LabelGrid &grid,
+                                double duration_s,
+                                const std::function<bool(double)> &kick_change_at);
 
 // The fixed split of the labelled tracks (docs/PLAN_SECTIONS_BATCHES.md 1.1): a track is held out
 // when the FNV-1a 32-bit hash of its file name (UTF-8, without the folder, extension included,

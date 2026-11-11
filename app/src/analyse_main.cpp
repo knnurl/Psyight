@@ -25,7 +25,14 @@
 // recall and F within one bar, the share of bars with the same label, and whether the detected
 // phrase grid lines up with a labelled one; then the totals over the tracks. With --split, each
 // track line ends in T (tune) or H (held out), the fixed split of docs/PLAN_SECTIONS_BATCHES.md 1.1
-// (held_out_track), and the totals follow for each set with its tracks per tempo band.
+// (held_out_track), and the totals follow for each set with its tracks per tempo band. --scores
+// adds a line per track and a block after the totals (each set's too with --split): boundaries on
+// the right bar (the labelled boundary's own bar), hit rates within 0.5 s and 3 s (all matched one
+// to one), the signed offset in bars of the nearest detected boundary within 4 bars of each
+// labelled one, recall and offsets for kick-change boundaries (the Viterbi kick state differs in
+// the bars either side) and kick-continuous ones, recall per labelled transition (under 5 cases
+// pooled as other), the confusion of bars by labelled and detected kind (a predrop counts as the
+// section before it), and the detected over labelled boundary count per track with its median.
 // --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
 // declare_section_params, for example --param section.texture_step=1.2; an unknown id or a value
 // outside the declared range is an error. The overrides are printed on the first line.
@@ -485,6 +492,16 @@ int sections_report(const std::vector<std::wstring> &paths, const SectionParams 
     return per_minute.empty() ? 1 : 0;
 }
 
+// The Viterbi kick state of the analysis's bar holding t (bar_s long): K, - or ? (no bar).
+char kick_at(const TrackAnalysis &a, double bar_s, double t) {
+    for (const SectionBar &b : a.section_bars) {
+        if (t >= b.start_s && t < b.start_s + bar_s) {
+            return b.kick ? 'K' : '-';
+        }
+    }
+    return '?';
+}
+
 // --detail: every labelled boundary (L) and every detected one (D) with its change, its bar
 // (from the labelled bar 1, and its place in an 8-bar phrase from there or from the labelled
 // phrase grid), whether the other side has one within a bar, and the kick either side.
@@ -500,14 +517,6 @@ void print_boundary_detail(const Labels &l, const std::vector<SectionLabel> &det
         }
         return false;
     };
-    const auto kick_at = [&](double t) {
-        for (const SectionBar &b : a.section_bars) {
-            if (t >= b.start_s && t < b.start_s + bar_s) {
-                return b.kick ? 'K' : '-';
-            }
-        }
-        return '?';
-    };
     const LabelPhrases phrases =
         l.phrases.set ? l.phrases : LabelPhrases{true, l.grid.first_downbeat_s, 8};
     const auto print = [&](char kind, const std::vector<SectionLabel> &list,
@@ -518,8 +527,8 @@ void print_boundary_detail(const Labels &l, const std::vector<SectionLabel> &det
             std::printf("    %c %8.2f s  %-9s -> %-9s  bar %4lld  in phrase %d  %s  kick %c%c\n",
                         kind, t, list[i - 1].label.c_str(), list[i].label.c_str(),
                         bar_index_at(l.grid, t + 1e-6) + 1, bar_in_phrase(l.grid, eight, t + 1e-6),
-                        near_one(other, t) ? "hit " : "miss", kick_at(t - 0.5 * bar_s),
-                        kick_at(t + 0.5 * bar_s));
+                        near_one(other, t) ? "hit " : "miss", kick_at(a, bar_s, t - 0.5 * bar_s),
+                        kick_at(a, bar_s, t + 0.5 * bar_s));
         }
     };
     print('L', l.sections, detected);
@@ -537,13 +546,94 @@ struct EvalTotals {
     int phrase_tracks = 0;
     int phrase_agree = 0;
     std::array<int, 3> tempo_bands{}; // Tracks per kTempoBands, by the labelled tempo.
+    BoundaryScores boundaries;
+    std::vector<double> count_ratios; // Detected over labelled boundaries, per track.
 };
 constexpr const char *kSetNames[] = {"All", "Tune", "Held out"};
 
 struct EvalFlags {
     bool detail = false; // --detail
     bool split = false;  // --split
+    bool scores = false; // --scores
 };
+
+std::string offsets_text(const BoundaryOffsets &o) {
+    std::string text;
+    char item[32];
+    for (int k = -kOffsetBars; k <= kOffsetBars; ++k) {
+        std::snprintf(item, sizeof(item), " %+d: %d", k,
+                      o.bars[static_cast<size_t>(k + kOffsetBars)]);
+        text += item;
+    }
+    std::snprintf(item, sizeof(item), ", none: %d", o.none);
+    return text + item;
+}
+
+// The --scores block for one set of tracks.
+void print_boundary_scores(const char *set, const EvalTotals &t) {
+    const BoundaryScores &b = t.boundaries;
+    std::printf(
+        "%s, %d track%s: right bar P %.2f R %.2f F %.2f; within 0.5 s P %.2f R %.2f F %.2f; "
+        "within 3 s P %.2f R %.2f F %.2f; count ratio median %.2f\n",
+        set, t.tracks, t.tracks == 1 ? "" : "s", b.right_bar.precision(), b.right_bar.recall(),
+        b.right_bar.f1(), b.within_half_s.precision(), b.within_half_s.recall(),
+        b.within_half_s.f1(), b.within_3_s.precision(), b.within_3_s.recall(), b.within_3_s.f1(),
+        median(t.count_ratios));
+    const auto kind = [](const char *name, const BoundaryOffsets &o) {
+        std::printf(
+            "  %s, %d labelled: recall within a bar %.2f; offsets (detected minus labelled, "
+            "bars)%s\n",
+            name, o.labelled, o.recall(), offsets_text(o).c_str());
+    };
+    kind("all boundaries", b.all);
+    kind("kick change", b.kick_change);
+    kind("kick-continuous", b.kick_continuous);
+    std::vector<std::pair<std::string, std::pair<int, int>>> transitions;
+    std::pair<int, int> other{0, 0};
+    for (const auto &[name, counts] : b.transitions) {
+        if (counts.first < 5) {
+            other.first += counts.first;
+            other.second += counts.second;
+        } else {
+            transitions.emplace_back(name, counts);
+        }
+    }
+    std::stable_sort(transitions.begin(), transitions.end(),
+                     [](const auto &x, const auto &y) { return x.second.first > y.second.first; });
+    if (other.first > 0) {
+        transitions.emplace_back("other", other);
+    }
+    std::printf("  by transition (recall within a bar, of labelled):");
+    for (const auto &[name, counts] : transitions) {
+        std::printf(" %s %.2f of %d;", name.c_str(), 1.0 * counts.second / counts.first,
+                    counts.first);
+    }
+    std::printf("\n  confusion (bars; rows labelled, columns detected):\n    %-9s", "");
+    for (size_t c = 0; c < kSectionKinds; ++c) {
+        std::printf(" %9s", kSectionNames[c]);
+    }
+    std::printf("\n");
+    for (size_t r = 0; r < kSectionKinds; ++r) {
+        std::printf("    %-9s", kSectionNames[r]);
+        for (size_t c = 0; c < kSectionKinds; ++c) {
+            std::printf(" %9d", b.confusion[r][c]);
+        }
+        std::printf("\n");
+    }
+    const auto row = [&](size_t r) {
+        int n = 0;
+        for (const int v : b.confusion[r]) {
+            n += v;
+        }
+        return n;
+    };
+    constexpr size_t kGroove = 1;
+    constexpr size_t kDrop = 4;
+    std::printf("  labelled drop bars detected as groove: %.0f%% of %d; labelled groove bars "
+                "detected as drop: %.0f%% of %d (SPEC 18 A9)\n",
+                100.0 * b.confusion[kDrop][kGroove] / std::max(1, row(kDrop)), row(kDrop),
+                100.0 * b.confusion[kGroove][kDrop] / std::max(1, row(kGroove)), row(kGroove));
+}
 
 int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags,
                   const SectionParams &section_params) {
@@ -588,10 +678,21 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
         const TrackAnalysis &a = analysis.value();
         const std::vector<SectionLabel> detected = sections_from_detection(a.sections, l.grid);
         const SectionScore s = score_sections(l.sections, detected, l.grid, a.duration_s);
+        const double label_bar_s = bar_length_s(l.grid);
+        const BoundaryScores boundaries =
+            score_boundaries(l.sections, detected, l.grid, a.duration_s, [&](double t) {
+                const char before = kick_at(a, label_bar_s, t - 0.5 * label_bar_s);
+                const char after = kick_at(a, label_bar_s, t + 0.5 * label_bar_s);
+                return before != '?' && after != '?' && before != after;
+            });
         const bool held_out = held_out_track(path_to_utf8(track.path.filename()));
         EvalTotals *const sets[] = {&totals[0], &totals[held_out ? 2 : 1]};
         for (EvalTotals *t : sets) {
             t->score += s;
+            t->boundaries += boundaries;
+            if (s.labelled_boundaries > 0) {
+                t->count_ratios.push_back(1.0 * s.detected_boundaries / s.labelled_boundaries);
+            }
             ++t->tracks;
             ++t->tempo_bands[static_cast<size_t>(tempo_band(l.grid.bpm))];
         }
@@ -637,6 +738,19 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
                             d.detected_events);
             }
         }
+        if (flags.scores) {
+            std::printf("%-50s  right bar P %.2f R %.2f F %.2f; within 0.5 s F %.2f, within 3 s F "
+                        "%.2f; kick change recall %.2f of %d, kick-continuous %.2f of %d; count "
+                        "ratio %.2f\n",
+                        "", boundaries.right_bar.precision(), boundaries.right_bar.recall(),
+                        boundaries.right_bar.f1(), boundaries.within_half_s.f1(),
+                        boundaries.within_3_s.f1(), boundaries.kick_change.recall(),
+                        boundaries.kick_change.labelled, boundaries.kick_continuous.recall(),
+                        boundaries.kick_continuous.labelled,
+                        s.labelled_boundaries > 0
+                            ? 1.0 * s.detected_boundaries / s.labelled_boundaries
+                            : 0.0);
+        }
         if (flags.detail) {
             print_boundary_detail(l, detected, a);
         }
@@ -674,6 +788,12 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
     } else {
         std::printf("Finer detail: none labelled yet (phases, roles, breaks and fills in the "
                     "labelling mode, Detailed on).\n");
+    }
+    if (flags.scores) {
+        std::printf("\nBoundary scores (docs/PLAN_SECTIONS_BATCHES.md A2):\n");
+        for (size_t set = 0; set < (flags.split ? totals.size() : 1); ++set) {
+            print_boundary_scores(kSetNames[set], totals[set]);
+        }
     }
     return 0;
 }
@@ -734,6 +854,8 @@ int wmain(int argc, wchar_t **argv) {
             eval_flags.detail = true;
         } else if (std::wcscmp(argv[i], L"--split") == 0) {
             eval_flags.split = true;
+        } else if (std::wcscmp(argv[i], L"--scores") == 0) {
+            eval_flags.scores = true;
         } else if (std::wcscmp(argv[i], L"--bars") == 0) {
             bar_table = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
