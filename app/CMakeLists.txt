@@ -125,7 +125,7 @@ target_link_libraries(psyight_eval PRIVATE psyight_options psyight_lib)
 
 # Reports the file-mode analysis of unlabelled tracks: tempo, grid, kicks, bass statistics.
 add_executable(psyight_analyse src/analyse_main.cpp)
-target_link_libraries(psyight_analyse PRIVATE psyight_options psyight_lib)
+target_link_libraries(psyight_analyse PRIVATE psyight_options psyight_lib nlohmann_json::nlohmann_json)
 
 # Renders whole tracks as shows offline and reports flashes, current, contrast and render cost.
 add_executable(psyight_show_check src/show_check_main.cpp)

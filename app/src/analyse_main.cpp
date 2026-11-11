@@ -33,6 +33,9 @@
 // the bars either side) and kick-continuous ones, recall per labelled transition (under 5 cases
 // pooled as other), the confusion of bars by labelled and detected kind (a predrop counts as the
 // section before it), and the detected over labelled boundary count per track with its median.
+// --json <file> writes the --param overrides, one row per track (its set, tempo band and every
+// score) and the totals for all, tune and held out, under the printed names in snake case, so
+// two runs can be diffed by a script.
 // --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
 // declare_section_params, for example --param section.texture_step=1.2; an unknown id or a value
 // outside the declared range is an error. The overrides are printed on the first line.
@@ -53,6 +56,8 @@
 #include "io/stems.h"
 #include "io/track_library.h"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -62,6 +67,7 @@
 #include <cwchar>
 #include <cwctype>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <optional>
 #include <string>
@@ -552,10 +558,64 @@ struct EvalTotals {
 constexpr const char *kSetNames[] = {"All", "Tune", "Held out"};
 
 struct EvalFlags {
-    bool detail = false; // --detail
-    bool split = false;  // --split
-    bool scores = false; // --scores
+    bool detail = false;        // --detail
+    bool split = false;         // --split
+    bool scores = false;        // --scores
+    std::filesystem::path json; // --json <file>; empty: none.
 };
+
+// --json: the figures --scores prints, under their printed names in snake case.
+nlohmann::json scores_json(const SectionScore &s, const BoundaryScores &b) {
+    nlohmann::json j;
+    j["labelled"] = s.labelled_boundaries;
+    j["detected"] = s.detected_boundaries;
+    j["boundaries_p"] = s.precision();
+    j["boundaries_r"] = s.recall();
+    j["boundaries_f"] = s.f1();
+    j["bars_labelled_alike"] = s.bar_accuracy();
+    const auto hits = [&](const char *name, const BoundaryHits &h) {
+        j[std::string(name) + "_p"] = h.precision();
+        j[std::string(name) + "_r"] = h.recall();
+        j[std::string(name) + "_f"] = h.f1();
+    };
+    hits("right_bar", b.right_bar);
+    hits("within_0_5_s", b.within_half_s);
+    hits("within_3_s", b.within_3_s);
+    const auto kind = [&](const char *name, const BoundaryOffsets &o) {
+        j[name] = {{"labelled", o.labelled},
+                   {"recall_within_a_bar", o.recall()},
+                   {"offsets_minus_4_to_plus_4", o.bars},
+                   {"none", o.none}};
+    };
+    kind("all_boundaries", b.all);
+    kind("kick_change", b.kick_change);
+    kind("kick_continuous", b.kick_continuous);
+    nlohmann::json transitions = nlohmann::json::object();
+    for (const auto &[name, counts] : b.transitions) {
+        transitions[name] = {{"labelled", counts.first}, {"matched", counts.second}};
+    }
+    j["by_transition"] = transitions;
+    nlohmann::json confusion = nlohmann::json::object();
+    for (size_t r = 0; r < kSectionKinds; ++r) {
+        for (size_t c = 0; c < kSectionKinds; ++c) {
+            confusion[kSectionNames[r]][kSectionNames[c]] = b.confusion[r][c];
+        }
+    }
+    j["confusion"] = confusion;
+    return j;
+}
+
+nlohmann::json totals_json(const EvalTotals &t) {
+    nlohmann::json j = scores_json(t.score, t.boundaries);
+    j["tracks"] = t.tracks;
+    j["phrase_grid_agrees"] = t.phrase_agree;
+    j["phrase_grid_labelled"] = t.phrase_tracks;
+    j["count_ratio_median"] = median(t.count_ratios);
+    for (size_t band = 0; band < t.tempo_bands.size(); ++band) {
+        j["tracks_by_tempo_band"][kTempoBands[band]] = t.tempo_bands[band];
+    }
+    return j;
+}
 
 std::string offsets_text(const BoundaryOffsets &o) {
     std::string text;
@@ -636,7 +696,8 @@ void print_boundary_scores(const char *set, const EvalTotals &t) {
 }
 
 int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags,
-                  const SectionParams &section_params) {
+                  const SectionParams &section_params, const ParamValues &overrides) {
+    nlohmann::json json_tracks = nlohmann::json::array();
     std::vector<std::filesystem::path> folders;
     std::vector<TrackEntry> tracks;
     for (const std::wstring &p : paths) {
@@ -738,6 +799,20 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
                             d.detected_events);
             }
         }
+        {
+            nlohmann::json row = scores_json(s, boundaries);
+            row["name"] = track.name;
+            row["set"] = held_out ? "held_out" : "tune";
+            row["bpm"] = l.grid.bpm;
+            row["tempo_band"] = kTempoBands[tempo_band(l.grid.bpm)];
+            row["source"] = options.source == AnalysisSource::stems ? "stems" : "mix";
+            row["phrase_grid"] = phrase;
+            row["count_ratio"] =
+                s.labelled_boundaries > 0
+                    ? nlohmann::json(1.0 * s.detected_boundaries / s.labelled_boundaries)
+                    : nlohmann::json(nullptr);
+            json_tracks.push_back(std::move(row));
+        }
         if (flags.scores) {
             std::printf("%-50s  right bar P %.2f R %.2f F %.2f; within 0.5 s F %.2f, within 3 s F "
                         "%.2f; kick change recall %.2f of %d, kick-continuous %.2f of %d; count "
@@ -793,6 +868,20 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
         std::printf("\nBoundary scores (docs/PLAN_SECTIONS_BATCHES.md A2):\n");
         for (size_t set = 0; set < (flags.split ? totals.size() : 1); ++set) {
             print_boundary_scores(kSetNames[set], totals[set]);
+        }
+    }
+    if (!flags.json.empty()) {
+        nlohmann::json out;
+        out["parameters"] = overrides;
+        out["tracks"] = json_tracks;
+        out["all"] = totals_json(totals[0]);
+        out["tune"] = totals_json(totals[1]);
+        out["held_out"] = totals_json(totals[2]);
+        std::ofstream file(flags.json, std::ios::binary);
+        file << out.dump(2) << "\n";
+        if (!file) {
+            std::fprintf(stderr, "could not write %s\n", path_to_utf8(flags.json).c_str());
+            return 1;
         }
     }
     return 0;
@@ -856,6 +945,8 @@ int wmain(int argc, wchar_t **argv) {
             eval_flags.split = true;
         } else if (std::wcscmp(argv[i], L"--scores") == 0) {
             eval_flags.scores = true;
+        } else if (std::wcscmp(argv[i], L"--json") == 0 && i + 1 < argc) {
+            eval_flags.json = argv[++i];
         } else if (std::wcscmp(argv[i], L"--bars") == 0) {
             bar_table = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
@@ -891,7 +982,7 @@ int wmain(int argc, wchar_t **argv) {
         return sections_report(paths, options.sections);
     }
     if (evaluate) {
-        return sections_eval(paths, eval_flags, options.sections);
+        return sections_eval(paths, eval_flags, options.sections, overrides);
     }
     int status = 0;
     for (const std::wstring &path : paths) {
