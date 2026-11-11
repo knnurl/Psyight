@@ -36,6 +36,14 @@
 // --json <file> writes the --param overrides, one row per track (its set, tempo band and every
 // score) and the totals for all, tune and held out, under the printed names in snake case, so
 // two runs can be diffed by a script.
+// --labels-stats <audio or folder> [more...] reads the labels of the tracks marked done, without
+// analysis (the audio is decoded only for its length): per track its tempo, sections per minute,
+// what else is labelled and its set (T or H); then, over all tracks and per tempo band (under
+// 160, 160 to 175, over 175 BPM, a stand-in for subgenre), the median sections per minute,
+// section lengths in bars per label (bars between nearest downbeats), the bars since the
+// previous boundary (from bar 1 for the first) by their place on the 4 and 8-bar lines,
+// breakdown lengths by what follows once builds and pre-drops are passed, and how many tracks
+// carry a labelled phrase grid, phases, roles and events.
 // --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
 // declare_section_params, for example --param section.texture_step=1.2; an unknown id or a value
 // outside the declared range is an error. The overrides are printed on the first line.
@@ -695,9 +703,8 @@ void print_boundary_scores(const char *set, const EvalTotals &t) {
                 100.0 * b.confusion[kGroove][kDrop] / std::max(1, row(kGroove)), row(kGroove));
 }
 
-int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags,
-                  const SectionParams &section_params, const ParamValues &overrides) {
-    nlohmann::json json_tracks = nlohmann::json::array();
+// The tracks named, then those under the folders (searched as the labelling mode does).
+std::vector<TrackEntry> tracks_from(const std::vector<std::wstring> &paths) {
     std::vector<std::filesystem::path> folders;
     std::vector<TrackEntry> tracks;
     for (const std::wstring &p : paths) {
@@ -715,6 +722,13 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
     for (TrackEntry &t : scan_track_folders(folders)) {
         tracks.push_back(std::move(t));
     }
+    return tracks;
+}
+
+int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags,
+                  const SectionParams &section_params, const ParamValues &overrides) {
+    nlohmann::json json_tracks = nlohmann::json::array();
+    const std::vector<TrackEntry> tracks = tracks_from(paths);
     std::array<EvalTotals, 3> totals; // All, tune, held out.
     DetailScore detail_total;
     for (const TrackEntry &track : tracks) {
@@ -913,12 +927,162 @@ bool parse_param(const wchar_t *arg, ParamValues &overrides) {
     return true;
 }
 
+// --labels-stats: the labelled sections alone (no analysis), over a set of tracks.
+constexpr const char *kLengthBins[] = {"1", "2",    "3",  "4",     "5-7",
+                                       "8", "9-15", "16", "17-31", "32+"};
+constexpr size_t kLengthBinCount = std::size(kLengthBins);
+size_t length_bin(long long bars) {
+    if (bars <= 4) {
+        return static_cast<size_t>(std::max(1LL, bars) - 1);
+    }
+    return bars <= 7 ? 4 : bars == 8 ? 5 : bars <= 15 ? 6 : bars == 16 ? 7 : bars <= 31 ? 8 : 9;
+}
+
+struct LabelStats {
+    int tracks = 0;
+    std::vector<double> per_minute;
+    std::map<std::string, std::array<int, kLengthBinCount>> lengths; // Per label.
+    // Bars since the previous boundary (bar 1 for the first): a multiple of 8, of 4 but not 8,
+    // one bar off a multiple of 4, other (two bars off).
+    std::array<int, 4> spacing{};
+    // Breakdown lengths by what follows once builds and pre-drops are passed: drop, groove, other.
+    std::map<std::string, std::array<int, kLengthBinCount>> breakdowns;
+    int phrase_grids = 0;
+    int phases = 0;
+    int roles = 0;
+    int events = 0;
+};
+
+void add_label_stats(LabelStats &st, const Labels &l, double duration_s) {
+    const std::vector<SectionLabel> &sec = l.sections;
+    const double bar_s = bar_length_s(l.grid);
+    const auto bar_of = [&](double t) {
+        return bar_s > 0.0 ? std::llround((t - l.grid.first_downbeat_s) / bar_s) : 0LL;
+    };
+    ++st.tracks;
+    st.per_minute.push_back(static_cast<double>(sec.size()) / std::max(1e-9, duration_s / 60.0));
+    for (size_t i = 0; i < sec.size(); ++i) {
+        const double end_s = i + 1 < sec.size() ? sec[i + 1].start_s : duration_s;
+        const long long bars = bar_of(end_s) - bar_of(sec[i].start_s);
+        auto &bins = st.lengths[sec[i].label];
+        ++bins[length_bin(bars)];
+        if (i > 0) {
+            const long long since =
+                bar_of(sec[i].start_s) - (i == 1 ? 0LL : bar_of(sec[i - 1].start_s));
+            const long long mod4 = ((since % 4) + 4) % 4;
+            ++st.spacing[mod4 == 0 ? (((since % 8) + 8) % 8 == 0 ? 0 : 1) : mod4 == 2 ? 3 : 2];
+        }
+        if (sec[i].label == "breakdown") {
+            size_t j = i + 1;
+            while (j < sec.size() && (sec[j].label == "build" || sec[j].label == "predrop")) {
+                ++j;
+            }
+            const std::string next =
+                j < sec.size() && (sec[j].label == "drop" || sec[j].label == "groove")
+                    ? sec[j].label
+                    : "other";
+            ++st.breakdowns[next][length_bin(bars)];
+        }
+    }
+    st.phrase_grids += l.phrases.set;
+    st.phases +=
+        std::any_of(sec.begin(), sec.end(), [](const SectionLabel &x) { return !x.phase.empty(); });
+    st.roles +=
+        std::any_of(sec.begin(), sec.end(), [](const SectionLabel &x) { return !x.role.empty(); });
+    st.events += !l.events.empty();
+}
+
+void print_label_stats(const char *set, const LabelStats &st) {
+    std::printf("\n%s: %d track%s; sections per minute median %.2f\n", set, st.tracks,
+                st.tracks == 1 ? "" : "s", median(st.per_minute));
+    if (st.tracks == 0) {
+        return;
+    }
+    std::printf("  section length in bars:%*s", 9, "");
+    for (const char *bin : kLengthBins) {
+        std::printf(" %5s", bin);
+    }
+    std::printf("\n");
+    const auto bins = [](const std::string &name, const std::array<int, kLengthBinCount> &b) {
+        std::printf("    %-30s", name.c_str());
+        for (const int n : b) {
+            std::printf(" %5d", n);
+        }
+        std::printf("\n");
+    };
+    for (const auto &[label, b] : st.lengths) {
+        bins(label, b);
+    }
+    const int boundaries = st.spacing[0] + st.spacing[1] + st.spacing[2] + st.spacing[3];
+    const auto share = [&](int n) { return 100.0 * n / std::max(1, boundaries); };
+    std::printf(
+        "  bars since the previous boundary, of %d boundaries: a multiple of 8 %.0f%%, of 4 "
+        "but not 8 %.0f%%, one bar off a multiple of 4 %.0f%%, other %.0f%%\n",
+        boundaries, share(st.spacing[0]), share(st.spacing[1]), share(st.spacing[2]),
+        share(st.spacing[3]));
+    std::printf("  breakdown length in bars, by what follows (builds and pre-drops passed):\n");
+    for (const auto &[next, b] : st.breakdowns) {
+        bins("then " + next, b);
+    }
+    std::printf("  tracks with a labelled phrase grid %d, phases %d, roles %d, events %d\n",
+                st.phrase_grids, st.phases, st.roles, st.events);
+}
+
+int labels_stats(const std::vector<std::wstring> &paths) {
+    std::array<LabelStats, 4> stats; // All, then per tempo band.
+    for (const TrackEntry &track : tracks_from(paths)) {
+        if (track.status != LabelStatus::done) {
+            continue;
+        }
+        const Result<Labels> labels = load_labels(labels_path_for(track.path));
+        if (!labels || labels.value().sections.empty()) {
+            continue;
+        }
+        const Labels &l = labels.value();
+        const Result<AudioBuffer> audio = decode_audio_file(track.path);
+        if (!audio) {
+            std::printf("%-50s  %s\n", track.name.substr(0, 50).c_str(),
+                        audio.error().message.c_str());
+            continue;
+        }
+        const double duration_s =
+            static_cast<double>(audio.value().frames()) / audio.value().sample_rate_hz;
+        const int band = tempo_band(l.grid.bpm);
+        add_label_stats(stats[0], l, duration_s);
+        add_label_stats(stats[static_cast<size_t>(band) + 1], l, duration_s);
+        std::printf("%-50s  %6.2f BPM  %3zu sections in %5.0f s: %.2f/min  %s%s%s%s  %s\n",
+                    track.name.substr(0, 50).c_str(), l.grid.bpm, l.sections.size(), duration_s,
+                    stats[0].per_minute.back(), l.phrases.set ? " phrase-grid" : "",
+                    std::any_of(l.sections.begin(), l.sections.end(),
+                                [](const SectionLabel &x) { return !x.phase.empty(); })
+                        ? " phases"
+                        : "",
+                    std::any_of(l.sections.begin(), l.sections.end(),
+                                [](const SectionLabel &x) { return !x.role.empty(); })
+                        ? " roles"
+                        : "",
+                    l.events.empty() ? "" : " events",
+                    held_out_track(path_to_utf8(track.path.filename())) ? "H" : "T");
+        std::fflush(stdout);
+    }
+    if (stats[0].tracks == 0) {
+        std::printf("No track marked done.\n");
+        return 1;
+    }
+    print_label_stats("All", stats[0]);
+    for (size_t band = 0; band < 3; ++band) {
+        print_label_stats(kTempoBands[band], stats[band + 1]);
+    }
+    return 0;
+}
+
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
     bool bar_table = false;
     bool report = false;
     bool evaluate = false;
+    bool label_statistics = false;
     EvalFlags eval_flags;
     TrackAnalysisOptions options;
     ParamValues overrides;
@@ -937,6 +1101,8 @@ int wmain(int argc, wchar_t **argv) {
             report = true;
         } else if (std::wcscmp(argv[i], L"--sections-eval") == 0) {
             evaluate = true;
+        } else if (std::wcscmp(argv[i], L"--labels-stats") == 0) {
+            label_statistics = true;
         } else if (std::wcscmp(argv[i], L"--texture-step") == 0 && i + 1 < argc) {
             texture_step = std::wcstod(argv[++i], nullptr);
         } else if (std::wcscmp(argv[i], L"--detail") == 0) {
@@ -980,6 +1146,9 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (report) {
         return sections_report(paths, options.sections);
+    }
+    if (label_statistics) {
+        return labels_stats(paths);
     }
     if (evaluate) {
         return sections_eval(paths, eval_flags, options.sections, overrides);
