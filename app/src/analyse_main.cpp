@@ -24,6 +24,11 @@
 // every track marked done (folders searched as the labelling mode does): boundary precision,
 // recall and F within one bar, the share of bars with the same label, and whether the detected
 // phrase grid lines up with a labelled one; then the totals over the tracks.
+// --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
+// declare_section_params, for example --param section.texture_step=1.2; an unknown id or a value
+// outside the declared range is an error. The overrides are printed on the first line.
+// --texture-step x stays as before (unchecked); it cannot be combined with
+// --param section.texture_step.
 
 #include "analysis/bass_tracker.h"
 #include "analysis/beat_tracker.h"
@@ -44,6 +49,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cwchar>
 #include <cwctype>
 #include <filesystem>
@@ -382,10 +388,12 @@ struct SectionStats {
     double flips_per_minute = 0.0;
 };
 
-std::optional<SectionStats> section_report(const std::filesystem::path &path) {
+std::optional<SectionStats> section_report(const std::filesystem::path &path,
+                                           const SectionParams &section_params) {
     TrackAnalysisOptions options;
     options.source =
         analysis_stems_exist(stem_paths_for(path)) ? AnalysisSource::stems : AnalysisSource::mix;
+    options.sections = section_params;
     const Result<TrackAnalysis> analysis = analyse_track(path, options);
     if (!analysis || analysis.value().beats.bpm <= 0.0) {
         std::printf("%-60s  no tempo\n", path_to_utf8(path.filename()).substr(0, 60).c_str());
@@ -417,7 +425,7 @@ std::optional<SectionStats> section_report(const std::filesystem::path &path) {
     s.median_bars = median(lengths);
     s.on_grid = boundaries > 0 ? static_cast<double>(on_grid) / boundaries : 1.0;
     if (const Result<std::vector<SectionBar>> bars =
-            section_bars(a.mix_features, a.beats, &a.residual);
+            section_bars(a.mix_features, a.beats, &a.residual, section_params);
         bars) {
         int flips = 0;
         for (size_t m = 1; m < bars.value().size(); ++m) {
@@ -434,7 +442,7 @@ std::optional<SectionStats> section_report(const std::filesystem::path &path) {
     return s;
 }
 
-int sections_report(const std::vector<std::wstring> &paths) {
+int sections_report(const std::vector<std::wstring> &paths, const SectionParams &section_params) {
     std::vector<std::filesystem::path> files;
     for (const std::wstring &p : paths) {
         const std::filesystem::path path(p);
@@ -460,7 +468,7 @@ int sections_report(const std::vector<std::wstring> &paths) {
     std::vector<double> on_grid;
     std::vector<double> flips;
     for (const std::filesystem::path &file : files) {
-        if (const std::optional<SectionStats> s = section_report(file); s) {
+        if (const std::optional<SectionStats> s = section_report(file, section_params); s) {
             per_minute.push_back(s->per_minute);
             median_bars.push_back(s->median_bars);
             short_sections.push_back(s->short_sections);
@@ -628,6 +636,32 @@ int sections_eval(const std::vector<std::wstring> &paths, bool detail,
     return 0;
 }
 
+// --param <id>=<value>: one override of a parameter declared by declare_section_params, checked
+// against its declared range. Adds it to `overrides`; false (with a message) when it is not valid.
+bool parse_param(const wchar_t *arg, ParamValues &overrides) {
+    const std::string text = path_to_utf8(std::filesystem::path(arg));
+    const size_t eq = text.find('=');
+    ParamRegistry registry;
+    (void)declare_section_params(registry);
+    const ParamSpec *spec = eq == std::string::npos ? nullptr : registry.find(text.substr(0, eq));
+    if (spec == nullptr) {
+        std::fprintf(stderr, "--param %s: expected <id>=<value> with a section.* id\n",
+                     text.c_str());
+        return false;
+    }
+    const std::string number = text.substr(eq + 1);
+    char *end = nullptr;
+    const double value = std::strtod(number.c_str(), &end);
+    if (number.empty() || end != number.c_str() + number.size() || !std::isfinite(value) ||
+        value < spec->min || value > spec->max) {
+        std::fprintf(stderr, "--param %s: the value must be a number from %g to %g\n", text.c_str(),
+                     spec->min, spec->max);
+        return false;
+    }
+    overrides[spec->id] = value;
+    return true;
+}
+
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
@@ -636,9 +670,15 @@ int wmain(int argc, wchar_t **argv) {
     bool evaluate = false;
     bool detail = false;
     TrackAnalysisOptions options;
+    ParamValues overrides;
+    std::optional<double> texture_step;
     std::vector<std::wstring> paths;
     for (int i = 1; i < argc; ++i) {
-        if (std::wcscmp(argv[i], L"--kicks") == 0) {
+        if (std::wcscmp(argv[i], L"--param") == 0 && i + 1 < argc) {
+            if (!parse_param(argv[++i], overrides)) {
+                return 2;
+            }
+        } else if (std::wcscmp(argv[i], L"--kicks") == 0) {
             kick_features = true;
         } else if (std::wcscmp(argv[i], L"--tempo") == 0) {
             local_tempo = true;
@@ -647,7 +687,7 @@ int wmain(int argc, wchar_t **argv) {
         } else if (std::wcscmp(argv[i], L"--sections-eval") == 0) {
             evaluate = true;
         } else if (std::wcscmp(argv[i], L"--texture-step") == 0 && i + 1 < argc) {
-            options.sections.texture_step = std::wcstod(argv[++i], nullptr);
+            texture_step = std::wcstod(argv[++i], nullptr);
         } else if (std::wcscmp(argv[i], L"--detail") == 0) {
             detail = true;
         } else if (std::wcscmp(argv[i], L"--bars") == 0) {
@@ -659,13 +699,30 @@ int wmain(int argc, wchar_t **argv) {
         }
     }
     if (paths.empty()) {
-        std::fprintf(stderr,
-                     "usage: psyight_analyse [--kicks] [--tempo] [--bars] [--stems] <audio> [more "
-                     "audio...]\n");
+        std::fprintf(
+            stderr,
+            "usage: psyight_analyse [--kicks] [--tempo] [--bars] [--stems] [--param <id>=<value>] "
+            "<audio> [more "
+            "audio...]\n");
         return 2;
     }
+    if (texture_step && overrides.contains("section.texture_step")) {
+        std::fprintf(stderr, "give --texture-step or --param section.texture_step, not both\n");
+        return 2;
+    }
+    options.sections = section_params_from(overrides); // The defaults without --param.
+    if (texture_step) {
+        options.sections.texture_step = *texture_step;
+    }
+    if (!overrides.empty()) {
+        std::printf("Parameters:");
+        for (const auto &[id, value] : overrides) {
+            std::printf(" %s=%g", id.c_str(), value);
+        }
+        std::printf("\n");
+    }
     if (report) {
-        return sections_report(paths);
+        return sections_report(paths, options.sections);
     }
     if (evaluate) {
         return sections_eval(paths, detail, options.sections);
