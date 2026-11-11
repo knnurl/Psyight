@@ -2,7 +2,7 @@
 // arriving live, and measures it against the file-mode analysis of the same audio.
 //
 //   psyight_live_check <audio> [--block <samples>] [--student <weights>] [--trace <from s> <to s>]
-//                      [--show <project.psyproj>]
+//                      [--show <project.psyproj> [--dwell]] [--set] [--gain-db <dB>]
 //
 // Feeds the decoded mono mix in blocks (default 480 samples, a 10 ms WASAPI period) and reports:
 // kicks against the file analysis's (stems when they exist) at +-20 ms; when the tempo was
@@ -11,7 +11,13 @@
 // notes against the labels' complete regions and against the file-mode student; the live section
 // changes beside the file sections; and the processing cost per hop. --trace prints the beat state
 // at each kick between two times; --show renders the project's show from the live state as live
-// mode does and prints a timeline (between --trace's times when given). Local tracks only.
+// mode does and prints a timeline (between --trace's times when given). --dwell, with --show,
+// then prints the live scene dwell over the frames rendered: scene changes per minute (a change of
+// SceneMix::to at a new section; rotations and variations inside a section are not changes), the
+// complete dwells in phrases (under a half, a half to one, one to two, over two; all, and with
+// the dwells a drop or build brought in aside), each dwell under a phrase with its time and the
+// sections before, during and after, and the live breakdowns by length in bars with how many a
+// drop followed. Works with --set (DJ sets). Local tracks only.
 
 #include "analysis/live_analysis.h"
 #include "analysis/scoring.h"
@@ -75,12 +81,92 @@ double mean_luminance(const Frame &frame) {
     return frame.empty() ? 0.0 : sum / static_cast<double>(frame.size());
 }
 
+// A scene held from one section change to the next change of scene (--dwell).
+struct SceneDwell {
+    double start_s = 0.0;
+    double end_s = 0.0;
+    int scene = 0;
+    const char *section = ""; // The section that brought the scene in.
+    double phrase_s = 0.0;    // At the dwell's end.
+    double phrases() const { return phrase_s > 0.0 ? (end_s - start_s) / phrase_s : 0.0; }
+};
+
+// --dwell: scene changes per minute, dwells in phrases (all, and drops and builds aside), every
+// dwell under a phrase with the sections around it, and the live breakdowns by length.
+void print_dwell(const std::vector<SceneDwell> &dwells, const std::vector<LiveState> &states,
+                 double shown_s) {
+    const size_t changes = dwells.empty() ? 0 : dwells.size() - 1;
+    std::printf("  scene dwell (a change of scene at a new section; rotations and variations "
+                "inside a section aside): %zu changes in %.1f min, %.2f per minute\n",
+                changes, shown_s / 60.0, shown_s > 0.0 ? 60.0 * changes / shown_s : 0.0);
+    // The last dwell runs to the end of the file: it is not complete.
+    std::array<int, 4> all{}, aside{};
+    const auto bin = [](double phrases) {
+        return phrases < 0.5 ? 0 : phrases < 1.0 ? 1 : phrases <= 2.0 ? 2 : 3;
+    };
+    for (size_t i = 0; i + 1 < dwells.size(); ++i) {
+        const size_t b = static_cast<size_t>(bin(dwells[i].phrases()));
+        ++all[b];
+        const std::string section = dwells[i].section;
+        aside[b] += section != "drop" && section != "build";
+    }
+    const int complete = all[0] + all[1] + all[2] + all[3];
+    const int complete_aside = aside[0] + aside[1] + aside[2] + aside[3];
+    std::printf("  dwell in phrases, %d complete (drops and builds aside: %d): under 0.5 %d (%d), "
+                "0.5 to 1 %d (%d), 1 to 2 %d (%d), over 2 %d (%d); under a phrase %.1f%% "
+                "(%.1f%%)\n",
+                complete, complete_aside, all[0], aside[0], all[1], aside[1], all[2], aside[2],
+                all[3], aside[3], complete > 0 ? 100.0 * (all[0] + all[1]) / complete : 0.0,
+                complete_aside > 0 ? 100.0 * (aside[0] + aside[1]) / complete_aside : 0.0);
+    for (size_t i = 0; i + 1 < dwells.size(); ++i) {
+        if (dwells[i].phrases() < 1.0) {
+            std::printf("    short dwell %.1f s (%.2f phrases): %s > %s > %s\n", dwells[i].start_s,
+                        dwells[i].phrases(), i > 0 ? dwells[i - 1].section : "start",
+                        dwells[i].section, dwells[i + 1].section);
+        }
+    }
+    // Live breakdowns, by the declared sections: length to the next one, in bars of the tempo
+    // then, and whether a drop followed (directly or after a build).
+    struct Declared {
+        LiveSection section;
+        double start_s;
+        double bar_s;
+    };
+    std::vector<Declared> declared;
+    int count = 0;
+    for (const LiveState &st : states) {
+        if (st.section_count != count) {
+            count = st.section_count;
+            declared.push_back(
+                {st.section, st.section_start_s, 4.0 * (st.tempo_known ? st.period_s : 0.5)});
+        }
+    }
+    std::array<int, 4> lengths{}, to_drop{};
+    for (size_t i = 0; i + 1 < declared.size(); ++i) {
+        if (declared[i].section != LiveSection::breakdown) {
+            continue;
+        }
+        const double bars = (declared[i + 1].start_s - declared[i].start_s) / declared[i].bar_s;
+        const size_t b = bars < 4.0 ? 0 : bars < 8.0 ? 1 : bars < 16.0 ? 2 : 3;
+        ++lengths[b];
+        const LiveSection next = declared[i + 1].section;
+        to_drop[b] +=
+            next == LiveSection::drop || (next == LiveSection::build && i + 2 < declared.size() &&
+                                          declared[i + 2].section == LiveSection::drop);
+    }
+    std::printf("  live breakdowns by length in bars (then a drop, directly or after a build): "
+                "under 4 %d (%d), 4 to 7 %d (%d), 8 to 15 %d (%d), 16 and over %d (%d)\n",
+                lengths[0], to_drop[0], lengths[1], to_drop[1], lengths[2], to_drop[2], lengths[3],
+                to_drop[3]);
+}
+
 // --show: the project's show rendered from the live states as live mode renders it (automation,
 // the scene mix and the fade on silence; no limiters), at 60 fps. Prints a line every 2 s (only
 // between --trace's times when given): the section, the scene, the automation's brightness, the
 // intensity and riser, the mean luminance and lit share, and each of the scene's layers alone.
+// With --dwell, then the scene dwell figures (print_dwell) over the frames rendered.
 int show_timeline(const std::vector<LiveState> &states, const std::filesystem::path &path,
-                  double from_s, double to_s, double duration_s) {
+                  double from_s, double to_s, double duration_s, bool dwell) {
     const Result<Project> loaded = load_project(path);
     if (!loaded) {
         std::fprintf(stderr, "%s\n", loaded.error().message.c_str());
@@ -104,6 +190,9 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
     ModMemory memory;
     size_t k = 0;
     double next_print_s = from_s;
+    std::vector<SceneDwell> dwells;
+    int dwell_section_count = 0;
+    double shown_s = 0.0;
     for (long long f = 0; static_cast<double>(f) / kFps <= std::min(to_s, duration_s); ++f) {
         const double t_s = static_cast<double>(f) / kFps;
         while (k + 1 < states.size() && states[k + 1].analysed_s <= t_s) {
@@ -113,6 +202,20 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
         EngineInputs inputs = inputs_at(s, t_s);
         inputs.macros = project.macro_values;
         const SceneMix mix = automate_live(project.scenes, s, inputs, project.automation, -1);
+        if (dwell) {
+            shown_s = t_s;
+            const char *section = s.silent ? "silent" : live_section_name(s.section);
+            if (dwells.empty() ||
+                (s.section_count != dwell_section_count && mix.to != dwells.back().scene)) {
+                if (!dwells.empty()) {
+                    dwells.back().end_s = t_s;
+                }
+                dwells.push_back({t_s, t_s, mix.to, section, 0.0});
+            }
+            dwell_section_count = s.section_count;
+            dwells.back().end_s = t_s;
+            dwells.back().phrase_s = 4.0 * s.phrase_bars * (s.tempo_known ? s.period_s : 0.5);
+        }
         Frame frame = render_mix(project.scenes, mix, rig, inputs, project.palettes, kSeed, &memory,
                                  &variants);
         if (s.silent) {
@@ -148,6 +251,9 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
             }
         }
         std::printf("\n");
+    }
+    if (dwell) {
+        print_dwell(dwells, states, shown_s);
     }
     return 0;
 }
@@ -438,6 +544,7 @@ int wmain(int argc, wchar_t **argv) {
     std::filesystem::path weights = "data/m4/student.weights";
     std::filesystem::path project_path;
     bool set_mode = false;
+    bool dwell = false;
     double gain_db = 0.0; // Applied to the live input only (a mixer's master level knob).
     int block = 480;
     double trace_from_s = -1.0, trace_to_s = -1.0;
@@ -453,6 +560,8 @@ int wmain(int argc, wchar_t **argv) {
             project_path = argv[++i];
         } else if (std::wcscmp(argv[i], L"--set") == 0) {
             set_mode = true;
+        } else if (std::wcscmp(argv[i], L"--dwell") == 0) {
+            dwell = true;
         } else if (std::wcscmp(argv[i], L"--gain-db") == 0 && i + 1 < argc) {
             gain_db = _wtof(argv[++i]);
         } else {
@@ -462,7 +571,7 @@ int wmain(int argc, wchar_t **argv) {
     if (audio_path.empty()) {
         std::fprintf(stderr, "usage: psyight_live_check <audio> [--block <samples>] "
                              "[--student <weights>] [--trace <from s> <to s>] [--show "
-                             "<project>] [--set] [--gain-db <dB>]\n");
+                             "<project> [--dwell]] [--set] [--gain-db <dB>]\n");
         return 2;
     }
     const Result<StudentModel> model = load_student(weights);
@@ -564,7 +673,7 @@ int wmain(int argc, wchar_t **argv) {
         print_live_sections(live);
         if (!project_path.empty()) {
             return show_timeline(live.recorded_states(), project_path, trace_from_s, trace_to_s,
-                                 duration_s);
+                                 duration_s, dwell);
         }
         return 0;
     }
@@ -666,7 +775,7 @@ int wmain(int argc, wchar_t **argv) {
     print_live_sections(live);
     if (!project_path.empty()) {
         return show_timeline(live.recorded_states(), project_path, trace_from_s, trace_to_s,
-                             duration_s);
+                             duration_s, dwell);
     }
     return 0;
 }
