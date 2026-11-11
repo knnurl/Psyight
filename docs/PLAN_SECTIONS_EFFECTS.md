@@ -176,11 +176,13 @@ Specified in `docs/PLAN_SECTIONS_BATCHES.md`:
 | Batch | What | Priority it serves |
 |---|---|---|
 | A | Measuring tools: right-bar score, offsets, recall by kind, confusion, label statistics, live scene dwell, parameter overrides | Detection accuracy (the view before the tuning) |
-| B | Boundary placement: local phrase anchor, asymmetric snap | Detection accuracy |
+| B | Boundary placement: local phrase anchor, asymmetric snap (parked by the owner, 2026-11-11) | Detection accuracy |
 | C | Block novelty for changes while the kick runs on | Detection accuracy |
 | D | Breaks, fills, pre-drops and phases reach the engine | Visual creativity |
 | E | Live mode: breakdown commit delay, resumed grooves, a tension input that keeps climbing | Reliability, visual creativity |
 | F | Breakdown, build and break scene candidates for the owner to pick | Visual creativity |
+
+Owner decisions after Batch A (2026-11-11): B is parked; C runs after E and D; E and D are authorised, E first; the drop rule gets its own batch after C, from the owner's description (a drop mainly after a build, sometimes after a breakdown, one bar to two phrases long) and a study of the labelled drops; the proposed targets are working targets until then.
 
 Not in the batches, and why:
 - **Kicks off the constant-tempo grid on edited tracks** (Alien Army: a kick on 41% of beats in labelled grooves). It limits every score above on such tracks. A pickup rule was tried and reverted (it hurt 14 of 61 tracks); it needs its own measurement and plan.

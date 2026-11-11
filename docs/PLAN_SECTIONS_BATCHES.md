@@ -45,7 +45,7 @@ A new rule ships with its parameter at the value that reproduces today's output.
 2. the same metric does not fall by more than 0.01 on the held-out set;
 3. bars labelled alike do not fall by more than one point on either set;
 4. no track loses more than 0.10 of boundary F within a bar, unless PROGRESS explains that track;
-5. on the corpus (`--sections-report` over the folders named in the plan's results), the median count of short sections stays 0;
+5. on the corpus (`--sections-report` over the folders named in the plan's results), the median count of short sections does not rise above its Batch A baseline (1; it was written as "stays 0", which the baseline already broke);
 6. the synthetic golden (`golden metrics`) passes without loosening.
 
 If the gate fails, keep the code and tests with the default off, write the table into PROGRESS and stop. A failed gate is a result, not a reason to try further rules.
@@ -66,7 +66,7 @@ Files: `app/src/analyse_main.cpp`, `app/src/io/section_marks.*` (scores), `app/s
 - **Right bar:** precision, recall and F counting a hit only when the detected boundary is in the same bar as the labelled one (bar index on the labelled grid, `bar_index_at`). This is the primary metric for Batch B.
 - **Seconds:** hit rates at ±0.5 s and ±3 s, matched one to one as the within-a-bar score is (reuse its matching; do not write a second matcher).
 - **Signed offsets:** for each labelled boundary, the nearest detected boundary within ±4 bars: a histogram of (detected minus labelled) in whole bars from -4 to +4, and a count of "none".
-- **By kind:** a labelled boundary is a **kick change** when the Viterbi kick state of the bar before and the bar after differ (`TrackAnalysis::section_bars`, as `print_boundary_detail`'s `kick_at`), else **kick-continuous**. Recall within a bar, and the offset histogram, for each kind. Recall for kick-continuous boundaries is the primary metric for Batch C.
+- **By kind:** a labelled boundary is a **kick change** when the Viterbi kick state of the bar before and the bar after differ (`TrackAnalysis::section_bars`, as `print_boundary_detail`'s `kick_at`), else **kick-continuous**. Recall within a bar, and the offset histogram, for each kind. Recall for kick-continuous boundaries is the primary metric for Batch C. Note (measured in Batch A): the kind comes from the detector's own kick state, so a kick change is always a detected boundary and its recall is 1 by construction; a labelled kick change that the detector misplaces by a bar or more, or where it hears the kick run on, counts as kick-continuous.
 - **By transition:** recall within a bar per labelled transition (groove to groove, groove to breakdown, build to drop and so on), transitions with fewer than 5 cases pooled as "other".
 - **Confusion:** bars by labelled kind against detected kind (6 by 6), over all tracks. Report beside it the share of labelled drop bars detected as groove and the reverse (assumption A9).
 - **Count ratio:** detected boundaries over labelled boundaries per track, and the median.
@@ -273,6 +273,15 @@ One concern per commit, each building and passing the tests.
 - anything would be sent to a node or played aloud.
 
 ## 11. Open points, marked for the owner
+
+Owner decisions after Batch A (2026-11-11):
+- Batch B (snapping) is parked: not built.
+- Batch C is approved, to run after E and D.
+- Drops: in the owner's words, a drop comes mainly after a build-up, sometimes after a breakdown, and lasts one bar, two bars, one phrase or two phrases depending on the track (phrases usually 8 bars, sometimes 16). The drop rule (SPEC 18 A9) stays as it is until its own batch, after C; a read-only study of the labelled drops comes first.
+- Duplicate labels: only the more detailed copy of each track is scored (`--exclude`); no label file is edited or deleted.
+- The targets proposed from Batch A's baseline (PROGRESS) are working targets, revisited after C and the drop batch.
+- Batches E and D are authorised, E first.
+
 
 - The targets in the plan's "Done when (revised)" are proposals until Batch A's baseline is in.
 - The split by file-name hash may fall unevenly across subgenres with 23 tracks; A6 reports each set's tempo bands so this is visible.
