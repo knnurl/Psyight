@@ -103,7 +103,8 @@ int check(const std::filesystem::path &audio_path, const Project &project,
         !opt.detected_sections && have_labels && labels.sections_edited && !labels.sections.empty();
     if (edited) {
         config.sections = std::make_shared<const SectionTimeline>(section_timeline(
-            *analysis, config.grid, engine_sections(labels.sections, analysis->duration_s)));
+            *analysis, config.grid, engine_sections(labels.sections, analysis->duration_s),
+            events_from_labels(labels.events)));
     }
 
     if (!opt.scene.empty()) {

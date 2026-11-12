@@ -178,6 +178,7 @@ class Session {
     LabelEditor labels_;
     std::shared_ptr<const SectionTimeline> timeline_; // edited_sections(), and what it was from:
     std::vector<SectionLabel> timeline_from_;
+    std::vector<EventLabel> timeline_events_;
     double timeline_bpm_ = 0.0;
     SampleIndex timeline_downbeat_ = 0;
     const TrackAnalysis *timeline_analysis_ = nullptr;

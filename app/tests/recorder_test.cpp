@@ -81,6 +81,49 @@ TEST_CASE("session files: meta, params and frames round trip; a truncated frame 
     CHECK_FALSE(parse_frames(std::vector<std::uint8_t>(20, 0)).ok());
 }
 
+TEST_CASE("session files: edited sections keep their finer detail and labelled events; older "
+          "lines have none") {
+    Project p = default_project();
+    RuntimeState r;
+    DetectedSection groove;
+    groove.start_s = 0.0;
+    groove.end_s = 20.0;
+    groove.label = "groove";
+    groove.phase = 1;
+    groove.role = "lead";
+    DetectedSection build;
+    build.start_s = 20.0;
+    build.end_s = 30.0;
+    build.label = "build";
+    build.predrop_s = 27.5;
+    r.sections = {groove, build};
+    r.events = {{"break", 12.0, 3.2}, {"fill", 18.4, 1.6}};
+    const Result<std::vector<ParamsEntry>> entries =
+        parse_params_jsonl(params_line(1, p, r).value());
+    REQUIRE(entries.ok());
+    const RuntimeState &q = entries.value()[0].runtime;
+    REQUIRE(q.sections.size() == 2);
+    CHECK(q.sections[0].phase == 1);
+    CHECK(q.sections[0].role == "lead");
+    CHECK(q.sections[0].predrop_s == -1.0);
+    CHECK(q.sections[1].phase == -1);
+    CHECK(q.sections[1].predrop_s == 27.5);
+    CHECK(q.events == r.events);
+    // A line written before: sections without the detail, no events.
+    nlohmann::json line = nlohmann::json::parse(params_line(1, p, r).value());
+    line["runtime"].erase("events");
+    for (nlohmann::json &sec : line["runtime"]["sections"]) {
+        sec.erase("phase");
+        sec.erase("role");
+        sec.erase("predrop_s");
+    }
+    const Result<std::vector<ParamsEntry>> older = parse_params_jsonl(line.dump() + "\n");
+    REQUIRE(older.ok());
+    CHECK(older.value()[0].runtime.events.empty());
+    CHECK(older.value()[0].runtime.sections[0].phase == -1);
+    CHECK(older.value()[0].runtime.sections[1].predrop_s == -1.0);
+}
+
 // A params line as a recording made before the hexagon-visuals settings existed would hold it:
 // the project without them.
 std::string older_params_line(const Project &p) {

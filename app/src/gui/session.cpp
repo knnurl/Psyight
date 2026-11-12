@@ -327,15 +327,17 @@ std::shared_ptr<const SectionTimeline> Session::edited_sections() {
         return nullptr;
     }
     const Grid g = grid();
-    if (timeline_ != nullptr && timeline_from_ == l.sections && timeline_bpm_ == g.bpm &&
-        timeline_downbeat_ == g.first_downbeat &&
+    if (timeline_ != nullptr && timeline_from_ == l.sections && timeline_events_ == l.events &&
+        timeline_bpm_ == g.bpm && timeline_downbeat_ == g.first_downbeat &&
         timeline_analysis_ == track_->track_analysis.get()) {
         return timeline_;
     }
     const TrackAnalysis &analysis = *track_->track_analysis;
     timeline_ = std::make_shared<const SectionTimeline>(
-        section_timeline(analysis, g, engine_sections(l.sections, analysis.duration_s)));
+        section_timeline(analysis, g, engine_sections(l.sections, analysis.duration_s),
+                         events_from_labels(l.events)));
     timeline_from_ = l.sections;
+    timeline_events_ = l.events;
     timeline_bpm_ = g.bpm;
     timeline_downbeat_ = g.first_downbeat;
     timeline_analysis_ = track_->track_analysis.get();

@@ -144,7 +144,26 @@ Result<SessionMeta> parse_meta_json(std::string_view text) {
 static json sections_json(const std::vector<DetectedSection> &sections) {
     json out = json::array();
     for (const DetectedSection &s : sections) {
-        out.push_back({{"start_s", s.start_s}, {"end_s", s.end_s}, {"label", s.label}});
+        json j = {{"start_s", s.start_s}, {"end_s", s.end_s}, {"label", s.label}};
+        // The finer detail, only when set: older recordings have none and replay as recorded.
+        if (s.phase >= 0) {
+            j["phase"] = s.phase;
+        }
+        if (!s.role.empty()) {
+            j["role"] = s.role;
+        }
+        if (s.predrop_s >= 0.0) {
+            j["predrop_s"] = s.predrop_s;
+        }
+        out.push_back(std::move(j));
+    }
+    return out;
+}
+
+static json events_json(const std::vector<DetectedEvent> &events) {
+    json out = json::array();
+    for (const DetectedEvent &e : events) {
+        out.push_back({{"kind", e.kind}, {"start_s", e.start_s}, {"length_s", e.length_s}});
     }
     return out;
 }
@@ -164,7 +183,8 @@ Result<std::string> params_line(std::uint64_t version, const Project &project,
               {"blackout", runtime.blackout},
               {"hold", runtime.hold},
               {"grid", grid_json(runtime.grid)},
-              {"sections", sections_json(runtime.sections)}}},
+              {"sections", sections_json(runtime.sections)},
+              {"events", events_json(runtime.events)}}},
         };
         return line.dump() + "\n";
     } catch (const json::exception &e) {
@@ -207,7 +227,17 @@ Result<std::vector<ParamsEntry>> parse_params_jsonl(std::string_view text) {
                     d.end_s = s.at("end_s").get<double>();
                     d.label = s.at("label").get<std::string>();
                     d.confidence = 1.0;
+                    d.phase = s.value("phase", -1);
+                    d.role = s.value("role", std::string());
+                    d.predrop_s = s.value("predrop_s", -1.0);
                     e.runtime.sections.push_back(std::move(d));
+                }
+            }
+            if (const auto events = r.find("events"); events != r.end()) {
+                for (const json &v : events->get_ref<const json::array_t &>()) {
+                    e.runtime.events.push_back({v.at("kind").get<std::string>(),
+                                                v.at("start_s").get<double>(),
+                                                v.at("length_s").get<double>()});
                 }
             }
             out.push_back(std::move(e));

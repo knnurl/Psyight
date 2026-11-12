@@ -130,7 +130,8 @@ ShowFrame ShowRenderer::render(const ShowConfig &config, double t_s) {
                 launcher_.update(config.manual_scene, inputs, config.automation.launch);
             out.mix = automate_live(config.scenes, state, inputs, config.automation, manual);
         } else {
-            inputs = inputs_at(*config.analysis, config.grid, t_s, config.sections.get());
+            inputs = inputs_at(*config.analysis, config.grid, t_s, config.sections.get(),
+                               config.automation.detected_events);
             const int manual =
                 launcher_.update(config.manual_scene, inputs, config.automation.launch);
             out.mix = automate(config.scenes, *config.analysis, config.grid, inputs,

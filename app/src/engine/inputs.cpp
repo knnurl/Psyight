@@ -19,9 +19,24 @@ long long last_at_or_before(const std::vector<T> &values, double t, Key key) {
 
 } // namespace
 
+const std::vector<DetectedEvent> &engine_events(const TrackAnalysis &analysis,
+                                                const SectionTimeline *timeline,
+                                                bool detected_events) {
+    static const std::vector<DetectedEvent> kNone;
+    if (timeline != nullptr) {
+        return timeline->events;
+    }
+    return detected_events ? analysis.events : kNone;
+}
+
 SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid,
-                                 std::vector<DetectedSection> sections) {
+                                 std::vector<DetectedSection> sections,
+                                 std::vector<DetectedEvent> events) {
     SectionTimeline timeline;
+    std::stable_sort(
+        events.begin(), events.end(),
+        [](const DetectedEvent &a, const DetectedEvent &b) { return a.start_s < b.start_s; });
+    timeline.events = std::move(events);
     timeline.phrase_starts_s = phrase_starts(
         grid, sections, static_cast<int>(std::lround(BeatTrackerParams{}.bars_per_phrase)),
         analysis.beats.phrase_bar_offset, analysis.duration_s);
@@ -36,7 +51,7 @@ SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid
 }
 
 EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
-                       const SectionTimeline *timeline) {
+                       const SectionTimeline *timeline, [[maybe_unused]] bool detected_events) {
     EngineInputs in;
     in.t_s = t_s;
     const std::vector<double> &phrase_starts =

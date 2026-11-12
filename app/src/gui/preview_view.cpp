@@ -140,6 +140,7 @@ void PreviewView::record_params() {
     runtime.grid = config_.grid;
     if (config_.sections != nullptr) {
         runtime.sections = config_.sections->sections;
+        runtime.events = config_.sections->events;
     }
     Result<std::string> line = params_line(config_.version, project_.project(), runtime);
     if (line) {
@@ -2787,7 +2788,8 @@ std::vector<std::uint8_t> PreviewView::audition_bytes(const ShowFrame &frame) co
         live = config_.live->state();
         inputs = inputs_at(*live, frame.t_s);
     } else {
-        inputs = inputs_at(*config_.analysis, config_.grid, frame.t_s, config_.sections.get());
+        inputs = inputs_at(*config_.analysis, config_.grid, frame.t_s, config_.sections.get(),
+                           config_.automation.detected_events);
     }
     inputs.macros = config_.macros;
     Frame out;

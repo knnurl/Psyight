@@ -115,7 +115,8 @@ ShowCheckResult run_show_check(const ShowConfig &config, double duration_s,
     std::vector<int> pixel_max(n_pixels, 0);
     for (long long f = 0; f < frames; ++f) {
         const double t_s = static_cast<double>(f) / fps;
-        EngineInputs inputs = inputs_at(analysis, config.grid, t_s, timeline);
+        EngineInputs inputs =
+            inputs_at(analysis, config.grid, t_s, timeline, config.automation.detected_events);
         inputs.macros = config.macros;
         const SceneMix mix = automate(config.scenes, analysis, config.grid, inputs,
                                       config.automation, config.manual_scene, timeline);

@@ -115,17 +115,25 @@ struct EngineInputs {
 struct SectionTimeline {
     std::vector<DetectedSection> sections;
     std::vector<double> phrase_starts_s;
-    std::vector<float> riser; // For these sections' builds (riser_curve).
+    std::vector<float> riser;          // For these sections' builds (riser_curve).
+    std::vector<DetectedEvent> events; // The labels' breaks and fills, in time order.
 };
 
+// The breaks and fills the engine reads: the timeline's when one is given (labelled), else the
+// analysis's detected ones only when detected_events (AutomationParams::detected_events), else
+// none.
+const std::vector<DetectedEvent> &
+engine_events(const TrackAnalysis &analysis, const SectionTimeline *timeline, bool detected_events);
+
 EngineInputs inputs_at(const TrackAnalysis &analysis, const Grid &grid, double t_s,
-                       const SectionTimeline *timeline = nullptr);
+                       const SectionTimeline *timeline = nullptr, bool detected_events = false);
 
 // The timeline for sections edited by hand: them (with their energy from the analysis's bars),
 // the phrases restarting at each (phrases of the default length from the analysis's phrase
-// offset, on `grid`), and the riser curve through their builds.
+// offset, on `grid`), the riser curve through their builds, and the labelled events.
 SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid,
-                                 std::vector<DetectedSection> sections);
+                                 std::vector<DetectedSection> sections,
+                                 std::vector<DetectedEvent> events = {});
 
 // Live mode (SPEC 4.3): from the latest causal state, at render time t_s on the capture clock.
 // The beat, bar, phrase and slot come from the loop's prediction, so they carry no analysis

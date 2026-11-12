@@ -221,6 +221,17 @@ std::vector<DetectedSection> engine_sections(const std::vector<SectionLabel> &se
     return out;
 }
 
+std::vector<DetectedEvent> events_from_labels(const std::vector<EventLabel> &events) {
+    std::vector<DetectedEvent> out;
+    for (const EventLabel &e : events) {
+        out.push_back({e.kind, e.start_s, e.length_s});
+    }
+    std::stable_sort(out.begin(), out.end(), [](const DetectedEvent &a, const DetectedEvent &b) {
+        return a.start_s < b.start_s;
+    });
+    return out;
+}
+
 std::optional<double> previous_boundary(const std::vector<SectionLabel> &sections, double t_s) {
     std::optional<double> found;
     for (const SectionLabel &s : sections) {

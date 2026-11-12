@@ -274,3 +274,16 @@ TEST_CASE("inputs: tension climbs through a build in both modes and is 0 outside
     s.section = LiveSection::groove;
     CHECK(inputs_at(s, 20.0).tension == 0.0);
 }
+
+TEST_CASE("inputs: the events the engine reads come from the labels, or detected only when asked") {
+    TrackAnalysis a;
+    a.events = {{"fill", 30.0, 1.6}};
+    CHECK(engine_events(a, nullptr, false).empty());
+    CHECK(engine_events(a, nullptr, true) == a.events);
+    const SectionTimeline t =
+        section_timeline(a, {150.0, 0, kSampleRateHz}, {{0.0, 60.0, "groove", 1.0}},
+                         {{"fill", 20.0, 1.6}, {"break", 10.0, 3.2}});
+    REQUIRE(t.events.size() == 2);
+    CHECK(t.events[0].kind == "break");            // In time order.
+    CHECK(engine_events(a, &t, true) == t.events); // Labelled, never the detected ones.
+}

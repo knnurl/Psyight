@@ -39,6 +39,7 @@ struct RuntimeState {
     bool hold = false;
     Grid grid;                             // The show's grid (the labels' grid in the app).
     std::vector<DetectedSection> sections; // Edited by hand; empty: the detection.
+    std::vector<DetectedEvent> events;     // Their labelled breaks and fills.
 };
 
 struct ParamsEntry {

@@ -28,6 +28,8 @@ inline constexpr const char *kSectionRoles[] = {"main", "lead", "peak", "climax"
 // predrop_s), phases and roles carried over; sorted, each to the next, the last to duration_s.
 std::vector<DetectedSection> engine_sections(const std::vector<SectionLabel> &sections,
                                              double duration_s);
+// The labelled breaks and fills as the engine's events, in time order.
+std::vector<DetectedEvent> events_from_labels(const std::vector<EventLabel> &events);
 
 double bar_length_s(const LabelGrid &grid); // 0 without a tempo.
 // The nearest downbeat to t_s (t_s itself without a tempo).

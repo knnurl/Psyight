@@ -112,6 +112,9 @@ struct AutomationParams {
     // before that breakdown, takes up that section's look (scene, rotation step and variation)
     // and its rotation goes on from the phrases it had run. Off: the next groove look (as before).
     bool live_resume = false;
+    // File mode: the analysis's detected breaks and fills reach the engine (labelled ones, from
+    // edited sections, always do). Off until the detection is scored against labels.
+    bool detected_events = false;
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for

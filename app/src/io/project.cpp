@@ -232,6 +232,7 @@ AutomationParams parse_automation(const json &aut) {
     a.live_breakdown_commit_bars =
         integer(aut, "live_breakdown_commit_bars", a.live_breakdown_commit_bars, 0, 8);
     a.live_resume = optional<bool>(aut, "live_resume", a.live_resume);
+    a.detected_events = optional<bool>(aut, "detected_events", a.detected_events);
     return a;
 }
 
@@ -257,7 +258,8 @@ json automation_json(const AutomationParams &a) {
             {"hold_rule", hold_rule_id(a.hold_rule)},
             {"palette_rotation", palette_rotation_id(a.palette_rotation)},
             {"live_breakdown_commit_bars", a.live_breakdown_commit_bars},
-            {"live_resume", a.live_resume}};
+            {"live_resume", a.live_resume},
+            {"detected_events", a.detected_events}};
 }
 
 json scene_json(const Scene &s) {
