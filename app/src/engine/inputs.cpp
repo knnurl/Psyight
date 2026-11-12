@@ -51,7 +51,7 @@ SectionTimeline section_timeline(const TrackAnalysis &analysis, const Grid &grid
 }
 
 EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
-                       const SectionTimeline *timeline, [[maybe_unused]] bool detected_events) {
+                       const SectionTimeline *timeline, bool detected_events) {
     EngineInputs in;
     in.t_s = t_s;
     const std::vector<double> &phrase_starts =
@@ -179,6 +179,48 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
     }
     if (in.section == "build") {
         in.tension = std::clamp(std::max(in.riser, in.build_progress), 0.0, 1.0);
+    }
+    // Breaks and fills, and the section's pre-drop and the drop ahead.
+    for (const DetectedEvent &e : engine_events(a, timeline, detected_events)) {
+        if (e.start_s > t_s) {
+            continue;
+        }
+        const bool inside = t_s < e.start_s + e.length_s && e.length_s > 0.0;
+        if (e.kind == "break") {
+            if (t_s - e.start_s < in.since_break_s) {
+                in.since_break_s = t_s - e.start_s;
+            }
+            if (inside) {
+                in.in_break = true;
+                in.break_length_s = e.length_s;
+                in.break_progress = (t_s - e.start_s) / e.length_s;
+            }
+        } else if (e.kind == "fill" && inside) {
+            in.in_fill = true;
+            in.fill_progress = (t_s - e.start_s) / e.length_s;
+        }
+    }
+    if (in.section_index >= 0) {
+        const auto i = static_cast<size_t>(in.section_index);
+        const DetectedSection &section = sections[i];
+        in.section_phase = section.phase;
+        if (section.predrop_s >= section.start_s && section.predrop_s < section.end_s) {
+            in.predrop_length_s = section.end_s - section.predrop_s;
+            if (t_s >= section.predrop_s) {
+                in.in_predrop = true;
+                in.predrop_progress = (t_s - section.predrop_s) / in.predrop_length_s;
+            }
+        }
+        if (section.label == "build" || section.label == "breakdown") {
+            size_t j = i + 1;
+            while (j < sections.size() &&
+                   (sections[j].label == "build" || sections[j].label == "breakdown")) {
+                ++j;
+            }
+            if (j < sections.size() && sections[j].label == "drop") {
+                in.until_drop_s = sections[j].start_s - t_s;
+            }
+        }
     }
     in.intensity = intensity_at(a.section_bars, a.intensity, t_s);
     const long long hat = last_at_or_before(r.hats, t_s, [](const HatOnset &h) { return h.t_s; });

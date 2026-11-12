@@ -245,7 +245,7 @@ TEST_CASE("inputs: tension climbs through a build in both modes and is 0 outside
     CHECK(source_value(ModSource::tension, inputs_at(a, a.grid, 19.0), 1) ==
           doctest::Approx(6.2 / 6.4));
     CHECK(mod_source_from_id("tension") == ModSource::tension);
-    CHECK(kModSources.back() == ModSource::tension);
+    CHECK(kModSources[30] == ModSource::tension);
 
     // Live mode: a build from 10 s, phrases of 12.8 s; the riser jumps to 0.6 at 11 s and to 1
     // at 30 s.
@@ -286,4 +286,72 @@ TEST_CASE("inputs: the events the engine reads come from the labels, or detected
     REQUIRE(t.events.size() == 2);
     CHECK(t.events[0].kind == "break");            // In time order.
     CHECK(engine_events(a, &t, true) == t.events); // Labelled, never the detected ones.
+}
+
+TEST_CASE("inputs: breaks, fills, the pre-drop and the drop ahead, before, inside and after") {
+    TrackAnalysis a;
+    a.sample_rate_hz = kSampleRateHz;
+    a.duration_s = 80.0;
+    a.grid = {150.0, 0, kSampleRateHz};
+    DetectedSection groove{0.0, 32.0, "groove", 1.0};
+    groove.phase = 1;
+    DetectedSection breakdown{32.0, 44.8, "breakdown", 1.0};
+    DetectedSection build{44.8, 51.2, "build", 1.0};
+    build.predrop_s = 48.0;
+    const DetectedSection drop{51.2, 80.0, "drop", 1.0};
+    const SectionTimeline t = section_timeline(a, a.grid, {groove, breakdown, build, drop},
+                                               {{"break", 12.8, 3.2}, {"fill", 28.8, 1.6}});
+    const auto at = [&](double s) { return inputs_at(a, a.grid, s, &t); };
+    // Before the break.
+    EngineInputs in = at(10.0);
+    CHECK_FALSE(in.in_break);
+    CHECK(in.since_break_s == kNever);
+    CHECK(in.section_phase == 1);
+    CHECK(in.until_drop_s == kNever);
+    // Inside it.
+    in = at(14.4);
+    CHECK(in.in_break);
+    CHECK(in.since_break_s == doctest::Approx(1.6));
+    CHECK(in.break_length_s == doctest::Approx(3.2));
+    CHECK(in.break_progress == doctest::Approx(0.5));
+    CHECK(source_value(ModSource::break_event, in, 1) == 1.0);
+    // After it.
+    in = at(20.0);
+    CHECK_FALSE(in.in_break);
+    CHECK(in.since_break_s == doctest::Approx(7.2));
+    CHECK(in.break_length_s == 0.0);
+    CHECK(in.break_progress == 0.0);
+    CHECK(source_value(ModSource::break_event, in, 1) == 0.0);
+    // The fill.
+    CHECK_FALSE(at(28.0).in_fill);
+    in = at(29.6);
+    CHECK(in.in_fill);
+    CHECK(in.fill_progress == doctest::Approx(0.5));
+    CHECK_FALSE(at(30.5).in_fill);
+    // The breakdown and the build lead to the drop; the pre-drop is the build's last 3.2 s.
+    in = at(40.0);
+    CHECK(in.until_drop_s == doctest::Approx(11.2));
+    CHECK(in.section_phase == -1);
+    CHECK_FALSE(in.in_predrop);
+    in = at(46.0);
+    CHECK(in.until_drop_s == doctest::Approx(5.2));
+    CHECK_FALSE(in.in_predrop);
+    CHECK(in.predrop_length_s == doctest::Approx(3.2));
+    in = at(49.6);
+    CHECK(in.in_predrop);
+    CHECK(in.predrop_progress == doctest::Approx(0.5));
+    CHECK(source_value(ModSource::predrop, in, 1) == doctest::Approx(0.5));
+    // The drop: none of it.
+    in = at(60.0);
+    CHECK_FALSE(in.in_predrop);
+    CHECK(in.predrop_length_s == 0.0);
+    CHECK(in.until_drop_s == kNever);
+    CHECK(source_value(ModSource::predrop, in, 1) == 0.0);
+    // Without the timeline the detected events count only when asked.
+    a.events = {{"break", 12.8, 3.2}};
+    CHECK_FALSE(inputs_at(a, a.grid, 14.4).in_break);
+    CHECK(inputs_at(a, a.grid, 14.4, nullptr, true).in_break);
+    CHECK(mod_source_from_id("break") == ModSource::break_event);
+    CHECK(mod_source_from_id("predrop") == ModSource::predrop);
+    CHECK(kModSources.back() == ModSource::predrop);
 }

@@ -108,6 +108,12 @@ double source_value(ModSource source, const EngineInputs &in, std::uint64_t seed
     case ModSource::tension:
         v = in.tension;
         break;
+    case ModSource::break_event:
+        v = in.in_break ? 1.0 : 0.0;
+        break;
+    case ModSource::predrop:
+        v = in.in_predrop ? in.predrop_progress : 0.0;
+        break;
     }
     return std::isfinite(v) ? std::clamp(v, 0.0, 1.0) : 0.0;
 }
@@ -265,6 +271,10 @@ const char *mod_source_name(ModSource source) {
         return "Build progress";
     case ModSource::tension:
         return "Tension";
+    case ModSource::break_event:
+        return "Break";
+    case ModSource::predrop:
+        return "Pre-drop";
     }
     return "?";
 }
@@ -389,6 +399,10 @@ const char *mod_source_id(ModSource source) {
         return "build_progress";
     case ModSource::tension:
         return "tension";
+    case ModSource::break_event:
+        return "break";
+    case ModSource::predrop:
+        return "predrop";
     }
     return "constant";
 }

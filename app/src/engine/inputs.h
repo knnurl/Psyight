@@ -92,6 +92,19 @@ struct EngineInputs {
     // larger of the ramp and riser * (0.5 + 0.5 ramp): the riser lifts it to a half fast, the
     // ramp climbs half the remaining way each phrase.
     double tension = 0.0;
+    // Breaks, fills and pre-drops (SPEC 6.6.1), file mode: the events engine_events gives and the
+    // section's pre-drop. Live mode leaves the defaults.
+    bool in_break = false;         // Inside a break event.
+    double since_break_s = kNever; // Since the latest break started.
+    double break_length_s = 0.0;   // Of the break in progress...
+    double break_progress = 0.0;   // ...and how far through, 0 to 1.
+    bool in_fill = false;          // Inside a fill event...
+    double fill_progress = 0.0;    // ...and how far through.
+    bool in_predrop = false;       // From the section's predrop_s to its end...
+    double predrop_progress = 0.0; // ...and how far through.
+    double predrop_length_s = 0.0; // The section's pre-drop; 0: it has none.
+    double until_drop_s = kNever;  // To the next drop, from a build or breakdown before one.
+    int section_phase = -1;        // DetectedSection::phase (0 for A...); -1 none.
     // The last kNoteHistory bass notes, newest first; entry 0 agrees with the bass fields above.
     // Live mode knows the latest note and only the onset times of three before it (length 0).
     std::array<NoteEvent, kNoteHistory> notes{};
