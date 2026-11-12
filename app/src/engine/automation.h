@@ -41,6 +41,11 @@
 //   PaletteRotation::all (the default) a scene's palette moves through every palette; with
 //   scene_list, through the scene's own palette_list (or stays on its palette when it has none),
 //   so each scene keeps a colour identity.
+// - File mode, opt-in (Batch D, SPEC 6.6.1): fill_source plays fills over fill events (labelled
+//   with edited sections; detected ones only with detected_events), break_fill over each break;
+//   scene_by phase gives a groove or drop with a phase the candidate at index phase; a breakdown
+//   shorter than short_breakdown_bars between two sections with a kick takes the scenes tagged
+//   "break" when any scene has that tag.
 // - Live mode, opt-in (Batch E): with live_breakdown_commit_bars, a declared breakdown keeps the
 //   look the section before ended on for that many bars, then crossfades as before (a build or
 //   drop declared meanwhile takes over at once, fading from the look that was showing); with
