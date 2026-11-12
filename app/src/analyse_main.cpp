@@ -44,7 +44,12 @@
 // sections per minute, section lengths in bars per label (bars between nearest downbeats), the bars
 // since the previous boundary (from bar 1 for the first) by their place on the 4 and 8-bar lines,
 // breakdown lengths by what follows once builds and pre-drops are passed, and how many tracks
-// carry a labelled phrase grid, phases, roles and events.
+// carry a labelled phrase grid, phases, roles and events; and the labelled drops: their length
+// (1, 2, 3 to 4, 5 to 8, 9 to 16, over 16 bars), the section before (its label and length) and
+// the one after.
+// --drops <audio or folder> [more...] (with --exclude, --param) analyses the tracks marked done
+// and prints the detector's view of every labelled drop, of the groove after a drop and of a
+// groove after a build (drops_study), then counts and medians per kind. Read-only.
 // --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
 // declare_section_params, for example --param section.texture_step=1.2; an unknown id or a value
 // outside the declared range is an error. The overrides are printed on the first line.
@@ -961,7 +966,17 @@ struct LabelStats {
     int phases = 0;
     int roles = 0;
     int events = 0;
+    // Labelled drops: length (kDropBins), the section before (label: its lengths by
+    // kLengthBins) and the one after (label: count).
+    std::array<int, 6> drop_lengths{};
+    std::map<std::string, std::array<int, kLengthBinCount>> drop_before;
+    std::map<std::string, int> drop_after;
 };
+
+constexpr const char *kDropBins[] = {"1", "2", "3-4", "5-8", "9-16", "17+"};
+size_t drop_bin(long long bars) {
+    return bars <= 1 ? 0 : bars == 2 ? 1 : bars <= 4 ? 2 : bars <= 8 ? 3 : bars <= 16 ? 4 : 5;
+}
 
 void add_label_stats(LabelStats &st, const Labels &l, double duration_s) {
     const std::vector<SectionLabel> &sec = l.sections;
@@ -981,6 +996,14 @@ void add_label_stats(LabelStats &st, const Labels &l, double duration_s) {
                 bar_of(sec[i].start_s) - (i == 1 ? 0LL : bar_of(sec[i - 1].start_s));
             const long long mod4 = ((since % 4) + 4) % 4;
             ++st.spacing[mod4 == 0 ? (((since % 8) + 8) % 8 == 0 ? 0 : 1) : mod4 == 2 ? 3 : 2];
+        }
+        if (sec[i].label == "drop") {
+            ++st.drop_lengths[drop_bin(bars)];
+            const std::string before = i > 0 ? sec[i - 1].label : "start";
+            const long long before_bars =
+                i > 0 ? bar_of(sec[i].start_s) - bar_of(sec[i - 1].start_s) : 0;
+            ++st.drop_before[before][length_bin(before_bars)];
+            ++st.drop_after[i + 1 < sec.size() ? sec[i + 1].label : "end"];
         }
         if (sec[i].label == "breakdown") {
             size_t j = i + 1;
@@ -1036,6 +1059,23 @@ void print_label_stats(const char *set, const LabelStats &st) {
     }
     std::printf("  tracks with a labelled phrase grid %d, phases %d, roles %d, events %d\n",
                 st.phrase_grids, st.phases, st.roles, st.events);
+    int drops = 0;
+    for (const int n : st.drop_lengths) {
+        drops += n;
+    }
+    std::printf("  drops, %d: length in bars", drops);
+    for (size_t b = 0; b < st.drop_lengths.size(); ++b) {
+        std::printf(" %s: %d", kDropBins[b], st.drop_lengths[b]);
+    }
+    std::printf("\n  the section before a drop, by its length in bars:\n");
+    for (const auto &[label, b] : st.drop_before) {
+        bins("after " + label, b);
+    }
+    std::printf("  the section after a drop:");
+    for (const auto &[label, n] : st.drop_after) {
+        std::printf(" %s %d;", label.c_str(), n);
+    }
+    std::printf("\n");
 }
 
 int labels_stats(const std::vector<std::wstring> &paths,
@@ -1087,6 +1127,208 @@ int labels_stats(const std::vector<std::wstring> &paths,
     return 0;
 }
 
+// --drops: the detector's view of every labelled drop, of the groove after it and of a groove
+// that follows a build without being labelled drop (the owner's drops,
+// docs/PLAN_SECTIONS_BATCHES.md section 11). Per section: its bars, the kick state and kicked beats
+// of the two bars before and of its first bar (the detection's Viterbi bars), the bar level (dB
+// from the track's median bar) and intensity over the 4 bars before, its own bars and the 4 bars
+// after, and the detected labels over its bars. Read-only: no rule changes.
+struct DropView {
+    std::string kind; // "drop", "groove after drop", "groove after build".
+    std::string track;
+    double start_s = 0.0;
+    long long bars = 0;
+    std::string before;
+    long long before_bars = 0;
+    std::string after;
+    std::string kicks;                  // Bars -2, -1, 0: K or -, with kicked beats.
+    std::array<double, 3> level_db{};   // Before, during, after.
+    std::array<double, 3> intensity{};  // Before, during, after.
+    std::map<std::string, int> covered; // Detected label per bar.
+};
+
+int drops_study(const std::vector<std::wstring> &paths,
+                const std::vector<std::filesystem::path> &excludes,
+                const SectionParams &section_params) {
+    std::vector<DropView> views;
+    for (const TrackEntry &track : tracks_from(paths, excludes)) {
+        if (track.status != LabelStatus::done) {
+            continue;
+        }
+        const Result<Labels> labels = load_labels(labels_path_for(track.path));
+        if (!labels || labels.value().sections.empty()) {
+            continue;
+        }
+        const Labels &l = labels.value();
+        TrackAnalysisOptions options;
+        options.source = analysis_stems_exist(stem_paths_for(track.path)) ? AnalysisSource::stems
+                                                                          : AnalysisSource::mix;
+        options.sections = section_params;
+        const Result<TrackAnalysis> analysis = analyse_track(track.path, options);
+        if (!analysis) {
+            std::printf("%-50s  %s\n", track.name.substr(0, 50).c_str(),
+                        analysis.error().message.c_str());
+            continue;
+        }
+        const TrackAnalysis &a = analysis.value();
+        const std::vector<SectionBar> &bars = a.section_bars;
+        if (bars.empty()) {
+            continue;
+        }
+        std::vector<double> levels;
+        for (const SectionBar &b : bars) {
+            levels.push_back(b.level_db);
+        }
+        const double median_level = median(levels);
+        // The detection's bar nearest a time.
+        const auto bar_at = [&](double t) {
+            size_t best = 0;
+            for (size_t m = 1; m < bars.size(); ++m) {
+                if (std::fabs(bars[m].start_s - t) < std::fabs(bars[best].start_s - t)) {
+                    best = m;
+                }
+            }
+            return static_cast<long long>(best);
+        };
+        const auto mean_over = [&](long long from, long long to, bool level) {
+            double sum = 0.0;
+            int n = 0;
+            for (long long m = std::max(0LL, from);
+                 m < std::min(to, static_cast<long long>(bars.size())); ++m) {
+                if (level) {
+                    sum += bars[static_cast<size_t>(m)].level_db - median_level;
+                } else if (static_cast<size_t>(m) < a.intensity.size()) {
+                    sum += a.intensity[static_cast<size_t>(m)];
+                } else {
+                    continue;
+                }
+                ++n;
+            }
+            return n > 0 ? sum / n : std::nan("");
+        };
+        const std::vector<SectionLabel> detected = sections_from_detection(a.sections, l.grid);
+        const std::vector<SectionLabel> &sec = l.sections;
+        const double bar_s = bar_length_s(l.grid);
+        for (size_t i = 1; i < sec.size(); ++i) {
+            std::string kind;
+            if (sec[i].label == "drop") {
+                kind = "drop";
+            } else if (sec[i].label == "groove" && sec[i - 1].label == "drop") {
+                kind = "groove after drop";
+            } else if (sec[i].label == "groove" &&
+                       (sec[i - 1].label == "build" || sec[i - 1].label == "predrop")) {
+                kind = "groove after build";
+            } else {
+                continue;
+            }
+            DropView v;
+            v.kind = kind;
+            v.track = track.name;
+            v.start_s = sec[i].start_s;
+            const double end_s = i + 1 < sec.size() ? sec[i + 1].start_s : a.duration_s;
+            v.bars = std::llround((end_s - sec[i].start_s) / bar_s);
+            v.before = sec[i - 1].label;
+            v.before_bars = std::llround((sec[i].start_s - sec[i - 1].start_s) / bar_s);
+            v.after = i + 1 < sec.size() ? sec[i + 1].label : "end";
+            const long long first = bar_at(sec[i].start_s);
+            const long long last = std::max(first + 1, bar_at(end_s));
+            for (long long m = first - 2; m <= first; ++m) {
+                if (m < 0) {
+                    v.kicks += "?? ";
+                    continue;
+                }
+                const SectionBar &b = bars[static_cast<size_t>(m)];
+                v.kicks += std::string(1, b.kick ? 'K' : '-') + std::to_string(b.kick_beats) + " ";
+            }
+            v.level_db = {mean_over(first - 4, first, true), mean_over(first, last, true),
+                          mean_over(last, last + 4, true)};
+            v.intensity = {mean_over(first - 4, first, false), mean_over(first, last, false),
+                           mean_over(last, last + 4, false)};
+            for (long long m = first; m < last && m < static_cast<long long>(bars.size()); ++m) {
+                const int d =
+                    section_at(detected, bars[static_cast<size_t>(m)].start_s + 0.5 * bar_s);
+                ++v.covered[d >= 0 ? detected[static_cast<size_t>(d)].label : "none"];
+            }
+            std::printf("%-18s  %-40s %7.1f s  %3lld bars  after %-9s %3lld bars  then %-9s  "
+                        "kicks %s level %+5.1f %+5.1f %+5.1f dB  intensity %.2f %.2f %.2f  "
+                        "detected",
+                        v.kind.c_str(), v.track.substr(0, 40).c_str(), v.start_s, v.bars,
+                        v.before.c_str(), v.before_bars, v.after.c_str(), v.kicks.c_str(),
+                        v.level_db[0], v.level_db[1], v.level_db[2], v.intensity[0], v.intensity[1],
+                        v.intensity[2]);
+            for (const auto &[label, n] : v.covered) {
+                std::printf(" %s %d", label.c_str(), n);
+            }
+            std::printf("\n");
+            views.push_back(std::move(v));
+        }
+        std::fflush(stdout);
+    }
+    // Per kind: counts and medians.
+    for (const char *kind : {"drop", "groove after drop", "groove after build"}) {
+        std::vector<double> bars_n, before_bars, lb, ld, la, ib, id, ia;
+        std::array<int, 6> lengths{};
+        std::map<std::string, int> before, after, covered_by;
+        int kick_off_before = 0, kick_on_first = 0, n = 0;
+        for (const DropView &v : views) {
+            if (v.kind != kind) {
+                continue;
+            }
+            ++n;
+            bars_n.push_back(static_cast<double>(v.bars));
+            ++lengths[drop_bin(v.bars)];
+            ++before[v.before];
+            before_bars.push_back(static_cast<double>(v.before_bars));
+            ++after[v.after];
+            kick_off_before += v.kicks.size() >= 6 && v.kicks[0] == '-' && v.kicks[3] == '-';
+            kick_on_first += v.kicks.size() >= 7 && v.kicks[6] == 'K';
+            const auto add = [](std::vector<double> &to, double x) {
+                if (std::isfinite(x)) {
+                    to.push_back(x);
+                }
+            };
+            add(lb, v.level_db[0]);
+            add(ld, v.level_db[1]);
+            add(la, v.level_db[2]);
+            add(ib, v.intensity[0]);
+            add(id, v.intensity[1]);
+            add(ia, v.intensity[2]);
+            std::string most;
+            int most_n = -1;
+            for (const auto &[label, c] : v.covered) {
+                if (c > most_n) {
+                    most = label;
+                    most_n = c;
+                }
+            }
+            ++covered_by[most];
+        }
+        std::printf("\n%s, %d: length in bars", kind, n);
+        for (size_t b = 0; b < lengths.size(); ++b) {
+            std::printf(" %s: %d", kDropBins[b], lengths[b]);
+        }
+        std::printf(" (median %.0f)\n  before:", median(bars_n));
+        for (const auto &[label, c] : before) {
+            std::printf(" %s %d;", label.c_str(), c);
+        }
+        std::printf(" (median %.0f bars)\n  after:", median(before_bars));
+        for (const auto &[label, c] : after) {
+            std::printf(" %s %d;", label.c_str(), c);
+        }
+        std::printf("\n  detected kick off in both bars before: %d; on in the first bar: %d\n",
+                    kick_off_before, kick_on_first);
+        std::printf("  level (dB from the track's median bar), median: before %+.1f, during "
+                    "%+.1f, after %+.1f; intensity: %.2f, %.2f, %.2f\n",
+                    median(lb), median(ld), median(la), median(ib), median(id), median(ia));
+        std::printf("  detected label over most of its bars:");
+        for (const auto &[label, c] : covered_by) {
+            std::printf(" %s %d;", label.c_str(), c);
+        }
+        std::printf("\n");
+    }
+    return views.empty() ? 1 : 0;
+}
+
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
@@ -1094,6 +1336,7 @@ int wmain(int argc, wchar_t **argv) {
     bool report = false;
     bool evaluate = false;
     bool label_statistics = false;
+    bool drops = false;
     EvalFlags eval_flags;
     std::vector<std::filesystem::path> excludes;
     TrackAnalysisOptions options;
@@ -1115,6 +1358,8 @@ int wmain(int argc, wchar_t **argv) {
             evaluate = true;
         } else if (std::wcscmp(argv[i], L"--labels-stats") == 0) {
             label_statistics = true;
+        } else if (std::wcscmp(argv[i], L"--drops") == 0) {
+            drops = true;
         } else if (std::wcscmp(argv[i], L"--texture-step") == 0 && i + 1 < argc) {
             texture_step = std::wcstod(argv[++i], nullptr);
         } else if (std::wcscmp(argv[i], L"--detail") == 0) {
@@ -1163,6 +1408,9 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (label_statistics) {
         return labels_stats(paths, excludes);
+    }
+    if (drops) {
+        return drops_study(paths, excludes, options.sections);
     }
     if (evaluate) {
         return sections_eval(paths, eval_flags, options.sections, overrides, excludes);
