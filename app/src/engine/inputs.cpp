@@ -162,6 +162,9 @@ EngineInputs inputs_at(const TrackAnalysis &a, const Grid &grid, double t_s,
             in.riser = riser[frame];
         }
     }
+    if (in.section == "build") {
+        in.tension = std::clamp(std::max(in.riser, in.build_progress), 0.0, 1.0);
+    }
     in.intensity = intensity_at(a.section_bars, a.intensity, t_s);
     const long long hat = last_at_or_before(r.hats, t_s, [](const HatOnset &h) { return h.t_s; });
     in.hats_so_far = hat + 1;
@@ -261,6 +264,10 @@ EngineInputs inputs_at(const LiveState &s, double t_s) {
         in.build_end_known = in.section_end_known;
     }
     in.riser = s.riser;
+    if (in.section == "build" && in.section_length_s > 0.0) {
+        const double ramp = 1.0 - std::exp2(-in.since_build_s / in.section_length_s);
+        in.tension = std::clamp(std::max(ramp, in.riser * (0.5 + 0.5 * ramp)), 0.0, 1.0);
+    }
     in.intensity = s.intensity;
 
     in.residual_level = std::clamp(s.residual_level, 0.0, 1.0);

@@ -86,6 +86,12 @@ struct EngineInputs {
     double since_build_s = 0.0;
     double build_length_s = 0.0;
     bool build_end_known = false; // As section_end_known.
+    // 0 to 1 through a build, never falling within it; 0 outside builds. File mode: the larger of
+    // the riser and the build progress (a quiet last bar holds what the build reached). Live mode,
+    // which cannot know the build's length: ramp = 1 - 2^(-since_build_s / phrase), and the
+    // larger of the ramp and riser * (0.5 + 0.5 ramp): the riser lifts it to a half fast, the
+    // ramp climbs half the remaining way each phrase.
+    double tension = 0.0;
     // The last kNoteHistory bass notes, newest first; entry 0 agrees with the bass fields above.
     // Live mode knows the latest note and only the onset times of three before it (length 0).
     std::array<NoteEvent, kNoteHistory> notes{};

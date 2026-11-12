@@ -5,6 +5,7 @@
 // not compared. Rewrite only for an intended change:
 //   set PSYIGHT_UPDATE_GOLDEN=1 && psyight_tests -tc="golden*"
 
+#include "analysis/live_analysis.h"
 #include "analysis/track_analysis.h"
 #include "engine/effect_spec.h"
 #include "engine/inputs.h"
@@ -191,7 +192,8 @@ TEST_CASE("inputs: consecutive builds are one run for build progress; the new so
     CHECK(source_value(ModSource::bass_confidence, in, 1) == doctest::Approx(0.37));
     CHECK(mod_source_from_id("build_progress") == ModSource::build_progress);
     CHECK(mod_source_from_id("bass_confidence") == ModSource::bass_confidence);
-    CHECK(kModSources.back() == ModSource::build_progress);
+    // Appended sources keep every older one in place (Tension came after Build progress).
+    CHECK(kModSources[29] == ModSource::build_progress);
 
     // Stutter: the pre-drop gap of the joined builds darkens only the run's last beat, where
     // the plain pre-drop gap darkens each build's.
@@ -210,4 +212,65 @@ TEST_CASE("inputs: consecutive builds are one run for build progress; the new so
     CHECK(gate(joined, 19.0) > 0.9f); // Inside the run.
     CHECK(gate(joined, 25.5) < 0.1f); // The run's last beat.
     CHECK(gate(plain, 25.5) < 0.1f);
+}
+
+TEST_CASE("inputs: tension climbs through a build in both modes and is 0 outside") {
+    // File mode: a build from 12.8 to 19.2 s whose riser rises to 0.9 by 15 s and holds.
+    TrackAnalysis a;
+    a.sample_rate_hz = kSampleRateHz;
+    a.duration_s = 30.0;
+    a.grid = {150.0, 0, kSampleRateHz};
+    a.sections = {
+        {0.0, 12.8, "groove", 1.0}, {12.8, 19.2, "build", 1.0}, {19.2, 30.0, "drop", 1.0}};
+    a.mix_features.sample_rate_hz = kSampleRateHz;
+    a.mix_features.hop_samples = 480; // Frames of 10 ms.
+    const size_t frames = 3000;
+    a.residual.energy_db.assign(frames, -30.0f);
+    a.residual.centroid_hz.assign(frames, 2000.0f);
+    a.residual.flatness.assign(frames, 0.1f);
+    a.riser.assign(frames, 0.0f);
+    for (size_t f = 1280; f < 1920; ++f) {
+        a.riser[f] = static_cast<float>(std::min(0.9, 0.9 * (f - 1280) / 220.0));
+    }
+    CHECK(inputs_at(a, a.grid, 14.0).tension == doctest::Approx(0.9 * 120 / 220.0).epsilon(0.01));
+    CHECK(inputs_at(a, a.grid, 19.0).tension == doctest::Approx(6.2 / 6.4)); // Progress leads.
+    CHECK(inputs_at(a, a.grid, 10.0).tension == 0.0);
+    CHECK(inputs_at(a, a.grid, 20.0).tension == 0.0);
+    double last = 0.0;
+    for (double t = 12.8; t < 19.2; t += 0.05) {
+        const double v = inputs_at(a, a.grid, t).tension;
+        CHECK(v >= last);
+        last = v;
+    }
+    CHECK(source_value(ModSource::tension, inputs_at(a, a.grid, 19.0), 1) ==
+          doctest::Approx(6.2 / 6.4));
+    CHECK(mod_source_from_id("tension") == ModSource::tension);
+    CHECK(kModSources.back() == ModSource::tension);
+
+    // Live mode: a build from 10 s, phrases of 12.8 s; the riser jumps to 0.6 at 11 s and to 1
+    // at 30 s.
+    LiveState s;
+    s.tempo_known = true;
+    s.locked = true;
+    s.period_s = 0.4;
+    s.phrase_bars = 8;
+    s.section = LiveSection::build;
+    s.section_start_s = 10.0;
+    s.section_count = 2;
+    last = 0.0;
+    for (double t = 10.0; t < 60.0; t += 0.1) {
+        s.riser = t < 11.0 ? 0.0 : t < 30.0 ? 0.6 : 1.0;
+        const double v = inputs_at(s, t).tension;
+        CHECK(v >= last - 1e-12);
+        last = v;
+    }
+    s.riser = 0.0;
+    CHECK(inputs_at(s, 10.0 + 12.8).tension == doctest::Approx(0.5)); // One phrase: half way.
+    CHECK(inputs_at(s, 10.0 + 25.6).tension == doctest::Approx(0.75));
+    s.riser = 0.6; // max(ramp, 0.6 * (0.5 + 0.5 * 0.5)) one phrase in.
+    CHECK(inputs_at(s, 10.0 + 12.8).tension == doctest::Approx(0.5));
+    CHECK(inputs_at(s, 10.0 + 1.0).tension ==
+          doctest::Approx(0.6 * (0.5 + 0.5 * (1.0 - std::exp2(-1.0 / 12.8)))));
+    s.section = LiveSection::groove;
+    CHECK(inputs_at(s, 20.0).tension == 0.0);
 }

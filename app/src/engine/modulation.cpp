@@ -105,6 +105,9 @@ double source_value(ModSource source, const EngineInputs &in, std::uint64_t seed
     case ModSource::build_progress:
         v = in.build_progress;
         break;
+    case ModSource::tension:
+        v = in.tension;
+        break;
     }
     return std::isfinite(v) ? std::clamp(v, 0.0, 1.0) : 0.0;
 }
@@ -260,6 +263,8 @@ const char *mod_source_name(ModSource source) {
         return "Bass confidence";
     case ModSource::build_progress:
         return "Build progress";
+    case ModSource::tension:
+        return "Tension";
     }
     return "?";
 }
@@ -382,6 +387,8 @@ const char *mod_source_id(ModSource source) {
         return "bass_confidence";
     case ModSource::build_progress:
         return "build_progress";
+    case ModSource::tension:
+        return "tension";
     }
     return "constant";
 }
