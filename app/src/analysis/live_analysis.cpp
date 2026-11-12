@@ -508,6 +508,11 @@ double LiveBeat::position(const LiveState &s, double t_s) {
 }
 
 void LiveBeat::set_section(LiveState &s, LiveSection section, double start_s) {
+    s.has_earlier = s.has_previous;
+    s.earlier_section = s.previous_section;
+    s.earlier_occurrence = s.previous_occurrence;
+    s.earlier_energy = s.previous_energy;
+    s.earlier_length_s = s.previous_length_s;
     s.has_previous = s.section_count > 0;
     s.previous_section = s.section;
     s.previous_occurrence = std::max(0, s.section_occurrences[static_cast<size_t>(s.section)] - 1);

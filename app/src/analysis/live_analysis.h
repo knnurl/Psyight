@@ -187,6 +187,13 @@ struct LiveState {
     int previous_occurrence = 0;
     int previous_energy = 1;
     double previous_length_s = 0.0; // Its phrases (the rotation it ended on).
+    // The section before that one, as the previous_* fields (a groove that returns after a short
+    // breakdown resumes the look it left: AutomationParams::live_resume).
+    bool has_earlier = false;
+    LiveSection earlier_section = LiveSection::intro;
+    int earlier_occurrence = 0;
+    int earlier_energy = 1;
+    double earlier_length_s = 0.0;
 };
 
 // The beat, downbeat, phrase and section half of the live analysis, driven by kick times: the

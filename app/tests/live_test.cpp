@@ -254,6 +254,88 @@ TEST_CASE("live beat: breakdowns, drops, downbeats and the run rule") {
     CHECK(rig.state.section_start_s == doctest::Approx(beat_s(132)).epsilon(1e-3));
 }
 
+TEST_CASE("live beat: the section history fields keep their values (Batch E adds, not changes)") {
+    // The kick sequence of the test above, then a short breakdown and a groove again. At every
+    // section change: the present fields, against their values before Batch E.
+    BeatRig rig;
+    const auto beat_s = [](int b) { return 1.0 + b * 0.4; };
+    struct Row {
+        LiveSection section;
+        double start_s;
+        bool has_previous;
+        LiveSection previous_section;
+        int previous_occurrence;
+        int previous_energy;
+        double previous_length_s;
+        bool has_earlier = false;
+        LiveSection earlier_section = LiveSection::intro;
+        int earlier_occurrence = 0;
+        int earlier_energy = 1;
+        double earlier_length_s = 0.0;
+    };
+    std::vector<Row> rows;
+    int count = 0;
+    const auto record = [&] {
+        if (rig.state.section_count != count) {
+            count = rig.state.section_count;
+            const LiveState &s = rig.state;
+            rows.push_back({s.section, s.section_start_s, s.has_previous, s.previous_section,
+                            s.previous_occurrence, s.previous_energy, s.previous_length_s,
+                            s.has_earlier, s.earlier_section, s.earlier_occurrence,
+                            s.earlier_energy, s.earlier_length_s});
+        }
+    };
+    const auto kicks = [&](int from, int to) {
+        for (int b = from; b < to; ++b) {
+            rig.kick(beat_s(b));
+            record();
+        }
+    };
+    kicks(0, 32);
+    kicks(36, 64);
+    for (int b = 64; b < 100; ++b) {
+        rig.advance_to(beat_s(b));
+        record();
+    }
+    kicks(100, 160);
+    for (int b = 160; b < 180; ++b) { // Five bars without a kick: a breakdown.
+        rig.advance_to(beat_s(b));
+        record();
+    }
+    kicks(180, 220);
+    // groove, breakdown, drop, groove, breakdown, groove.
+    const std::vector<Row> before = {
+        {LiveSection::groove, 4.2, false, LiveSection::intro, 0, 1, 4.2},
+        {LiveSection::breakdown, 26.6, true, LiveSection::groove, 0, 1, 22.4},
+        {LiveSection::drop, 41.0, true, LiveSection::breakdown, 0, 0, 14.4},
+        {LiveSection::groove, 53.8, true, LiveSection::drop, 0, 2, 12.8},
+        {LiveSection::breakdown, 65.0, true, LiveSection::groove, 1, 1, 11.2},
+        {LiveSection::groove, 73.0, true, LiveSection::breakdown, 1, 0, 8.0},
+    };
+    REQUIRE(rows.size() == before.size());
+    for (size_t i = 0; i < rows.size(); ++i) {
+        CAPTURE(i);
+        CHECK(rows[i].section == before[i].section);
+        CHECK(rows[i].start_s == doctest::Approx(before[i].start_s).epsilon(1e-6));
+        CHECK(rows[i].has_previous == before[i].has_previous);
+        CHECK(rows[i].previous_section == before[i].previous_section);
+        CHECK(rows[i].previous_occurrence == before[i].previous_occurrence);
+        CHECK(rows[i].previous_energy == before[i].previous_energy);
+        CHECK(rows[i].previous_length_s ==
+              doctest::Approx(before[i].previous_length_s).epsilon(1e-6));
+        // The added fields: the section before the previous one.
+        const Row *earlier = i > 0 ? &before[i - 1] : nullptr;
+        CHECK(rows[i].has_earlier == (earlier != nullptr && earlier->has_previous));
+        if (earlier != nullptr && earlier->has_previous) {
+            CHECK(rows[i].earlier_section == earlier->previous_section);
+            CHECK(rows[i].earlier_occurrence == earlier->previous_occurrence);
+            CHECK(rows[i].earlier_energy == earlier->previous_energy);
+            CHECK(rows[i].earlier_length_s ==
+                  doctest::Approx(earlier->previous_length_s).epsilon(1e-6));
+        }
+    }
+}
+
 TEST_CASE("live beat: a kick-kick-kick-gap groove is still a groove, not a breakdown then a drop") {
     for (const bool bridges : {true, false}) {
         CAPTURE(bridges);
