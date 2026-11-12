@@ -195,7 +195,8 @@ struct StrobeParams {
 };
 
 struct StutterParams {
-    int mode = 0;      // Grid, bass gate, kick duck, pre-drop gap, pre-drop gap (joined builds).
+    int mode = 0;      // Grid, bass gate, kick duck, pre-drop gap, pre-drop gap (joined builds),
+                       // pre-drop gap (detected: the section's pre-drop, else as joined builds).
     int division = 0;  // 16th, 8th, beat (grid mode).
     double duty = 0.5; // Grid: share open; kick duck: share of a beat to reopen.
     double depth = 1.0;

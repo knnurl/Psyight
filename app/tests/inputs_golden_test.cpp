@@ -355,3 +355,38 @@ TEST_CASE("inputs: breaks, fills, the pre-drop and the drop ahead, before, insid
     CHECK(mod_source_from_id("predrop") == ModSource::predrop);
     CHECK(kModSources.back() == ModSource::predrop);
 }
+
+TEST_CASE("stutter gate: the detected pre-drop gap, and joined builds without one") {
+    TrackAnalysis a;
+    a.sample_rate_hz = kSampleRateHz;
+    a.duration_s = 60.0;
+    a.grid = {150.0, 0, kSampleRateHz};
+    DetectedSection build{12.8, 25.6, "build", 1.0};
+    build.predrop_s = 22.4; // The last two bars.
+    const SectionTimeline with = section_timeline(a, a.grid,
+                                                  {{0.0, 12.8, "groove", 1.0},
+                                                   build,
+                                                   {25.6, 38.4, "drop", 1.0},
+                                                   {38.4, 44.8, "build", 1.0},
+                                                   {44.8, 60.0, "drop", 1.0}});
+    StutterParams detected;
+    detected.mode = 5;
+    StutterParams joined;
+    joined.mode = 4;
+    const Rig rig = default_rig();
+    const Palette palette{"p", {{1, 1, 1}}};
+    const auto gate = [&](const StutterParams &p, double t_s) {
+        Frame out(rig.pixels.size());
+        make_effect({p})->render({rig, inputs_at(a, a.grid, t_s, &with), palette, 1}, out);
+        return out[0].r;
+    };
+    CHECK(gate(detected, 22.0) > 0.9f); // Before the pre-drop.
+    CHECK(gate(detected, 23.0) < 0.1f); // Dark through it...
+    CHECK(gate(detected, 25.5) < 0.1f);
+    CHECK(gate(joined, 23.0) > 0.9f); // ...where the joined gap is dark only at the last beat.
+    CHECK(gate(detected, 30.0) > 0.9f);
+    // The second build has no pre-drop: as joined builds.
+    CHECK(gate(detected, 42.0) > 0.9f);
+    CHECK(gate(detected, 44.7) < 0.1f);
+    CHECK(gate(detected, 44.7) == gate(joined, 44.7));
+}

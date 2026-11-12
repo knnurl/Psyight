@@ -182,6 +182,14 @@ class Stutter final : public Effect {
                 open = into < 0.0 ? 1.0 : std::exp(-into / release_s);
             }
             break;
+        case 5: // Dark from the section's pre-drop to its end (file mode), else as 4.
+            if (in.predrop_length_s > 0.0) {
+                if (in.in_predrop) {
+                    open = std::exp(-in.predrop_progress * in.predrop_length_s / release_s);
+                }
+                break;
+            }
+            [[fallthrough]];
         case 4: // As 3, at the end of a run of builds taken as one.
             if (in.section == "build" && in.build_end_known && in.build_length_s > 0.0) {
                 const double into = in.since_build_s - (in.build_length_s - p_.gap_beats * beat_s);
