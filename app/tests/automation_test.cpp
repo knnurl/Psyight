@@ -440,6 +440,83 @@ TEST_CASE("automation: live mode rotates by phrase_bars phrases from the section
     CHECK(at(10.0 + 4 * kPhraseS + 0.01).to == kGroove);
 }
 
+namespace {
+
+// A live state locked at 150 BPM, phrases of 8 bars (12.8 s).
+LiveState live_locked() {
+    LiveState s;
+    s.tempo_known = true;
+    s.locked = true;
+    s.period_s = kBeatS;
+    s.phrase_bars = 8;
+    return s;
+}
+
+// A live section change, as LiveBeat::set_section makes it.
+void enter(LiveState &s, LiveSection section, double start_s) {
+    s.has_earlier = s.has_previous;
+    s.earlier_section = s.previous_section;
+    s.earlier_occurrence = s.previous_occurrence;
+    s.earlier_energy = s.previous_energy;
+    s.earlier_length_s = s.previous_length_s;
+    s.has_previous = s.section_count > 0;
+    s.previous_section = s.section;
+    s.previous_occurrence = std::max(0, s.section_occurrences[static_cast<size_t>(s.section)] - 1);
+    s.previous_energy = s.section_energy;
+    s.previous_length_s = std::max(0.0, start_s - s.section_start_s);
+    ++s.section_occurrences[static_cast<size_t>(section)];
+    s.section = section;
+    s.section_start_s = start_s;
+    ++s.section_count;
+}
+
+constexpr double kBarS = 4 * kBeatS;
+
+} // namespace
+
+TEST_CASE("automation: live breakdown commit delay") {
+    const std::vector<Scene> scenes = default_scenes();
+    // A groove of two phrases from 10 s, then a breakdown from 35.6 s.
+    LiveState groove = live_locked();
+    enter(groove, LiveSection::groove, 10.0);
+    LiveState breakdown = groove;
+    enter(breakdown, LiveSection::breakdown, 35.6);
+    for (const int bars : {0, 4}) {
+        CAPTURE(bars);
+        AutomationParams p;
+        p.live_breakdown_commit_bars = bars;
+        const auto at = [&](const LiveState &s, double t) {
+            return automate_live(scenes, s, inputs_at(s, t), p);
+        };
+        const SceneMix ended = at(groove, 35.59); // The look the groove ended on.
+        const SceneMix early = at(breakdown, 35.6 + 0.1);
+        if (bars == 0) { // As before: the breakdown's scene at once, crossfading in.
+            CHECK(early.to != ended.to);
+            CHECK(early.from == ended.to);
+        } else { // The groove's look stays through the wait, no fade.
+            for (const double into : {0.1, 2.0 * kBarS, 4.0 * kBarS - 0.05}) {
+                const SceneMix m = at(breakdown, 35.6 + into);
+                CHECK(m.to == ended.to);
+                CHECK(m.variant == ended.variant);
+                CHECK(m.from == -1);
+            }
+            // Then the breakdown's scene crossfades in from the groove's.
+            const SceneMix after = at(breakdown, 35.6 + 4.0 * kBarS + 0.1);
+            CHECK(after.to == at(breakdown, 35.6 + 6.0 * kBarS).to);
+            CHECK(after.to != ended.to);
+            CHECK(after.from == ended.to);
+            CHECK(after.to_weight < 0.2);
+        }
+        // A build declared in the breakdown's third bar takes over at once, from the look that
+        // was showing.
+        LiveState build = breakdown;
+        enter(build, LiveSection::build, 35.6 + 3.0 * kBarS);
+        const SceneMix b = at(build, 35.6 + 3.0 * kBarS + 0.1);
+        CHECK(b.to == kBuild);
+        CHECK(b.from == (bars == 0 ? early.to : ended.to));
+    }
+}
+
 TEST_CASE("automation: phrase-end fills in long grooves, before rotations, not at the end") {
     const TrackAnalysis a = long_groove(); // Six phrases of groove, then a breakdown.
     AutomationParams p;

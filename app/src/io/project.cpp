@@ -229,6 +229,8 @@ AutomationParams parse_automation(const json &aut) {
         optional<std::string>(aut, "palette_rotation", palette_rotation_id(a.palette_rotation));
     a.palette_rotation =
         from_id_or_throw(palette_rotation_from_id(rotation), "palette rotation", rotation);
+    a.live_breakdown_commit_bars =
+        integer(aut, "live_breakdown_commit_bars", a.live_breakdown_commit_bars, 0, 8);
     return a;
 }
 
@@ -252,7 +254,8 @@ json automation_json(const AutomationParams &a) {
             {"energy_dim", finite(a.energy_dim, "energy_dim")},
             {"energy_scenes", a.energy_scenes},
             {"hold_rule", hold_rule_id(a.hold_rule)},
-            {"palette_rotation", palette_rotation_id(a.palette_rotation)}};
+            {"palette_rotation", palette_rotation_id(a.palette_rotation)},
+            {"live_breakdown_commit_bars", a.live_breakdown_commit_bars}};
 }
 
 json scene_json(const Scene &s) {

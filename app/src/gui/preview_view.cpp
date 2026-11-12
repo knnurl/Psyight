@@ -2495,6 +2495,12 @@ void PreviewView::draw_automation() {
           "mid, high), so a groove that fills up or thins out changes with it. File mode; live "
           "mode already judges a groove's energy each phrase.");
     ImGui::TextDisabled("Scenes can also follow it: route the Intensity source.");
+    ImGui::SeparatorText("Live mode");
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_int("Breakdown waits (bars)", &a.live_breakdown_commit_bars, 0.05f, 0, 8, "%d"),
+          "Live mode cannot know how long a breakdown will last: most last under 4 bars (a "
+          "kick dropout). The look before it stays this many bars, then the breakdown scene "
+          "fades in; a build or drop takes over at once. 0: at once.");
     if (changed) {
         project_.edit().automation = a;
         project_.changed();

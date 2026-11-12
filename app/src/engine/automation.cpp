@@ -446,6 +446,33 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
                                      state.section_energy, phrases, key);
     mix.to = now.scene;
     mix.variant = now.variant;
+    // The look a section ended on (`back` sections before this one).
+    const auto ended_look = [&](LiveSection section, int occ, int energy, double length_s,
+                                int back) {
+        return look_in_section(
+            scenes, params, live_section_name(section), static_cast<size_t>(occ), energy,
+            static_cast<long long>(std::floor(std::max(0.0, length_s / phrase_s - 1e-6))),
+            static_cast<std::uint64_t>(state.section_count - back));
+    };
+    // The look the section before ended on, as shown: a breakdown shorter than the commit delay
+    // never showed its own, so then the one before it.
+    const double wait_s = std::clamp(params.live_breakdown_commit_bars, 0, 8) * 4.0 * beat_s;
+    const auto previous_look = [&] {
+        if (wait_s > 0.0 && state.previous_section == LiveSection::breakdown &&
+            state.previous_length_s < wait_s && state.has_earlier) {
+            return ended_look(state.earlier_section, state.earlier_occurrence, state.earlier_energy,
+                              state.earlier_length_s, 2);
+        }
+        return ended_look(state.previous_section, state.previous_occurrence, state.previous_energy,
+                          state.previous_length_s, 1);
+    };
+    const bool waiting = wait_s > 0.0 && state.section == LiveSection::breakdown;
+    if (waiting && state.has_previous && into_s < wait_s) { // Not committed yet.
+        const Look held = previous_look();
+        mix.to = held.scene;
+        mix.variant = held.variant;
+        return mix;
+    }
     if (phrases > 0) {
         const Look before =
             look_in_section(scenes, params, inputs.section, occurrence(state.section),
@@ -459,19 +486,14 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
     if (!state.has_previous || cuts_into(inputs.section)) {
         return mix;
     }
-    const std::string previous_label = live_section_name(state.previous_section);
-    const auto previous_phrases = static_cast<long long>(
-        std::floor(std::max(0.0, state.previous_length_s / phrase_s - 1e-6)));
-    // The look the section before ended on.
-    const Look previous =
-        look_in_section(scenes, params, previous_label,
-                        static_cast<size_t>(state.previous_occurrence), state.previous_energy,
-                        previous_phrases, static_cast<std::uint64_t>(state.section_count - 1));
+    const Look previous = previous_look();
+    // A breakdown that waited crossfades from the end of its wait.
+    const double since_s = waiting ? into_s - wait_s : inputs.since_section_s;
     const double fade_s = std::min(params.crossfade_beats * beat_s, 0.5 * inputs.section_length_s);
-    if (previous != now && fade_s > 0.0 && inputs.since_section_s < fade_s) {
+    if (previous != now && fade_s > 0.0 && since_s < fade_s) {
         mix.from = previous.scene;
         mix.variant_from = previous.variant;
-        mix.to_weight = inputs.since_section_s / fade_s;
+        mix.to_weight = since_s / fade_s;
     }
     return mix;
 }

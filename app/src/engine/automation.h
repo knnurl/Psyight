@@ -104,6 +104,10 @@ struct AutomationParams {
     bool energy_scenes = true;  // File mode: each phrase's energy picks its scene.
     HoldRule hold_rule = HoldRule::tolerant;
     PaletteRotation palette_rotation = PaletteRotation::all;
+    // Live mode: a declared breakdown keeps the look the section before ended on for its first
+    // this many bars, then crossfades as before; a build or drop declared meanwhile takes over at
+    // once. 0: at once (as before). 0 to 8.
+    int live_breakdown_commit_bars = 0;
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
