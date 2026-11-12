@@ -108,6 +108,10 @@ struct AutomationParams {
     // this many bars, then crossfades as before; a build or drop declared meanwhile takes over at
     // once. 0: at once (as before). 0 to 8.
     int live_breakdown_commit_bars = 0;
+    // Live mode: a groove after a breakdown shorter than a phrase, when a groove or drop came
+    // before that breakdown, takes up that section's look (scene, rotation step and variation)
+    // and its rotation goes on from the phrases it had run. Off: the next groove look (as before).
+    bool live_resume = false;
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for

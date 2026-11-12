@@ -438,21 +438,36 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
     const double phrase_s = 4.0 * state.phrase_bars * beat_s;
     const double into_s = std::max(0.0, inputs.t_s - state.section_start_s);
     const auto phrases = static_cast<long long>(std::floor(into_s / phrase_s + 1e-9));
-    place_fill(mix, params, inputs.section, phrases,
+    const auto ended_phrases = [&](double length_s) {
+        return static_cast<long long>(std::floor(std::max(0.0, length_s / phrase_s - 1e-6)));
+    };
+    // The section whose look this one shows: itself, or (live_resume) the groove or drop before
+    // a short breakdown, its phrases going on from where it ended.
+    const bool resume = params.live_resume && state.section == LiveSection::groove &&
+                        state.has_previous && state.previous_section == LiveSection::breakdown &&
+                        state.previous_length_s < phrase_s - 1e-6 && state.has_earlier &&
+                        (state.earlier_section == LiveSection::groove ||
+                         state.earlier_section == LiveSection::drop);
+    const std::string label = resume ? live_section_name(state.earlier_section) : inputs.section;
+    const size_t shown_occurrence =
+        resume ? static_cast<size_t>(state.earlier_occurrence) : occurrence(state.section);
+    const int energy = resume ? state.earlier_energy : state.section_energy;
+    const long long shown_phrases =
+        resume ? ended_phrases(state.earlier_length_s) + phrases : phrases;
+    const auto key = static_cast<std::uint64_t>(state.section_count - (resume ? 2 : 0));
+    place_fill(mix, params, inputs.section, shown_phrases,
                state.section_start_s + static_cast<double>(phrases + 1) * phrase_s, false,
-               inputs.t_s, beat_s, static_cast<std::uint64_t>(state.section_count));
-    const auto key = static_cast<std::uint64_t>(state.section_count);
-    const Look now = look_in_section(scenes, params, inputs.section, occurrence(state.section),
-                                     state.section_energy, phrases, key);
+               inputs.t_s, beat_s, key);
+    const Look now =
+        look_in_section(scenes, params, label, shown_occurrence, energy, shown_phrases, key);
     mix.to = now.scene;
     mix.variant = now.variant;
     // The look a section ended on (`back` sections before this one).
     const auto ended_look = [&](LiveSection section, int occ, int energy, double length_s,
                                 int back) {
-        return look_in_section(
-            scenes, params, live_section_name(section), static_cast<size_t>(occ), energy,
-            static_cast<long long>(std::floor(std::max(0.0, length_s / phrase_s - 1e-6))),
-            static_cast<std::uint64_t>(state.section_count - back));
+        return look_in_section(scenes, params, live_section_name(section), static_cast<size_t>(occ),
+                               energy, ended_phrases(length_s),
+                               static_cast<std::uint64_t>(state.section_count - back));
     };
     // The look the section before ended on, as shown: a breakdown shorter than the commit delay
     // never showed its own, so then the one before it.
@@ -474,9 +489,8 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
         return mix;
     }
     if (phrases > 0) {
-        const Look before =
-            look_in_section(scenes, params, inputs.section, occurrence(state.section),
-                            state.section_energy, phrases - 1, key);
+        const Look before = look_in_section(scenes, params, label, shown_occurrence, energy,
+                                            shown_phrases - 1, key);
         if (before != now) { // This phrase began a rotation or a new variation.
             fade_change(mix, before, into_s - static_cast<double>(phrases) * phrase_s, beat_s,
                         params);

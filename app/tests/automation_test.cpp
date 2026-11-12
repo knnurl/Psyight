@@ -517,6 +517,68 @@ TEST_CASE("automation: live breakdown commit delay") {
     }
 }
 
+TEST_CASE("automation: live resumed groove") {
+    const std::vector<Scene> scenes = default_scenes();
+    // Groove 1 from 10 s for a phrase and a half (its last look: phrase 1), a breakdown of
+    // `break_bars` bars, then groove 2.
+    const auto run = [&](double break_bars, AutomationParams p) {
+        LiveState s = live_locked();
+        enter(s, LiveSection::groove, 10.0);
+        const double g1_end = 10.0 + 1.5 * kPhraseS;
+        const SceneMix last = automate_live(scenes, s, inputs_at(s, g1_end - 0.01), p);
+        enter(s, LiveSection::breakdown, g1_end);
+        const double g2 = g1_end + break_bars * kBarS;
+        enter(s, LiveSection::groove, g2);
+        return std::pair{last, [=, &scenes](double into_s) {
+                             return automate_live(scenes, s, inputs_at(s, g2 + into_s), p);
+                         }};
+    };
+    AutomationParams resume;
+    resume.live_resume = true;
+    {
+        // Six bars of breakdown: groove 2 takes up groove 1's look, and its rotation goes on
+        // from groove 1's phrases (rotate every 2: groove 1 ended in phrase 1, step 0; groove 2's
+        // phrase 1 is phrase 2, step 1).
+        const auto [last, at] = run(6.0, resume);
+        CHECK(at(0.1).to == last.to);
+        CHECK(at(0.1).variant == last.variant);
+        LiveState g1 = live_locked();
+        enter(g1, LiveSection::groove, 10.0);
+        const SceneMix g1_phrase2 =
+            automate_live(scenes, g1, inputs_at(g1, 10.0 + 2 * kPhraseS + 0.1), resume);
+        CHECK(g1_phrase2.to != last.to);
+        CHECK(at(kPhraseS + 0.1).to == g1_phrase2.to);
+        CHECK(at(kPhraseS + 0.1).variant == g1_phrase2.variant);
+        // Off (the default): the next groove look.
+        const auto [last_off, at_off] = run(6.0, AutomationParams{});
+        CHECK(last_off.to == last.to);
+        CHECK(at_off(0.1).to != last.to);
+    }
+    {
+        // A breakdown of two phrases is a real one: not resumed.
+        const auto [last, at] = run(16.0, resume);
+        const auto [last_off, at_off] = run(16.0, AutomationParams{});
+        CHECK(at(0.1).to == at_off(0.1).to);
+        CHECK(at(0.1).variant == at_off(0.1).variant);
+    }
+    {
+        // With the commit delay at 4 bars and resume on, a 3-bar breakdown never changes the
+        // scene: groove, breakdown, groove all show groove 1's last look.
+        AutomationParams both = resume;
+        both.live_breakdown_commit_bars = 4;
+        LiveState s = live_locked();
+        enter(s, LiveSection::groove, 10.0);
+        const double g1_end = 10.0 + 1.5 * kPhraseS;
+        const SceneMix last = automate_live(scenes, s, inputs_at(s, g1_end - 0.01), both);
+        enter(s, LiveSection::breakdown, g1_end);
+        for (double t = g1_end; t < g1_end + 3 * kBarS; t += 0.2) {
+            CHECK(automate_live(scenes, s, inputs_at(s, t), both).to == last.to);
+        }
+        enter(s, LiveSection::groove, g1_end + 3 * kBarS);
+        CHECK(automate_live(scenes, s, inputs_at(s, g1_end + 3 * kBarS + 0.1), both).to == last.to);
+    }
+}
+
 TEST_CASE("automation: phrase-end fills in long grooves, before rotations, not at the end") {
     const TrackAnalysis a = long_groove(); // Six phrases of groove, then a breakdown.
     AutomationParams p;

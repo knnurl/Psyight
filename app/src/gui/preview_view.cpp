@@ -2501,6 +2501,9 @@ void PreviewView::draw_automation() {
           "Live mode cannot know how long a breakdown will last: most last under 4 bars (a "
           "kick dropout). The look before it stays this many bars, then the breakdown scene "
           "fades in; a build or drop takes over at once. 0: at once.");
+    field(ImGui::Checkbox("Resume a groove after a short break", &a.live_resume),
+          "A groove that returns within a phrase of a breakdown takes up the look it left "
+          "(scene, variation and rotation) instead of the next groove scene.");
     if (changed) {
         project_.edit().automation = a;
         project_.changed();

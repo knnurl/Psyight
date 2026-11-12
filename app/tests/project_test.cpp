@@ -82,6 +82,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.automation.hold_rule = HoldRule::strict;
     p.automation.palette_rotation = PaletteRotation::scene_list;
     p.automation.live_breakdown_commit_bars = 4;
+    p.automation.live_resume = true;
     p.scenes[0].palette_list = {1, 0};
     p.show_pack = "Hexagon";
     p.group_caps = {{"booth", 0.4}, {"canopy", 0.75}};
@@ -138,6 +139,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.automation.hold_rule == HoldRule::strict);
     CHECK(q.automation.palette_rotation == PaletteRotation::scene_list);
     CHECK(q.automation.live_breakdown_commit_bars == 4);
+    CHECK(q.automation.live_resume);
     CHECK(q.scenes[0].palette_list == std::vector<int>{1, 0});
     CHECK(q.scenes[1].palette_list.empty());
     CHECK(q.show_pack == "Hexagon");
