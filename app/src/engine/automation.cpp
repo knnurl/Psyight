@@ -419,7 +419,10 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
             *phrases_out = phrases;
         }
         const auto key = static_cast<std::uint64_t>(std::llround(s.start_s * 1000.0));
-        const size_t occurrence = occurrence_of(sections, own, phrase_s, params.hold_rule);
+        const size_t occurrence = params.scene_by == SceneBy::phase && s.phase >= 0 &&
+                                          (s.label == "groove" || s.label == "drop")
+                                      ? static_cast<size_t>(s.phase)
+                                      : occurrence_of(sections, own, phrase_s, params.hold_rule);
         return std::pair{look_in_section(scenes, params, s.label, occurrence,
                                          phrase_energy(s, phrases), phrases, key),
                          phrases > 0
@@ -659,6 +662,18 @@ std::optional<PaletteRotation> palette_rotation_from_id(const std::string &id) {
     }
     if (id == "scene_list") {
         return PaletteRotation::scene_list;
+    }
+    return std::nullopt;
+}
+
+const char *scene_by_id(SceneBy by) { return by == SceneBy::phase ? "phase" : "occurrence"; }
+
+std::optional<SceneBy> scene_by_from_id(const std::string &id) {
+    if (id == "occurrence") {
+        return SceneBy::occurrence;
+    }
+    if (id == "phase") {
+        return SceneBy::phase;
     }
     return std::nullopt;
 }

@@ -2442,6 +2442,15 @@ void PreviewView::draw_automation() {
         "A section shorter than a phrase keeps the scene before it. Look past short builds: a "
         "one-bar build shows the build scene for its bar, and the short sections after it go "
         "back to the scene before it. Strict (older): they keep the build scene.");
+    int scene_by = a.scene_by == SceneBy::phase ? 1 : 0;
+    ImGui::SetNextItemWidth(10.0f * em);
+    if (ImGui::Combo("Grooves pick by", &scene_by, "Turn (next scene each time) Phase (A, B) ")) {
+        a.scene_by = scene_by == 1 ? SceneBy::phase : SceneBy::occurrence;
+        changed = true;
+    }
+    ImGui::SetItemTooltip("File mode. Phase: a groove or drop labelled with a phase (A, B...) "
+                          "takes the scene for its phase, so groove A looks the same each time it "
+                          "returns. Sections without a phase take turns as before.");
     ImGui::SeparatorText("Long sections");
     ImGui::SetNextItemWidth(6.0f * em);
     field(drag_int("Next scene every (phrases)", &a.rotate_every_phrases, 0.05f, 0, 64, "%d"),

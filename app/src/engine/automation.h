@@ -89,6 +89,13 @@ enum class FillSource { phrase, events, both };
 const char *fill_source_id(FillSource source); // "phrase", "events", "both" (files).
 std::optional<FillSource> fill_source_from_id(const std::string &id);
 
+// Which candidate a groove or drop takes: by how many came before (occurrence, as before), or
+// by its phase (SPEC 6.6.1: groove A looks the same each time it returns; sections without a
+// phase count as before).
+enum class SceneBy { occurrence, phase };
+const char *scene_by_id(SceneBy by); // "occurrence", "phase" (files).
+std::optional<SceneBy> scene_by_from_id(const std::string &id);
+
 // How a section shorter than a phrase keeps the scene before it (above).
 enum class HoldRule { strict, tolerant };
 const char *hold_rule_id(HoldRule rule); // "strict", "tolerant" (files).
@@ -127,6 +134,7 @@ struct AutomationParams {
     // File mode: what plays over a break event for its whole length (gap: the stop-cut look); off
     // as before. Never mix (a project asking for it loads as off).
     PhraseFill break_fill = PhraseFill::off;
+    SceneBy scene_by = SceneBy::occurrence; // File mode (live sections have no phase).
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for

@@ -242,6 +242,8 @@ AutomationParams parse_automation(const json &aut) {
     if (a.break_fill == PhraseFill::mix) {
         a.break_fill = PhraseFill::off; // Not allowed over a break.
     }
+    const std::string scene_by = optional<std::string>(aut, "scene_by", scene_by_id(a.scene_by));
+    a.scene_by = from_id_or_throw(scene_by_from_id(scene_by), "scene by", scene_by);
     return a;
 }
 
@@ -270,7 +272,8 @@ json automation_json(const AutomationParams &a) {
             {"live_resume", a.live_resume},
             {"detected_events", a.detected_events},
             {"fill_source", fill_source_id(a.fill_source)},
-            {"break_fill", phrase_fill_id(a.break_fill)}};
+            {"break_fill", phrase_fill_id(a.break_fill)},
+            {"scene_by", scene_by_id(a.scene_by)}};
 }
 
 json scene_json(const Scene &s) {

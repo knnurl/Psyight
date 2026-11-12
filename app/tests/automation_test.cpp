@@ -390,6 +390,42 @@ SceneMix rotated_at(const TrackAnalysis &a, double t_s, const AutomationParams &
 
 } // namespace
 
+TEST_CASE("automation: grooves by phase: A B A shows the first look again") {
+    // Three groove scenes, so taking turns gives three different looks.
+    std::vector<Scene> scenes(3, default_scenes()[static_cast<size_t>(kGroove)]);
+    TrackAnalysis a = long_groove(); // Three phrases a groove.
+    a.duration_s = 128.0;
+    a.phrase_starts_s.clear();
+    for (double t = 0.0; t < 128.0; t += kPhraseS) {
+        a.phrase_starts_s.push_back(t);
+    }
+    DetectedSection g1{0.0, 38.4, "groove", 1.0};
+    g1.phase = 0;
+    DetectedSection g2{38.4, 76.8, "groove", 1.0};
+    g2.phase = 1;
+    DetectedSection g3{76.8, 115.2, "groove", 1.0};
+    g3.phase = 0;
+    a.sections = {g1, g2, g3, {115.2, 128.0, "breakdown", 1.0}};
+    AutomationParams p;
+    const auto scene_at = [&](double t) {
+        return automate(scenes, a, a.grid, inputs_at(a, a.grid, t), p).to;
+    };
+    CHECK(scene_at(39.0) != scene_at(1.0));
+    CHECK(scene_at(77.0) != scene_at(1.0)); // Taking turns: the third groove, the third scene.
+    p.scene_by = SceneBy::phase;
+    CHECK(scene_at(77.0) == scene_at(1.0)); // A again.
+    CHECK(scene_at(39.0) != scene_at(1.0)); // B.
+    // Rotation inside a section is unchanged: two phrases into A, the next scene.
+    CHECK(scene_at(77.0 + 2 * kPhraseS) != scene_at(77.0));
+    // Sections without a phase take turns as before.
+    for (DetectedSection &sec : a.sections) {
+        sec.phase = -1;
+    }
+    const int by_phase = scene_at(77.0);
+    p.scene_by = SceneBy::occurrence;
+    CHECK(scene_at(77.0) == by_phase);
+}
+
 TEST_CASE("automation: fills from events and over breaks") {
     TrackAnalysis a = long_groove(); // Phrase-end fills at 25.6 and 51.2 (gap, 2 beats).
     a.events = {{"fill", 30.0, 1.6}, {"break", 40.0, 3.2}, {"fill", 50.8, 1.6}};
