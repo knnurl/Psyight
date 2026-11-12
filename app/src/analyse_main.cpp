@@ -36,17 +36,18 @@
 // --json <file> writes the --param overrides, one row per track (its set, tempo band and every
 // score) and the totals for all, tune and held out, under the printed names in snake case, so
 // two runs can be diffed by a script.
-// --exclude <audio> (repeatable) leaves a file out of --sections-eval and --labels-stats (a
-// second labelled copy of a track). --labels-stats <audio or folder> [more...] reads the labels of
-// the tracks marked done, without analysis (the audio is decoded only for its length): per track
-// its tempo, sections per minute, what else is labelled and its set (T or H); then, over all tracks
-// and per tempo band (under 160, 160 to 175, over 175 BPM, a stand-in for subgenre), the median
-// sections per minute, section lengths in bars per label (bars between nearest downbeats), the bars
-// since the previous boundary (from bar 1 for the first) by their place on the 4 and 8-bar lines,
-// breakdown lengths by what follows once builds and pre-drops are passed, and how many tracks
-// carry a labelled phrase grid, phases, roles and events; and the labelled drops: their length
-// (1, 2, 3 to 4, 5 to 8, 9 to 16, over 16 bars), the section before (its label and length) and
-// the one after.
+// --only tune|held_out scores one set of the split alone (a sweep tunes on the tune set without
+// running the held-out tracks). --exclude <audio> (repeatable) leaves a file out of --sections-eval
+// and --labels-stats (a second labelled copy of a track). --labels-stats <audio or folder>
+// [more...] reads the labels of the tracks marked done, without analysis (the audio is decoded only
+// for its length): per track its tempo, sections per minute, what else is labelled and its set (T
+// or H); then, over all tracks and per tempo band (under 160, 160 to 175, over 175 BPM, a stand-in
+// for subgenre), the median sections per minute, section lengths in bars per label (bars between
+// nearest downbeats), the bars since the previous boundary (from bar 1 for the first) by their
+// place on the 4 and 8-bar lines, breakdown lengths by what follows once builds and pre-drops are
+// passed, and how many tracks carry a labelled phrase grid, phases, roles and events; and the
+// labelled drops: their length (1, 2, 3 to 4, 5 to 8, 9 to 16, over 16 bars), the section before
+// (its label and length) and the one after.
 // --drops <audio or folder> [more...] (with --exclude, --param) analyses the tracks marked done
 // and prints the detector's view of every labelled drop, of the groove after a drop and of a
 // groove after a build (drops_study), then counts and medians per kind. Read-only.
@@ -575,6 +576,7 @@ struct EvalFlags {
     bool detail = false;        // --detail
     bool split = false;         // --split
     bool scores = false;        // --scores
+    int only = -1;              // --only: 0 the tune set, 1 the held-out set; -1 both.
     std::filesystem::path json; // --json <file>; empty: none.
 };
 
@@ -747,7 +749,9 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
     std::array<EvalTotals, 3> totals; // All, tune, held out.
     DetailScore detail_total;
     for (const TrackEntry &track : tracks) {
-        if (track.status != LabelStatus::done) {
+        if (track.status != LabelStatus::done ||
+            (flags.only >= 0 &&
+             held_out_track(path_to_utf8(track.path.filename())) != (flags.only == 1))) {
             continue;
         }
         const Result<Labels> labels = load_labels(labels_path_for(track.path));
@@ -1368,6 +1372,13 @@ int wmain(int argc, wchar_t **argv) {
             eval_flags.split = true;
         } else if (std::wcscmp(argv[i], L"--exclude") == 0 && i + 1 < argc) {
             excludes.emplace_back(argv[++i]);
+        } else if (std::wcscmp(argv[i], L"--only") == 0 && i + 1 < argc) {
+            const std::wstring set = argv[++i];
+            if (set != L"tune" && set != L"held_out") {
+                std::fprintf(stderr, "--only takes tune or held_out\n");
+                return 2;
+            }
+            eval_flags.only = set == L"tune" ? 0 : 1;
         } else if (std::wcscmp(argv[i], L"--scores") == 0) {
             eval_flags.scores = true;
         } else if (std::wcscmp(argv[i], L"--json") == 0 && i + 1 < argc) {
