@@ -41,6 +41,11 @@
 //   PaletteRotation::all (the default) a scene's palette moves through every palette; with
 //   scene_list, through the scene's own palette_list (or stays on its palette when it has none),
 //   so each scene keeps a colour identity.
+// - Live mode, opt-in (Batch E): with live_breakdown_commit_bars, a declared breakdown keeps the
+//   look the section before ended on for that many bars, then crossfades as before (a build or
+//   drop declared meanwhile takes over at once, fading from the look that was showing); with
+//   live_resume, a groove after a breakdown shorter than a phrase, when a groove or drop came
+//   before that breakdown, takes up that section's look and goes on with its rotation.
 // - A manual scene overrides the section rules until released. SceneLauncher (below) makes a
 //   newly chosen scene, or the return to the rules, wait for the next bar or phrase (SPEC 7.6:
 //   a cut on the next downbeat), as AutomationParams::launch says.
