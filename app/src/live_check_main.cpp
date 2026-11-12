@@ -2,7 +2,8 @@
 // arriving live, and measures it against the file-mode analysis of the same audio.
 //
 //   psyight_live_check <audio> [--block <samples>] [--student <weights>] [--trace <from s> <to s>]
-//                      [--show <project.psyproj> [--dwell]] [--set] [--gain-db <dB>]
+//                      [--show <project.psyproj> [--dwell] [--commit-bars <n>] [--resume]]
+//                      [--set] [--gain-db <dB>]
 //
 // Feeds the decoded mono mix in blocks (default 480 samples, a 10 ms WASAPI period) and reports:
 // kicks against the file analysis's (stems when they exist) at +-20 ms; when the tempo was
@@ -17,7 +18,11 @@
 // complete dwells in phrases (under a half, a half to one, one to two, over two; all, and with
 // the dwells a drop or build brought in aside), each dwell under a phrase with its time and the
 // sections before, during and after, and the live breakdowns by length in bars with how many a
-// drop followed. Works with --set (DJ sets). Local tracks only.
+// drop followed; then, for each live drop, the time from its start to the first frame that shows
+// its scene alone, and the share of build time the tension and the riser spend within 0.05 of
+// their build's highest. --commit-bars <n> and --resume override the project's
+// live_breakdown_commit_bars and live_resume (Batch E candidates). Works with --set (DJ sets).
+// Local tracks only.
 
 #include "analysis/live_analysis.h"
 #include "analysis/scoring.h"
@@ -160,17 +165,48 @@ void print_dwell(const std::vector<SceneDwell> &dwells, const std::vector<LiveSt
                 to_drop[3]);
 }
 
+// Live figures measured on the rendered frames with --dwell, beside the dwells.
+struct LiveFigures {
+    std::vector<double> drop_scene_s; // Per live drop: its start to the first frame showing it.
+    double build_s = 0.0;             // Frames in builds...
+    double tension_top_s = 0.0;       // ...with the tension within 0.05 of its build's highest...
+    double riser_top_s = 0.0;         // ...and the riser within 0.05 of its build's highest.
+};
+
+void print_live_figures(const LiveFigures &f) {
+    std::vector<double> d = f.drop_scene_s;
+    std::sort(d.begin(), d.end());
+    std::printf("  drop scene: %zu live drops, from the drop's start to the first frame showing it "
+                "alone: median %.2f s, max %.2f s\n",
+                d.size(), d.empty() ? 0.0 : d[d.size() / 2], d.empty() ? 0.0 : d.back());
+    std::printf("  builds: %.0f s; within 0.05 of the build's highest: tension %.0f%% of build "
+                "time, riser %.0f%%\n",
+                f.build_s, f.build_s > 0.0 ? 100.0 * f.tension_top_s / f.build_s : 0.0,
+                f.build_s > 0.0 ? 100.0 * f.riser_top_s / f.build_s : 0.0);
+}
+
 // --show: the project's show rendered from the live states as live mode renders it (automation,
 // the scene mix and the fade on silence; no limiters), at 60 fps. Prints a line every 2 s (only
 // between --trace's times when given): the section, the scene, the automation's brightness, the
 // intensity and riser, the mean luminance and lit share, and each of the scene's layers alone.
-// With --dwell, then the scene dwell figures (print_dwell) over the frames rendered.
+// With --dwell, then the scene dwell figures (print_dwell) over the frames rendered, the time
+// from each live drop to its scene and the tension against the riser through builds.
+// --commit-bars and --resume override the project's live_breakdown_commit_bars and live_resume.
 int show_timeline(const std::vector<LiveState> &states, const std::filesystem::path &path,
-                  double from_s, double to_s, double duration_s, bool dwell) {
-    const Result<Project> loaded = load_project(path);
+                  double from_s, double to_s, double duration_s, bool dwell,
+                  std::optional<int> commit_bars, bool resume) {
+    Result<Project> loaded = load_project(path);
     if (!loaded) {
         std::fprintf(stderr, "%s\n", loaded.error().message.c_str());
         return 1;
+    }
+    if (commit_bars || resume) {
+        loaded.value().automation.live_breakdown_commit_bars =
+            commit_bars.value_or(loaded.value().automation.live_breakdown_commit_bars);
+        loaded.value().automation.live_resume |= resume;
+        std::printf("  automation overrides: live_breakdown_commit_bars %d, live_resume %s\n",
+                    loaded.value().automation.live_breakdown_commit_bars,
+                    loaded.value().automation.live_resume ? "on" : "off");
     }
     const Project &project = loaded.value();
     const Rig rig = rig_of(project);
@@ -193,6 +229,23 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
     std::vector<SceneDwell> dwells;
     int dwell_section_count = 0;
     double shown_s = 0.0;
+    LiveFigures figures;
+    int drop_seen = 0; // The section count of the last live drop measured.
+    std::vector<std::pair<double, double>> build_frames; // Tension and riser in this build.
+    int build_count = 0;
+    const auto end_build = [&] {
+        double top_tension = 0.0, top_riser = 0.0;
+        for (const auto &[tension, riser] : build_frames) {
+            top_tension = std::max(top_tension, tension);
+            top_riser = std::max(top_riser, riser);
+        }
+        for (const auto &[tension, riser] : build_frames) {
+            figures.build_s += 1.0 / kFps;
+            figures.tension_top_s += tension >= top_tension - 0.05 ? 1.0 / kFps : 0.0;
+            figures.riser_top_s += riser >= top_riser - 0.05 ? 1.0 / kFps : 0.0;
+        }
+        build_frames.clear();
+    };
     for (long long f = 0; static_cast<double>(f) / kFps <= std::min(to_s, duration_s); ++f) {
         const double t_s = static_cast<double>(f) / kFps;
         while (k + 1 < states.size() && states[k + 1].analysed_s <= t_s) {
@@ -215,6 +268,19 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
             dwell_section_count = s.section_count;
             dwells.back().end_s = t_s;
             dwells.back().phrase_s = 4.0 * s.phrase_bars * (s.tempo_known ? s.period_s : 0.5);
+            if (!s.silent && s.section == LiveSection::drop && s.section_count != drop_seen &&
+                mix.from < 0) {
+                drop_seen = s.section_count;
+                figures.drop_scene_s.push_back(t_s - s.section_start_s);
+            }
+            const bool in_build = !s.silent && s.section == LiveSection::build;
+            if (!build_frames.empty() && (!in_build || s.section_count != build_count)) {
+                end_build();
+            }
+            if (in_build) {
+                build_count = s.section_count;
+                build_frames.emplace_back(inputs.tension, inputs.riser);
+            }
         }
         Frame frame = render_mix(project.scenes, mix, rig, inputs, project.palettes, kSeed, &memory,
                                  &variants);
@@ -253,7 +319,9 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
         std::printf("\n");
     }
     if (dwell) {
+        end_build();
         print_dwell(dwells, states, shown_s);
+        print_live_figures(figures);
     }
     return 0;
 }
@@ -545,6 +613,8 @@ int wmain(int argc, wchar_t **argv) {
     std::filesystem::path project_path;
     bool set_mode = false;
     bool dwell = false;
+    std::optional<int> commit_bars;
+    bool resume = false;
     double gain_db = 0.0; // Applied to the live input only (a mixer's master level knob).
     int block = 480;
     double trace_from_s = -1.0, trace_to_s = -1.0;
@@ -562,6 +632,10 @@ int wmain(int argc, wchar_t **argv) {
             set_mode = true;
         } else if (std::wcscmp(argv[i], L"--dwell") == 0) {
             dwell = true;
+        } else if (std::wcscmp(argv[i], L"--commit-bars") == 0 && i + 1 < argc) {
+            commit_bars = std::clamp(_wtoi(argv[++i]), 0, 8);
+        } else if (std::wcscmp(argv[i], L"--resume") == 0) {
+            resume = true;
         } else if (std::wcscmp(argv[i], L"--gain-db") == 0 && i + 1 < argc) {
             gain_db = _wtof(argv[++i]);
         } else {
@@ -571,7 +645,8 @@ int wmain(int argc, wchar_t **argv) {
     if (audio_path.empty()) {
         std::fprintf(stderr, "usage: psyight_live_check <audio> [--block <samples>] "
                              "[--student <weights>] [--trace <from s> <to s>] [--show "
-                             "<project> [--dwell]] [--set] [--gain-db <dB>]\n");
+                             "<project> [--dwell] [--commit-bars <n>] [--resume]] [--set] "
+                             "[--gain-db <dB>]\n");
         return 2;
     }
     const Result<StudentModel> model = load_student(weights);
@@ -673,7 +748,7 @@ int wmain(int argc, wchar_t **argv) {
         print_live_sections(live);
         if (!project_path.empty()) {
             return show_timeline(live.recorded_states(), project_path, trace_from_s, trace_to_s,
-                                 duration_s, dwell);
+                                 duration_s, dwell, commit_bars, resume);
         }
         return 0;
     }
@@ -775,7 +850,7 @@ int wmain(int argc, wchar_t **argv) {
     print_live_sections(live);
     if (!project_path.empty()) {
         return show_timeline(live.recorded_states(), project_path, trace_from_s, trace_to_s,
-                             duration_s, dwell);
+                             duration_s, dwell, commit_bars, resume);
     }
     return 0;
 }
