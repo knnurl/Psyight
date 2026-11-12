@@ -12,6 +12,7 @@
 #include "engine/presets.h"
 #include "engine/rig.h"
 #include "engine/rig_templates.h"
+#include "io/session_record.h"
 #include "output/show_check.h"
 #include "synth_generator.h"
 
@@ -23,6 +24,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,8 +38,8 @@ constexpr int kBars = 57;
 constexpr double kFps = 20.0;
 constexpr double kSlack = 1e-6; // Runs are bit-identical; this only absorbs JSON round trips.
 
-std::filesystem::path golden_path() {
-    return std::filesystem::path(PSYIGHT_TESTS_DIR) / "golden" / "show_baseline.json";
+std::filesystem::path golden_path(const char *name = "show_baseline.json") {
+    return std::filesystem::path(PSYIGHT_TESTS_DIR) / "golden" / name;
 }
 
 bool update_requested() {
@@ -111,12 +113,45 @@ const Track &track() {
     return t;
 }
 
-nlohmann::json measure(const ShowPack &pack) {
+// The same track with the finer detail labelled (Batch D): grooves A (bar 4), B (bar 17) and A
+// (bar 45), the drop reprising A, a pre-drop over the build's last bar, a two-bar break in the
+// first groove and a one-bar fill at the second groove's phrase end.
+std::shared_ptr<const SectionTimeline> detailed_sections() {
+    const Track &t = track();
+    std::vector<DetectedSection> sections = t.sections->sections;
+    const double bar_s = 4.0 * 60.0 / kBpm;
+    const double first_s = sections[1].start_s - 4 * bar_s;
+    for (DetectedSection &s : sections) {
+        const auto bar = static_cast<int>(std::lround((s.start_s - first_s) / bar_s));
+        if (s.label == "groove") {
+            s.phase = bar == 17 ? 1 : 0;
+        } else if (s.label == "drop") {
+            s.phase = 0;
+        } else if (s.label == "build" && bar == 33) {
+            s.predrop_s = first_s + 36 * bar_s;
+        }
+    }
+    return std::make_shared<const SectionTimeline>(section_timeline(
+        *t.analysis, t.grid, std::move(sections),
+        {{"break", first_s + 8 * bar_s, 2 * bar_s}, {"fill", first_s + 24 * bar_s, bar_s}}));
+}
+
+// The Batch D options on (each off by default).
+AutomationParams with_options(AutomationParams a) {
+    a.fill_source = FillSource::both;
+    a.break_fill = PhraseFill::gap;
+    a.scene_by = SceneBy::phase;
+    return a;
+}
+
+nlohmann::json measure(const ShowPack &pack,
+                       std::shared_ptr<const SectionTimeline> sections = nullptr,
+                       std::optional<AutomationParams> automation = std::nullopt) {
     const Track &t = track();
     ShowConfig config;
     config.analysis = t.analysis;
     config.grid = t.grid;
-    config.sections = t.sections;
+    config.sections = sections != nullptr ? sections : t.sections;
     config.rig = mandala();
     config.patch = build_patch(config.rig);
     config.limiter.brightness_cap = 0.4375; // The owner's hexagon project.
@@ -124,7 +159,7 @@ nlohmann::json measure(const ShowPack &pack) {
     config.limiter.flash_limiter = false;
     config.scenes = pack.scenes;
     config.palettes = pack.palettes;
-    config.automation = pack.automation;
+    config.automation = automation.value_or(pack.automation);
     ShowCheckOptions options;
     options.fps = kFps;
     const ShowCheckResult r = run_show_check(config, t.duration_s, options);
@@ -197,4 +232,81 @@ TEST_CASE("golden show: the three packs on the hexagon over a synthetic track ma
     REQUIRE_MESSAGE(file.good(), "missing " << golden_path().string()
                                             << "; set PSYIGHT_UPDATE_GOLDEN=1 to create it");
     compare(nlohmann::json::parse(file), current, "");
+}
+
+TEST_CASE("golden show options: breaks, fills, pre-drop and phases on, Hexagon 4 over the "
+          "synthetic track") {
+    nlohmann::json current;
+    for (const ShowPack &pack : builtin_show_packs()) {
+        if (pack.name == "Hexagon 4") {
+            current["Hexagon 4"] =
+                measure(pack, detailed_sections(), with_options(pack.automation));
+            current["Hexagon 4, options off"] = measure(pack, detailed_sections());
+        }
+    }
+    REQUIRE(current.size() == 2);
+    CHECK(current["Hexagon 4"] != current["Hexagon 4, options off"]); // The options do something.
+    if (update_requested()) {
+        std::ofstream(golden_path("show_options_baseline.json")) << current.dump(2) << "\n";
+        MESSAGE("wrote " << golden_path("show_options_baseline.json").string());
+        return;
+    }
+    std::ifstream file(golden_path("show_options_baseline.json"));
+    REQUIRE_MESSAGE(file.good(), "missing show_options_baseline.json; set "
+                                 "PSYIGHT_UPDATE_GOLDEN=1 to create it");
+    compare(nlohmann::json::parse(file), current, "");
+}
+
+TEST_CASE("replay: a recording with the Batch D options and labelled detail replays identically") {
+    const Track &t = track();
+    ShowPack pack;
+    for (const ShowPack &p : builtin_show_packs()) {
+        if (p.name == "Hexagon 4") {
+            pack = p;
+        }
+    }
+    ShowConfig config;
+    config.analysis = t.analysis;
+    config.grid = t.grid;
+    config.sections = detailed_sections();
+    config.rig = mandala();
+    config.patch = build_patch(config.rig);
+    config.scenes = pack.scenes;
+    config.palettes = pack.palettes;
+    config.automation = with_options(pack.automation);
+    // As the app records it (PreviewView::record_params) and psyight_replay rebuilds it.
+    Project project = default_project();
+    project.scenes = config.scenes;
+    project.palettes = config.palettes;
+    project.automation = config.automation;
+    RuntimeState runtime;
+    runtime.grid = config.grid;
+    runtime.sections = config.sections->sections;
+    runtime.events = config.sections->events;
+    const Result<std::vector<ParamsEntry>> entries =
+        parse_params_jsonl(params_line(1, project, runtime).value());
+    REQUIRE(entries.ok());
+    const ParamsEntry &e = entries.value()[0];
+    ShowConfig replayed = config;
+    replayed.automation = e.project.automation;
+    replayed.scenes = e.project.scenes;
+    replayed.palettes = e.project.palettes;
+    replayed.sections = std::make_shared<const SectionTimeline>(
+        section_timeline(*t.analysis, e.runtime.grid, e.runtime.sections, e.runtime.events));
+    const auto frames = [&](const ShowConfig &c) {
+        std::vector<Frame> out;
+        ShowCheckOptions options;
+        options.fps = kFps;
+        options.on_frame = [&](const ShowFrame &f) { out.push_back(f.frame); };
+        run_show_check(c, t.duration_s, options);
+        return out;
+    };
+    const std::vector<Frame> recorded = frames(config);
+    const std::vector<Frame> again = frames(replayed);
+    REQUIRE(recorded.size() == again.size());
+    size_t different = 0;
+    for (size_t i = 0; i < recorded.size(); ++i) {
+        different += recorded[i] != again[i];
+    }
+    CHECK(different == 0);
 }

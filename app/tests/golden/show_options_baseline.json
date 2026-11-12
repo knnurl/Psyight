@@ -1,0 +1,422 @@
+{
+  "Hexagon 4": {
+    "current_max_a": 3.7208235294117653,
+    "current_mean_a": 1.4741550338139613,
+    "dark_before_mean": 0.33638723425419165,
+    "dark_mean": 0.7615394032602999,
+    "flashes_after": 16,
+    "flashes_before": 211,
+    "groups": {
+      "hex": {
+        "dark_share": 0.0509761388286334,
+        "max_byte": 34,
+        "mean_byte": 2.6311116275866877
+      },
+      "inner": {
+        "dark_share": 0.08459869848156182,
+        "max_byte": 34,
+        "mean_byte": 2.8814211386714383
+      },
+      "left": {
+        "dark_share": 0.0509761388286334,
+        "max_byte": 34,
+        "mean_byte": 2.622805725176481
+      },
+      "middle": {
+        "dark_share": 0.052060737527114966,
+        "max_byte": 30,
+        "mean_byte": 2.887882494115476
+      },
+      "outer": {
+        "dark_share": 0.05260303687635575,
+        "max_byte": 31,
+        "mean_byte": 2.3380829081502714
+      },
+      "right": {
+        "dark_share": 0.0509761388286334,
+        "max_byte": 34,
+        "mean_byte": 2.632540468697108
+      },
+      "spokes": {
+        "dark_share": 0.05260303687635575,
+        "max_byte": 34,
+        "mean_byte": 2.6931884942154705
+      }
+    },
+    "max_after_in_1s": 3,
+    "max_before_in_1s": 5,
+    "power_limited_frames": 2,
+    "scenes": {
+      "Bloom 3": {
+        "flashes_alone": 412,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Comet rain": {
+        "flashes_alone": 135,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Cube 3": {
+        "flashes_alone": 243,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Deep space": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Deep tunnel": {
+        "flashes_alone": 43,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 2,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Drop bloom": {
+        "flashes_alone": 104,
+        "max_byte": 28,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 579.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.8
+      },
+      "Facet intro": {
+        "flashes_alone": 361,
+        "max_byte": 24,
+        "max_flashes_alone_in_1s": 7,
+        "median_lit_pixels": 1080.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.4
+      },
+      "Hammer": {
+        "flashes_alone": 392,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 7,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Hex echoes": {
+        "flashes_alone": 402,
+        "max_byte": 1,
+        "max_flashes_alone_in_1s": 7,
+        "median_lit_pixels": 31.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.5
+      },
+      "Hex pressure": {
+        "flashes_alone": 103,
+        "max_byte": 31,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 1100.0,
+        "quarter_above_20": 0.0125,
+        "seconds": 8.0
+      },
+      "Hex radar": {
+        "flashes_alone": 230,
+        "max_byte": 31,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 696.0,
+        "quarter_above_20": 0.0,
+        "seconds": 25.95
+      },
+      "Hex tunnel": {
+        "flashes_alone": 397,
+        "max_byte": 34,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 838.0,
+        "quarter_above_20": 0.0,
+        "seconds": 25.7
+      },
+      "Lattice": {
+        "flashes_alone": 24,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 2,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Nebula": {
+        "flashes_alone": 67,
+        "max_byte": 18,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 800.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.85
+      },
+      "Note rings": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Pitch tunnel": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Radar 3": {
+        "flashes_alone": 230,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Ring rain": {
+        "flashes_alone": 254,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Star radar": {
+        "flashes_alone": 26,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 1,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Tunnel 3": {
+        "flashes_alone": 397,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      }
+    }
+  },
+  "Hexagon 4, options off": {
+    "current_max_a": 3.7208235294117653,
+    "current_mean_a": 1.461878057079663,
+    "dark_before_mean": 0.34745750553776694,
+    "dark_mean": 0.7898011377765554,
+    "flashes_after": 10,
+    "flashes_before": 211,
+    "groups": {
+      "hex": {
+        "dark_share": 0.016811279826464208,
+        "max_byte": 34,
+        "mean_byte": 2.5343427561431886
+      },
+      "inner": {
+        "dark_share": 0.0710412147505423,
+        "max_byte": 34,
+        "mean_byte": 2.8375223993209495
+      },
+      "left": {
+        "dark_share": 0.016811279826464208,
+        "max_byte": 34,
+        "mean_byte": 2.504618948503507
+      },
+      "middle": {
+        "dark_share": 0.055314533622559656,
+        "max_byte": 30,
+        "mean_byte": 2.7857225273457393
+      },
+      "outer": {
+        "dark_share": 0.09273318872017354,
+        "max_byte": 31,
+        "mean_byte": 2.1618394386565223
+      },
+      "right": {
+        "dark_share": 0.016811279826464208,
+        "max_byte": 34,
+        "mean_byte": 2.5314152236697414
+      },
+      "spokes": {
+        "dark_share": 0.01843817787418655,
+        "max_byte": 34,
+        "mean_byte": 2.693920974933719
+      }
+    },
+    "max_after_in_1s": 2,
+    "max_before_in_1s": 5,
+    "power_limited_frames": 2,
+    "scenes": {
+      "Bloom 3": {
+        "flashes_alone": 412,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Comet rain": {
+        "flashes_alone": 135,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Cube 3": {
+        "flashes_alone": 243,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Deep space": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Deep tunnel": {
+        "flashes_alone": 43,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 2,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Drop bloom": {
+        "flashes_alone": 104,
+        "max_byte": 28,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 579.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.8
+      },
+      "Facet intro": {
+        "flashes_alone": 361,
+        "max_byte": 24,
+        "max_flashes_alone_in_1s": 7,
+        "median_lit_pixels": 1080.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.4
+      },
+      "Hammer": {
+        "flashes_alone": 392,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 7,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Hex echoes": {
+        "flashes_alone": 402,
+        "max_byte": 1,
+        "max_flashes_alone_in_1s": 7,
+        "median_lit_pixels": 31.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.5
+      },
+      "Hex pressure": {
+        "flashes_alone": 103,
+        "max_byte": 31,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 1100.0,
+        "quarter_above_20": 0.0125,
+        "seconds": 8.0
+      },
+      "Hex radar": {
+        "flashes_alone": 230,
+        "max_byte": 31,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 694.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.1
+      },
+      "Hex tunnel": {
+        "flashes_alone": 397,
+        "max_byte": 34,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 840.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.85
+      },
+      "Lattice": {
+        "flashes_alone": 24,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 2,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Nebula": {
+        "flashes_alone": 67,
+        "max_byte": 18,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 800.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.85
+      },
+      "Note rings": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Pitch tunnel": {
+        "flashes_alone": 0,
+        "max_byte": 31,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 140.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.85
+      },
+      "Radar 3": {
+        "flashes_alone": 230,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 3,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Ring rain": {
+        "flashes_alone": 254,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 4,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Star radar": {
+        "flashes_alone": 26,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 1,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Tunnel 3": {
+        "flashes_alone": 397,
+        "max_byte": 33,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 871.0,
+        "quarter_above_20": 0.0,
+        "seconds": 12.85
+      }
+    }
+  }
+}
