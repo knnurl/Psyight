@@ -348,6 +348,80 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
         }
     }
 
+    // Block novelty on 4-bar lines inside a groove or drop (novelty_step > 0).
+    if (p.novelty_step > 0.0) {
+        const int span = std::max(1, static_cast<int>(std::lround(p.novelty_bars)));
+        std::vector<std::vector<double>> features;
+        for (const SectionBar &bar : bar_list) {
+            std::vector<double> v = bar.texture;
+            if (residual != nullptr) {
+                v.push_back(bar.flatness);
+                v.push_back(std::log10(std::max(bar.centroid_hz, 1.0)));
+            }
+            features.push_back(std::move(v));
+        }
+        const size_t dims = features.front().size();
+        std::vector<double> f_mean(dims, 0.0);
+        std::vector<double> f_sd(dims, 0.0);
+        for (const std::vector<double> &v : features) {
+            for (size_t d = 0; d < dims; ++d) {
+                f_mean[d] += v[d] / bars;
+            }
+        }
+        for (const std::vector<double> &v : features) {
+            for (size_t d = 0; d < dims; ++d) {
+                f_sd[d] += (v[d] - f_mean[d]) * (v[d] - f_mean[d]) / bars;
+            }
+        }
+        for (double &v : f_sd) {
+            v = std::sqrt(v);
+        }
+        for (int m = 0; m < bars;) {
+            int n = m;
+            while (n < bars && label[n] == label[m]) {
+                ++n;
+            }
+            if (label[m] == "groove" || label[m] == "drop") {
+                // The novelty at each 4-bar line of the run [m, n), -1 where undefined.
+                const auto novelty = [&](int b) {
+                    if (b <= m || b >= n ||
+                        ((b - phrase_offset) % kTextureLineBars + kTextureLineBars) %
+                                kTextureLineBars !=
+                            0) {
+                        return -1.0;
+                    }
+                    const int from = std::max(m, b - span);
+                    const int to = std::min(n, b + span);
+                    double distance = 0.0;
+                    for (size_t d = 0; d < dims; ++d) {
+                        if (f_sd[d] <= 1e-9) {
+                            continue;
+                        }
+                        double before = 0.0;
+                        double after = 0.0;
+                        for (int k = from; k < b; ++k) {
+                            before += features[static_cast<size_t>(k)][d];
+                        }
+                        for (int k = b; k < to; ++k) {
+                            after += features[static_cast<size_t>(k)][d];
+                        }
+                        const double change = (after / (to - b) - before / (b - from)) / f_sd[d];
+                        distance += change * change;
+                    }
+                    return std::sqrt(distance);
+                };
+                for (int b = m + kTextureLineBars; b <= n - kTextureLineBars; ++b) {
+                    const double here = novelty(b);
+                    if (here >= p.novelty_step && here > novelty(b - kTextureLineBars) &&
+                        here >= novelty(b + kTextureLineBars)) {
+                        cut[b] = true;
+                    }
+                }
+            }
+            m = n;
+        }
+    }
+
     // Merge runs of equal labels.
     for (int m = 0; m < bars;) {
         int n = m;
@@ -555,6 +629,8 @@ const ParamEntry kParamTable[] = {
     {&SectionParams::predrop_max_bars, "section.predrop_max_bars", "Pre-drop length", "bars", 1.0, 8.0, ParamTier::engineer, "The longest pre-drop."},
     {&SectionParams::break_max_bars, "section.break_max_bars", "Break length", "bars", 1.0, 8.0, ParamTier::engineer, "The longest kickless run inside a groove counted as a break."},
     {&SectionParams::fill_distance, "section.fill_distance", "Fill distance", "", 0.2, 10.0, ParamTier::engineer, "A phrase's last bar this far (scaled over the track) from the rest of the phrase is a fill."},
+    {&SectionParams::novelty_step, "section.novelty_step", "Novelty step", "", 0.0, 10.0, ParamTier::engineer, "Block novelty: how much the mean sound of the bars after a 4-bar line must differ from the bars before (texture step's unit) to start a new section there. 0: off."},
+    {&SectionParams::novelty_bars, "section.novelty_bars", "Novelty bars", "bars", 1.0, 16.0, ParamTier::engineer, "Block novelty: the bars averaged on each side of the line."},
     {&SectionParams::texture_step, "section.texture_step", "Texture step", "", 0.2, 10.0, ParamTier::tune, "How much a bar's sound (band levels, bass and hats density, scaled over the track) must change from the bar before to start a new section on a 4-bar line."},
 };
 // clang-format on
@@ -575,6 +651,7 @@ Result<void> declare_section_params(ParamRegistry &registry) {
                                 entry.member == &SectionParams::build_min_flatness ||
                                 entry.member == &SectionParams::energy_step_db ||
                                 entry.member == &SectionParams::texture_step ||
+                                entry.member == &SectionParams::novelty_step ||
                                 entry.member == &SectionParams::phase_distance ||
                                 entry.member == &SectionParams::peak_share ||
                                 entry.member == &SectionParams::lead_flatness_ratio ||

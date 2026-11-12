@@ -7,8 +7,10 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -206,10 +208,13 @@ TEST_CASE("sections: parameters round trip through the registry") {
 namespace {
 
 // 40 bars of rolling bass at 150 BPM with kicks where kick_at(bar) and the bass scaled by
-// bass_gain(bar); the sections found, and the first downbeat and phrase offset.
+// bass_gain(bar), and a quiet 6 kHz tone of layer(bar) amplitude (a layer coming in); the
+// sections found with `params`, and the first downbeat and phrase offset.
 template <typename KickAt, typename BassGain>
 std::vector<DetectedSection> sections_of(KickAt kick_at, BassGain bass_gain, double &downbeat_s,
-                                         int &phrase_offset) {
+                                         int &phrase_offset,
+                                         const std::function<double(int)> &layer = {},
+                                         const SectionParams &section_params = {}) {
     constexpr double kBpm = 150.0;
     synth::SynthParams params;
     params.bpm = kBpm;
@@ -230,6 +235,10 @@ std::vector<DetectedSection> sections_of(KickAt kick_at, BassGain bass_gain, dou
         if (whole >= 0 && kick_at(whole)) {
             mix.samples[i] += kicks.samples[i];
         }
+        if (layer && whole >= 0) {
+            mix.samples[i] += static_cast<float>(
+                layer(whole) * std::sin(2.0 * 3.14159265358979 * 6000.0 * i / kSampleRateHz));
+        }
     }
     const Result<FrontEndResult> features = analyse_front_end(mix.samples, kSampleRateHz, {});
     REQUIRE(features.ok());
@@ -237,7 +246,7 @@ std::vector<DetectedSection> sections_of(KickAt kick_at, BassGain bass_gain, dou
     REQUIRE(beats.ok());
     phrase_offset = beats.value().phrase_bar_offset;
     const Result<std::vector<DetectedSection>> found =
-        detect_sections(features.value(), beats.value(), {});
+        detect_sections(features.value(), beats.value(), section_params);
     REQUIRE(found.ok());
     return found.value();
 }
@@ -350,4 +359,93 @@ TEST_CASE("sections: the riser curve follows a build's flatness, holds, and is 0
     CHECK(curve[850] == doctest::Approx(0.5).epsilon(0.05));
     CHECK(curve[899] == doctest::Approx(1.0));
     CHECK(curve[950] == 0.0f);
+}
+
+namespace {
+
+// The bars (from the first downbeat) where grooves start after the first.
+std::vector<int> groove_splits(const std::vector<DetectedSection> &found, double downbeat_s) {
+    std::vector<int> out;
+    for (size_t i = 1; i < found.size(); ++i) {
+        if (found[i].label == "groove" && found[i - 1].label == "groove") {
+            out.push_back(static_cast<int>(std::lround((found[i].start_s - downbeat_s) / 1.6)));
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("sections: block novelty splits where a layer comes in and stays, not at a fill") {
+    const auto kicks = [](int bar) { return bar >= 4 && bar < 36; };
+    const auto steady = [](int) { return 1.0; };
+    double downbeat_s = 0.0;
+    int offset = 0;
+    sections_of(kicks, steady, downbeat_s, offset);
+    // The first 8-bar line at or after bar 20 on this track's grid.
+    const int line = 20 + ((offset - 20) % 8 + 8) % 8;
+    REQUIRE(line < 28);
+    SectionParams off;     // Today's rules.
+    SectionParams novelty; // The novelty rule on, the texture rule out of reach.
+    novelty.novelty_step = 1.0;
+    novelty.texture_step = 1e9;
+    SectionParams texture_only = off; // A low texture step: one bar's change is enough.
+    texture_only.texture_step = 0.5;
+
+    // A layer comes in on the line and stays: one novelty split there, whatever the texture step.
+    const std::function<double(int)> enters = [&](int bar) { return bar >= line ? 0.01 : 0.0; };
+    std::vector<DetectedSection> found =
+        sections_of(kicks, steady, downbeat_s, offset, enters, novelty);
+    CAPTURE(summary_of(found, downbeat_s));
+    CHECK(groove_splits(found, downbeat_s) == std::vector<int>{line});
+    SectionParams both = novelty;
+    both.texture_step = 1.5;
+    found = sections_of(kicks, steady, downbeat_s, offset, enters, both);
+    CAPTURE(summary_of(found, downbeat_s));
+    CHECK(groove_splits(found, downbeat_s) == std::vector<int>{line}); // One split, not two.
+
+    // A one-bar fill at the phrase end (the layer in the bar before the line only): no novelty
+    // split; the texture rule alone, at a low step, splits there.
+    const std::function<double(int)> fill = [&](int bar) { return bar == line - 1 ? 0.01 : 0.0; };
+    found = sections_of(kicks, steady, downbeat_s, offset, fill, novelty);
+    CAPTURE(summary_of(found, downbeat_s));
+    CHECK(groove_splits(found, downbeat_s).empty());
+    found = sections_of(kicks, steady, downbeat_s, offset, fill, texture_only);
+    CAPTURE(summary_of(found, downbeat_s));
+    const std::vector<int> texture_splits = groove_splits(found, downbeat_s);
+    CHECK(std::find(texture_splits.begin(), texture_splits.end(), line) != texture_splits.end());
+
+    // A change that ramps in over two bars across the line: one split, on the line.
+    const std::function<double(int)> ramp = [&](int bar) {
+        return bar >= line ? 0.01 : bar == line - 1 ? 0.003 : 0.0;
+    };
+    found = sections_of(kicks, steady, downbeat_s, offset, ramp, novelty);
+    CAPTURE(summary_of(found, downbeat_s));
+    CHECK(groove_splits(found, downbeat_s) == std::vector<int>{line});
+
+    // Off (novelty_step 0, the default) reproduces today's sections exactly, whatever
+    // novelty_bars is.
+    SectionParams other_bars = off;
+    other_bars.novelty_bars = 8.0;
+    for (const std::function<double(int)> &layer : {enters, fill, ramp}) {
+        const std::vector<DetectedSection> a =
+            sections_of(kicks, steady, downbeat_s, offset, layer, off);
+        const std::vector<DetectedSection> b =
+            sections_of(kicks, steady, downbeat_s, offset, layer, other_bars);
+        REQUIRE(a.size() == b.size());
+        for (size_t i = 0; i < a.size(); ++i) {
+            CHECK(a[i].start_s == b[i].start_s);
+            CHECK(a[i].end_s == b[i].end_s);
+            CHECK(a[i].label == b[i].label);
+            CHECK(a[i].energy == b[i].energy);
+        }
+    }
+    // Deterministic: the same input twice gives the same sections.
+    const std::vector<DetectedSection> again =
+        sections_of(kicks, steady, downbeat_s, offset, enters, novelty);
+    found = sections_of(kicks, steady, downbeat_s, offset, enters, novelty);
+    REQUIRE(again.size() == found.size());
+    for (size_t i = 0; i < found.size(); ++i) {
+        CHECK(again[i].start_s == found[i].start_s);
+    }
 }

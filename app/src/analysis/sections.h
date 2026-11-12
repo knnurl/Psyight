@@ -28,6 +28,14 @@
 //   texture (the five bands' levels and the bass and hats onset density, each scaled over the
 //   track) differs from the bar before by texture_step or more (the kick runs on: a layer comes
 //   in, the bass changes; on the owner's labelled tracks most changes are of this kind);
+// - block novelty (novelty_step > 0, off by default): a groove or drop also splits on a 4-bar
+//   line where the mean feature vector of the novelty_bars bars after it (the texture plus the
+//   residual's flatness and log centroid, each scaled over the track; without a residual the
+//   texture alone) differs from the mean of the novelty_bars bars before (both clipped to the run
+//   of the label) by novelty_step or more, in texture_step's unit, when that line's novelty is the
+//   largest within 4 bars either side and both pieces are at least 4 bars (Foote's checkerboard
+//   novelty in block-mean form: a one-bar fill moves a 4-bar mean by a quarter, a lasting change
+//   by all of it);
 // - build starts within build_snap_bars of a 4-bar line of the phrase grid move onto it.
 // Confidence is the share of beats in the section that agree with its kick state.
 // Assumptions: 4/4 on the beat tracker's grid. Deterministic. Latency: non-causal (file mode).
@@ -67,6 +75,11 @@ struct SectionParams {
     double predrop_max_bars = 4.0;
     double break_max_bars = 4.0;
     double fill_distance = 2.5; // A phrase's last bar this far from the rest of it is a fill.
+    // Block novelty (Batch C): 0 off. A groove or drop also splits on a 4-bar line where the mean
+    // of the novelty_bars bars after it differs from the mean of those before by novelty_step
+    // (texture_step's unit), the largest within 4 bars either side, each piece at least 4 bars.
+    double novelty_step = 0.0;
+    double novelty_bars = 4.0;
 };
 
 // One bar of the grid as the section rules see it (also printed by psyight_analyse --bars).
