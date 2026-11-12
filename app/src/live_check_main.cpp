@@ -14,7 +14,8 @@
 // at each kick between two times; --show renders the project's show from the live state as live
 // mode does and prints a timeline (between --trace's times when given). --dwell, with --show,
 // then prints the live scene dwell over the frames rendered: scene changes per minute (a change of
-// SceneMix::to at a new section; rotations and variations inside a section are not changes), the
+// SceneMix::to at a new section, or when a breakdown held by live_breakdown_commit_bars commits;
+// rotations and variations inside a section are not changes), the
 // complete dwells in phrases (under a half, a half to one, one to two, over two; all, and with
 // the dwells a drop or build brought in aside), each dwell under a phrase with its time and the
 // sections before, during and after, and the live breakdowns by length in bars with how many a
@@ -227,7 +228,7 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
     size_t k = 0;
     double next_print_s = from_s;
     std::vector<SceneDwell> dwells;
-    int dwell_section_count = 0;
+    long long dwell_event = 0; // The section count, twice, plus one once a breakdown commits.
     double shown_s = 0.0;
     LiveFigures figures;
     int drop_seen = 0; // The section count of the last live drop measured.
@@ -258,14 +259,20 @@ int show_timeline(const std::vector<LiveState> &states, const std::filesystem::p
         if (dwell) {
             shown_s = t_s;
             const char *section = s.silent ? "silent" : live_section_name(s.section);
-            if (dwells.empty() ||
-                (s.section_count != dwell_section_count && mix.to != dwells.back().scene)) {
+            // A section change, or a waiting breakdown committing (live_breakdown_commit_bars):
+            // a change of scene then is not a rotation.
+            const double wait_s = project.automation.live_breakdown_commit_bars * 4.0 *
+                                  (s.tempo_known ? s.period_s : 0.5);
+            const bool committed =
+                s.section != LiveSection::breakdown || t_s - s.section_start_s >= wait_s;
+            const long long event = 2LL * s.section_count + (committed ? 1 : 0);
+            if (dwells.empty() || (event != dwell_event && mix.to != dwells.back().scene)) {
                 if (!dwells.empty()) {
                     dwells.back().end_s = t_s;
                 }
                 dwells.push_back({t_s, t_s, mix.to, section, 0.0});
             }
-            dwell_section_count = s.section_count;
+            dwell_event = event;
             dwells.back().end_s = t_s;
             dwells.back().phrase_s = 4.0 * s.phrase_bars * (s.tempo_known ? s.period_s : 0.5);
             if (!s.silent && s.section == LiveSection::drop && s.section_count != drop_seen &&
