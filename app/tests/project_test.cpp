@@ -4,6 +4,7 @@
 #include "io/project.h"
 
 #include <doctest/doctest.h>
+#include <nlohmann/json.hpp>
 
 #include <filesystem>
 #include <string>
@@ -83,6 +84,9 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.automation.palette_rotation = PaletteRotation::scene_list;
     p.automation.live_breakdown_commit_bars = 4;
     p.automation.live_resume = true;
+    p.automation.detected_events = true;
+    p.automation.fill_source = FillSource::both;
+    p.automation.break_fill = PhraseFill::gap;
     p.scenes[0].palette_list = {1, 0};
     p.show_pack = "Hexagon";
     p.group_caps = {{"booth", 0.4}, {"canopy", 0.75}};
@@ -140,6 +144,9 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.automation.palette_rotation == PaletteRotation::scene_list);
     CHECK(q.automation.live_breakdown_commit_bars == 4);
     CHECK(q.automation.live_resume);
+    CHECK(q.automation.detected_events);
+    CHECK(q.automation.fill_source == FillSource::both);
+    CHECK(q.automation.break_fill == PhraseFill::gap);
     CHECK(q.scenes[0].palette_list == std::vector<int>{1, 0});
     CHECK(q.scenes[1].palette_list.empty());
     CHECK(q.show_pack == "Hexagon");
@@ -322,4 +329,14 @@ TEST_CASE("project: the rig's preset source round trips; a rebuild keeps colour 
     CHECK(rebuilt[1].order == ColourOrder::rgb);
     CHECK(rebuilt[2].spec.name == "C");
     CHECK(rebuilt[2].order == ColourOrder::grb); // New: the first strip's order.
+}
+
+TEST_CASE("project: a break fill of mix loads as off") {
+    Project p = default_project();
+    p.automation.break_fill = PhraseFill::gap;
+    nlohmann::json j = nlohmann::json::parse(to_project_json(p).value());
+    j["automation"]["break_fill"] = "mix";
+    const Result<Project> q = parse_project_json(j.dump());
+    REQUIRE(q.ok());
+    CHECK(q.value().automation.break_fill == PhraseFill::off);
 }

@@ -87,6 +87,18 @@ size_t rotation_step(const AutomationParams &params, const std::string &label, l
     return static_cast<size_t>(phrases / params.rotate_every_phrases);
 }
 
+// The fill kind: `fill`, or for mix one of the five, seeded by the key and the phrase.
+PhraseFill pick_fill(PhraseFill fill, std::uint64_t key, long long phrase) {
+    if (fill != PhraseFill::mix) {
+        return fill;
+    }
+    std::uint64_t h = key * 0x9e3779b97f4a7c15ull + static_cast<std::uint64_t>(phrase);
+    h ^= h >> 29;
+    h *= 0xbf58476d1ce4e5b9ull;
+    h ^= h >> 32;
+    return kPhraseFills[1 + h % 5];
+}
+
 // The fill over the end of phrase `phrase` (0-based within its section) that ends at end_s, if
 // t_s is inside it. last_phrase: the section ends with it (no fill). key: varies the mix's pick.
 void place_fill(SceneMix &mix, const AutomationParams &params, const std::string &label,
@@ -104,16 +116,51 @@ void place_fill(SceneMix &mix, const AutomationParams &params, const std::string
     if (!(every || before_rotation) || t_s < end_s - fill_s || t_s >= end_s) {
         return;
     }
-    mix.fill = params.fill;
-    if (mix.fill == PhraseFill::mix) { // One of the five, seeded by the phrase.
-        std::uint64_t h = key * 0x9e3779b97f4a7c15ull + static_cast<std::uint64_t>(phrase);
-        h ^= h >> 29;
-        h *= 0xbf58476d1ce4e5b9ull;
-        h ^= h >> 32;
-        mix.fill = kPhraseFills[1 + h % 5];
-    }
+    mix.fill = pick_fill(params.fill, key, phrase);
     mix.fill_s = fill_s;
     mix.fill_progress = (t_s - (end_s - fill_s)) / fill_s;
+}
+
+// Fills from events (file mode): a break_fill over each break; with fill_source events or both,
+// a fill event in a groove or drop plays its fill (pick_fill, seeded as a phrase-end fill), and
+// with both a phrase-end fill overlapping a fill event is dropped.
+void place_event_fills(SceneMix &mix, const AutomationParams &params,
+                       const std::vector<DetectedEvent> &events, const std::string &label,
+                       long long phrase, double t_s, std::uint64_t key) {
+    const auto inside = [&](const DetectedEvent &e) {
+        return e.length_s > 0.0 && t_s >= e.start_s && t_s < e.start_s + e.length_s;
+    };
+    if (params.fill_source != FillSource::phrase) {
+        if (params.fill_source == FillSource::events) {
+            mix.fill = PhraseFill::off;
+        } else if (mix.fill != PhraseFill::off) {
+            const double from = t_s - mix.fill_progress * mix.fill_s;
+            const double to = from + mix.fill_s;
+            for (const DetectedEvent &e : events) {
+                if (e.kind == "fill" && e.start_s < to && e.start_s + e.length_s > from) {
+                    mix.fill = PhraseFill::off;
+                }
+            }
+        }
+        if (params.fill != PhraseFill::off && (label == "groove" || label == "drop")) {
+            for (const DetectedEvent &e : events) {
+                if (e.kind == "fill" && inside(e)) {
+                    mix.fill = pick_fill(params.fill, key, phrase);
+                    mix.fill_s = e.length_s;
+                    mix.fill_progress = (t_s - e.start_s) / e.length_s;
+                }
+            }
+        }
+    }
+    if (params.break_fill != PhraseFill::off && params.break_fill != PhraseFill::mix) {
+        for (const DetectedEvent &e : events) {
+            if (e.kind == "break" && inside(e)) {
+                mix.fill = params.break_fill;
+                mix.fill_s = e.length_s;
+                mix.fill_progress = (t_s - e.start_s) / e.length_s;
+            }
+        }
+    }
 }
 
 // Phrases into the current rotation step.
@@ -317,16 +364,21 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
         return mix;
     }
     const auto index = static_cast<size_t>(inputs.section_index);
-    { // A phrase-end fill.
+    { // A phrase-end fill, and the fills from events.
         const DetectedSection &own =
             sections[own_section(sections, index, phrase_s, params.hold_rule)];
         const long long phrase = phrases_run(phrase_starts, own.start_s, inputs.t_s);
         const auto next = static_cast<size_t>(inputs.phrase_index + 1);
+        const auto key = static_cast<std::uint64_t>(std::llround(own.start_s * 1000.0));
         if (inputs.phrase_index >= 0 && next < phrase_starts.size()) {
             const double end_s = phrase_starts[next];
             place_fill(mix, params, own.label, phrase, end_s,
-                       end_s >= sections[index].end_s - kPhraseToleranceS, inputs.t_s, beat_s,
-                       static_cast<std::uint64_t>(std::llround(own.start_s * 1000.0)));
+                       end_s >= sections[index].end_s - kPhraseToleranceS, inputs.t_s, beat_s, key);
+        }
+        if (params.fill_source != FillSource::phrase || params.break_fill != PhraseFill::off) {
+            place_event_fills(mix, params,
+                              engine_events(analysis, timeline, params.detected_events), own.label,
+                              phrase, inputs.t_s, key);
         }
     }
     // The energy of a section's p-th phrase: its bars' mean intensity in thirds (energy_scenes),
@@ -607,6 +659,19 @@ std::optional<PaletteRotation> palette_rotation_from_id(const std::string &id) {
     }
     if (id == "scene_list") {
         return PaletteRotation::scene_list;
+    }
+    return std::nullopt;
+}
+
+const char *fill_source_id(FillSource source) {
+    return source == FillSource::events ? "events" : source == FillSource::both ? "both" : "phrase";
+}
+
+std::optional<FillSource> fill_source_from_id(const std::string &id) {
+    for (const FillSource s : {FillSource::phrase, FillSource::events, FillSource::both}) {
+        if (id == fill_source_id(s)) {
+            return s;
+        }
     }
     return std::nullopt;
 }

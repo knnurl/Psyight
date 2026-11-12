@@ -2471,6 +2471,30 @@ void PreviewView::draw_automation() {
     field(drag_double("Fill length (beats)", &a.fill_beats, 0.05f, 0.0, 16.0, "%.1f"),
           "Up to the phrase's end.");
     ImGui::EndDisabled();
+    int fill_source = static_cast<int>(a.fill_source);
+    ImGui::SetNextItemWidth(10.0f * em);
+    if (ImGui::Combo("Fills from", &fill_source, "Phrase ends Fill events Both ")) {
+        a.fill_source = static_cast<FillSource>(fill_source);
+        changed = true;
+    }
+    ImGui::SetItemTooltip("File mode. Fill events: the fills labelled in the labelling mode (or "
+                          "detected, below) play over their own bars instead of phrase ends. "
+                          "Both: phrase ends too, unless one overlaps a fill event.");
+    ImGui::SetNextItemWidth(6.0f * em);
+    if (ImGui::BeginCombo("Over a break", phrase_fill_name(a.break_fill))) {
+        for (const PhraseFill f : kPhraseFills) {
+            if (f != PhraseFill::mix && ImGui::Selectable(phrase_fill_name(f), f == a.break_fill)) {
+                a.break_fill = f;
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("File mode: what plays over a break (the kick out for a bar or a few) "
+                          "for its whole length. Gap: the stop-cut look.");
+    field(ImGui::Checkbox("Use detected breaks and fills", &a.detected_events),
+          "File mode: the breaks and fills the analysis finds reach the lights. Off: only the "
+          "ones labelled with edited sections (the detection is not scored yet).");
     ImGui::SetNextItemWidth(6.0f * em);
     field(drag_int("Vary every (phrases)", &a.vary_every_phrases, 0.05f, 0, 64, "%d"),
           "The playing scene changes a little this often (its first phrases as made): 0 never.");

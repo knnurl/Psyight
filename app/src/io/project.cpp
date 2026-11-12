@@ -233,6 +233,15 @@ AutomationParams parse_automation(const json &aut) {
         integer(aut, "live_breakdown_commit_bars", a.live_breakdown_commit_bars, 0, 8);
     a.live_resume = optional<bool>(aut, "live_resume", a.live_resume);
     a.detected_events = optional<bool>(aut, "detected_events", a.detected_events);
+    const std::string fill_source =
+        optional<std::string>(aut, "fill_source", fill_source_id(a.fill_source));
+    a.fill_source = from_id_or_throw(fill_source_from_id(fill_source), "fill source", fill_source);
+    const std::string break_fill =
+        optional<std::string>(aut, "break_fill", phrase_fill_id(a.break_fill));
+    a.break_fill = from_id_or_throw(phrase_fill_from_id(break_fill), "break fill", break_fill);
+    if (a.break_fill == PhraseFill::mix) {
+        a.break_fill = PhraseFill::off; // Not allowed over a break.
+    }
     return a;
 }
 
@@ -259,7 +268,9 @@ json automation_json(const AutomationParams &a) {
             {"palette_rotation", palette_rotation_id(a.palette_rotation)},
             {"live_breakdown_commit_bars", a.live_breakdown_commit_bars},
             {"live_resume", a.live_resume},
-            {"detected_events", a.detected_events}};
+            {"detected_events", a.detected_events},
+            {"fill_source", fill_source_id(a.fill_source)},
+            {"break_fill", phrase_fill_id(a.break_fill)}};
 }
 
 json scene_json(const Scene &s) {

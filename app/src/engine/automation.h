@@ -83,6 +83,12 @@ enum class PaletteRotation { all, scene_list };
 const char *palette_rotation_id(PaletteRotation rotation); // "all", "scene_list" (files).
 std::optional<PaletteRotation> palette_rotation_from_id(const std::string &id);
 
+// Where file mode's fills come from: phrase ends (as before), fill events (labelled, or
+// detected with detected_events), or both (a phrase-end fill overlapping a fill event is dropped).
+enum class FillSource { phrase, events, both };
+const char *fill_source_id(FillSource source); // "phrase", "events", "both" (files).
+std::optional<FillSource> fill_source_from_id(const std::string &id);
+
 // How a section shorter than a phrase keeps the scene before it (above).
 enum class HoldRule { strict, tolerant };
 const char *hold_rule_id(HoldRule rule); // "strict", "tolerant" (files).
@@ -115,6 +121,12 @@ struct AutomationParams {
     // File mode: the analysis's detected breaks and fills reach the engine (labelled ones, from
     // edited sections, always do). Off until the detection is scored against labels.
     bool detected_events = false;
+    // File mode: where fills come from (FillSource); a fill event in a groove or drop plays the
+    // fill kind `fill` picks over the event's own start and length.
+    FillSource fill_source = FillSource::phrase;
+    // File mode: what plays over a break event for its whole length (gap: the stop-cut look); off
+    // as before. Never mix (a project asking for it loads as off).
+    PhraseFill break_fill = PhraseFill::off;
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for

@@ -390,6 +390,55 @@ SceneMix rotated_at(const TrackAnalysis &a, double t_s, const AutomationParams &
 
 } // namespace
 
+TEST_CASE("automation: fills from events and over breaks") {
+    TrackAnalysis a = long_groove(); // Phrase-end fills at 25.6 and 51.2 (gap, 2 beats).
+    a.events = {{"fill", 30.0, 1.6}, {"break", 40.0, 3.2}, {"fill", 50.8, 1.6}};
+    AutomationParams p;
+    p.fill = PhraseFill::gap;
+    p.detected_events = true;
+    const auto fill_at = [&](double t) { return rotated_at(a, t, p); };
+    // Phrase ends only (the default): the events change nothing.
+    CHECK(fill_at(25.2).fill == PhraseFill::gap);
+    CHECK(fill_at(30.5).fill == PhraseFill::off);
+    CHECK(fill_at(41.0).fill == PhraseFill::off);
+    CHECK(fill_at(50.5).fill == PhraseFill::gap);
+    // Events: the fill events over their own start and length, no phrase-end fills.
+    p.fill_source = FillSource::events;
+    CHECK(fill_at(25.2).fill == PhraseFill::off);
+    SceneMix m = fill_at(30.5);
+    CHECK(m.fill == PhraseFill::gap);
+    CHECK(m.fill_s == doctest::Approx(1.6));
+    CHECK(m.fill_progress == doctest::Approx(0.5 / 1.6));
+    CHECK(fill_at(31.7).fill == PhraseFill::off);
+    // Both: phrase ends too, but one overlapping a fill event gives way to it.
+    p.fill_source = FillSource::both;
+    CHECK(fill_at(25.2).fill == PhraseFill::gap);
+    CHECK(fill_at(30.5).fill == PhraseFill::gap);
+    CHECK(fill_at(50.5).fill == PhraseFill::off); // The phrase-end fill from 50.4 is dropped.
+    m = fill_at(51.0);
+    CHECK(m.fill == PhraseFill::gap);
+    CHECK(m.fill_progress == doctest::Approx(0.2 / 1.6));
+    // Mix picks one of the five for an event as for a phrase end.
+    p.fill = PhraseFill::mix;
+    CHECK(fill_at(30.5).fill != PhraseFill::off);
+    CHECK(fill_at(30.5).fill != PhraseFill::mix);
+    // Detected events are read only when asked.
+    p.fill = PhraseFill::gap;
+    p.detected_events = false;
+    CHECK(fill_at(30.5).fill == PhraseFill::off);
+    // A gap over a two-bar break, for its whole length.
+    p = AutomationParams{};
+    p.detected_events = true;
+    CHECK(fill_at(41.0).fill == PhraseFill::off);
+    p.break_fill = PhraseFill::gap;
+    m = fill_at(41.0);
+    CHECK(m.fill == PhraseFill::gap);
+    CHECK(m.fill_s == doctest::Approx(3.2));
+    CHECK(m.fill_progress == doctest::Approx(1.0 / 3.2));
+    CHECK(fill_at(43.3).fill == PhraseFill::off);
+    CHECK(fill_at(39.9).fill == PhraseFill::off);
+}
+
 TEST_CASE("automation: long sections rotate their scenes on phrase downbeats") {
     const TrackAnalysis a = long_groove();
     AutomationParams p; // The next scene every 2 phrases, cut.
