@@ -1004,7 +1004,7 @@ void PreviewView::draw_scene_editor(std::vector<Scene> &scenes, const ShowFrame 
     ImGui::TextUnformatted("For");
     const ImGuiStyle &style = ImGui::GetStyle();
     const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-    for (const char *label : {"intro", "groove", "breakdown", "build", "drop", "outro"}) {
+    for (const char *label : {"intro", "groove", "breakdown", "build", "drop", "outro", "break"}) {
         const float width =
             ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(label).x;
         if (ImGui::GetItemRectMax().x + style.ItemSpacing.x + width < right) {
@@ -2451,6 +2451,10 @@ void PreviewView::draw_automation() {
     ImGui::SetItemTooltip("File mode. Phase: a groove or drop labelled with a phase (A, B...) "
                           "takes the scene for its phase, so groove A looks the same each time it "
                           "returns. Sections without a phase take turns as before.");
+    ImGui::SetNextItemWidth(6.0f * em);
+    field(drag_int("Short breakdown under (bars)", &a.short_breakdown_bars, 0.05f, 1, 64, "%d"),
+          "File mode: a breakdown this short between two sections with a kick plays the scenes "
+          "tagged \"break\", when any scene has that tag; otherwise nothing changes.");
     ImGui::SeparatorText("Long sections");
     ImGui::SetNextItemWidth(6.0f * em);
     field(drag_int("Next scene every (phrases)", &a.rotate_every_phrases, 0.05f, 0, 64, "%d"),

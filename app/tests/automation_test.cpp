@@ -426,6 +426,35 @@ TEST_CASE("automation: grooves by phase: A B A shows the first look again") {
     CHECK(scene_at(77.0) == by_phase);
 }
 
+TEST_CASE("automation: a short breakdown between kicks takes the break scenes, when tagged") {
+    TrackAnalysis a = long_groove();
+    a.duration_s = 128.0;
+    a.phrase_starts_s.clear();
+    for (double t = 0.0; t < 128.0; t += kPhraseS) {
+        a.phrase_starts_s.push_back(t);
+    }
+    // A 12-bar breakdown between two grooves, then a 16-bar one before a build.
+    a.sections = {{0.0, 25.6, "groove", 1.0},  {25.6, 44.8, "breakdown", 1.0},
+                  {44.8, 70.4, "groove", 1.0}, {70.4, 96.0, "breakdown", 1.0},
+                  {96.0, 102.4, "build", 1.0}, {102.4, 128.0, "drop", 1.0}};
+    std::vector<Scene> scenes = default_scenes();
+    const auto scene_at = [&](double t) {
+        return automate(scenes, a, a.grid, inputs_at(a, a.grid, t), AutomationParams{}).to;
+    };
+    const int breakdown = scene_at(30.0);
+    CHECK(breakdown == scene_at(80.0)); // No scene tagged break: as before.
+    Scene tagged = scenes[static_cast<size_t>(kStaccato)];
+    tagged.sections = {"break"};
+    scenes.push_back(tagged);
+    const int break_scene = static_cast<int>(scenes.size()) - 1;
+    CHECK(scene_at(30.0) == break_scene);
+    CHECK(scene_at(80.0) == breakdown); // 16 bars, and a build after it: a main breakdown.
+    // The breakdown crossfades in from the groove's look as before, to the break scene.
+    const SceneMix m = automate(scenes, a, a.grid, inputs_at(a, a.grid, 25.7), AutomationParams{});
+    CHECK(m.to == break_scene);
+    CHECK(m.from == scene_at(25.5));
+}
+
 TEST_CASE("automation: fills from events and over breaks") {
     TrackAnalysis a = long_groove(); // Phrase-end fills at 25.6 and 51.2 (gap, 2 beats).
     a.events = {{"fill", 30.0, 1.6}, {"break", 40.0, 3.2}, {"fill", 50.8, 1.6}};

@@ -244,6 +244,7 @@ AutomationParams parse_automation(const json &aut) {
     }
     const std::string scene_by = optional<std::string>(aut, "scene_by", scene_by_id(a.scene_by));
     a.scene_by = from_id_or_throw(scene_by_from_id(scene_by), "scene by", scene_by);
+    a.short_breakdown_bars = integer(aut, "short_breakdown_bars", a.short_breakdown_bars, 1, 64);
     return a;
 }
 
@@ -273,7 +274,8 @@ json automation_json(const AutomationParams &a) {
             {"detected_events", a.detected_events},
             {"fill_source", fill_source_id(a.fill_source)},
             {"break_fill", phrase_fill_id(a.break_fill)},
-            {"scene_by", scene_by_id(a.scene_by)}};
+            {"scene_by", scene_by_id(a.scene_by)},
+            {"short_breakdown_bars", a.short_breakdown_bars}};
 }
 
 json scene_json(const Scene &s) {

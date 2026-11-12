@@ -88,6 +88,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     p.automation.fill_source = FillSource::both;
     p.automation.break_fill = PhraseFill::gap;
     p.automation.scene_by = SceneBy::phase;
+    p.automation.short_breakdown_bars = 8;
     p.scenes[0].palette_list = {1, 0};
     p.show_pack = "Hexagon";
     p.group_caps = {{"booth", 0.4}, {"canopy", 0.75}};
@@ -149,6 +150,7 @@ TEST_CASE("project: every stored setting survives a round trip") {
     CHECK(q.automation.fill_source == FillSource::both);
     CHECK(q.automation.break_fill == PhraseFill::gap);
     CHECK(q.automation.scene_by == SceneBy::phase);
+    CHECK(q.automation.short_breakdown_bars == 8);
     CHECK(q.scenes[0].palette_list == std::vector<int>{1, 0});
     CHECK(q.scenes[1].palette_list.empty());
     CHECK(q.show_pack == "Hexagon");

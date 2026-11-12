@@ -411,9 +411,26 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
     };
     // The look of section i at time t_s: its own section's (or the one before a blip), rotated
     // and varied by the phrases it has run.
+    // A short breakdown between two sections with a kick plays the scenes tagged "break" (when
+    // any scene has the tag).
+    const bool break_scenes = !tagged(scenes, "break").empty();
+    const auto kicked = [&](size_t j) {
+        return j < sections.size() &&
+               (sections[j].label == "groove" || sections[j].label == "drop");
+    };
+    const auto shown_label = [&](size_t own) -> const std::string & {
+        static const std::string kBreak = "break";
+        const DetectedSection &s = sections[own];
+        const bool short_break =
+            break_scenes && s.label == "breakdown" && own > 0 && kicked(own - 1) &&
+            kicked(own + 1) &&
+            s.end_s - s.start_s < params.short_breakdown_bars * 4.0 * beat_s - kPhraseToleranceS;
+        return short_break ? kBreak : s.label;
+    };
     const auto look_at = [&](size_t i, double t_s, long long *phrases_out) {
         const size_t own = own_section(sections, i, phrase_s, params.hold_rule);
         const DetectedSection &s = sections[own];
+        const std::string &label = shown_label(own);
         const long long phrases = phrases_run(phrase_starts, s.start_s, t_s);
         if (phrases_out != nullptr) {
             *phrases_out = phrases;
@@ -423,10 +440,10 @@ SceneMix automate(const std::vector<Scene> &scenes, const TrackAnalysis &analysi
                                           (s.label == "groove" || s.label == "drop")
                                       ? static_cast<size_t>(s.phase)
                                       : occurrence_of(sections, own, phrase_s, params.hold_rule);
-        return std::pair{look_in_section(scenes, params, s.label, occurrence,
+        return std::pair{look_in_section(scenes, params, label, occurrence,
                                          phrase_energy(s, phrases), phrases, key),
                          phrases > 0
-                             ? look_in_section(scenes, params, s.label, occurrence,
+                             ? look_in_section(scenes, params, label, occurrence,
                                                phrase_energy(s, phrases - 1), phrases - 1, key)
                              : Look{-1, 0}};
     };

@@ -135,6 +135,9 @@ struct AutomationParams {
     // as before. Never mix (a project asking for it loads as off).
     PhraseFill break_fill = PhraseFill::off;
     SceneBy scene_by = SceneBy::occurrence; // File mode (live sections have no phase).
+    // File mode: a breakdown shorter than this between two sections with a kick (grooves or
+    // drops) takes the scenes tagged "break", when any scene carries that tag (opt-in by tag).
+    int short_breakdown_bars = 16;
 };
 
 // Launch quantisation for the manual scene, once a frame. A requested change (a scene, or -1 for
