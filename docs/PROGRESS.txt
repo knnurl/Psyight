@@ -243,6 +243,26 @@ Last updated: 2026-11-11. Written so another agent can pick up without the origi
   - The bass tracker misses far more widely, but that is a different miss: under 50% in the labelled grooves and drops on 12 of 32 tracks (El Bonito 6%, Trichome Psycho 5%, Monkey Temple 0%) where the beat tracker is at 90% or more; its kicks feed the note masks, not the sections.
   - Corpus (140 tracks, no labels; inside the bars the detector itself calls kick-on, so it understates): 19 tracks under 85% with at least half the unmarked beats kick-like; the bass tracker is under 50% in the kick-on bars on 73 of 140.
   - Synthetic case (tests/bass_tracker_test.cpp, not in the synthetic set): kick plus a loud rolling bass on every 16th with the gate open, hats on the offbeats, four clearer bars first. Over the buried bars today the bass tracker finds 54% of the kicks and the beat tracker marks 73%. Measured: these synthetic misses are kicks whose click the bass attacks mask (click 0.2 to 0.4 of the 99th percentile), not the real tracks' mechanism (a clear click over a buried low rise); several generator settings were tried and none reproduced the real mechanism, so the case pins a miss but not the one H2 targets.
+- Batch H2, the kick click contrast (2026-11-13; `beat.kick_click_contrast` and `bass.kick_click_contrast`, both 0, off; every golden and existing assertion untouched; tool output at the defaults identical). Design (PLAN_SECTIONS_BATCHES.md 7b): a beat or kick candidate whose low band does not rise counts when its kick-like click is at least the contrast times the click at the 16ths a quarter beat either side and the low band sounds; contrast, not click strength, because a bass attacking on every 16th clicks on the beat too. Scored at 2 (and 1.5 on the tune set: worse F, 0.585):
+  - Kicks with ground truth: the synthetic set's golden metrics do not move at all (kick F and every other metric equal on every case); Phase Change's labelled region (157 kicks): P 1.000, R 1.000 before and after (one more kick elsewhere in the track); the buried synthetic case: beat tracker 73% -> 81% of the kicks, bass tracker 54% -> 54%, no kick off the beat, none added in bars without a kick.
+  - The bass tracker on the labelled bass regions: OculusDrift onset F 0.994, pitch 0.989, gate MAE 0.037, and Phase Change F 0.984, pitch 0.991, gate MAE 0.024, unchanged (its kicks there are found either way).
+  - Coverage on the labelled set (beat tracker / bass tracker in labelled grooves and drops, then labelled drops): Alien Army 38% / 79% -> 82% / 92%, drops 29% -> 83%; Source 14% / 13% -> 30% / 38%, drops 25% -> 38%; Epilepsy 85% / 78% -> 92% / 93%; Hagios 39% -> 43%; Constructive_Interference 68% -> 72%. Unchanged: Arjuna 21% (its kicks do rise, 5.4 dB, but under the track's strongest beats' 21 dB: the relative presence threshold, not this rule), Digital Alchemy 66%, Karev & Cyk 69%, Bam Bam 74%.
+  - Sections, today against contrast 2 (tune 14 tracks / held out 18):
+
+  | Figure | Tune today | Tune contrast 2 | Held out today | Held out contrast 2 |
+  |---|---|---|---|---|
+  | Within a bar F | 0.596 | 0.595 | 0.662 | 0.664 |
+  | Right bar F | 0.531 | 0.530 | 0.606 | 0.619 |
+  | Bars labelled alike | 64.6% | 67.4% | 73.9% | 77.1% |
+  | Kick-continuous recall | 0.471 | 0.469 | 0.542 | 0.549 |
+  | Labelled drop bars detected drop / groove | 65 / 154 of 357 | 57 / 186 | 41 / 237 of 345 | 41 / 272 |
+  | Labelled groove bars detected drop | 73 | 69 | 10 | 2 |
+  | Build to drop recall | 11 of 20 | 11 of 20 | 12 of 20 | 14 of 20 |
+  | Worst track F loss | 0 | 0.01 | 0 | 0 |
+
+  - Per track: Source bars alike 11% -> 31%, Alien Army 19% -> 68% (F 0.44 -> 0.46), Hagios 30% -> 36%, Bam Bam F 0.71 -> 0.74.
+  - Batch G's rule 1 (8 bars, breakdown alone too) again with the kicks fixed: tune drop bars detected drop 55 (today's rule with the fix 57), held out 29 (41); bars alike 67.3% and 76.7%. With the kicks heard, the labelled drops now read as groove rather than breakdown or outro (drop bars detected as groove up 32 on tune and 35 held out), but rule 1 still finds no drop where the detector hears no breakdown before it.
+  - No default changes. FOR THE OWNER: whether to adopt `beat.kick_click_contrast` 2 (bars alike +2.8 points tune, +3.2 held out; F flat) and `bass.kick_click_contrast` 2; and whether to look at the relative presence threshold for tracks like Arjuna.
 - Commands (from the main checkout, Release binaries of `sections-2`; the folders as listed above):
   - `psyight_analyse --sections-eval --detail --split --scores --exclude "data\Hidden Tribe.wav" --exclude "data\Conquest.mp3" --json captures\review\sections\baseline\sections_eval.json data C:\Users\ses634\Music\mel C:\Users\ses634\Music\Musify\Download\DEPURATUS ...\Electric ...\Hall-of-Purity ...\HITECH_UNIVERSE ...\MayDecks ...\msi\In_Hyperspace ...\Psyflow-to-Pixieland ...\Samples "...\Star Beings"` (about 15 min)
   - `psyight_analyse --labels-stats --exclude "data\Hidden Tribe.wav" --exclude "data\Conquest.mp3" <the same folders>` (36 s)
@@ -253,6 +273,7 @@ Last updated: 2026-11-11. Written so another agent can pick up without the origi
   - Batch C sweep, per setting: `psyight_analyse --sections-eval --detail --scores --only tune --exclude "data\Hidden Tribe.wav" --exclude "data\Conquest.mp3" --param section.novelty_step=<n> [--texture-step 1000] --json captures\review\sections\batch_c\<name>.json <the folders>`; the held-out run the same with `--only held_out`; the corpus with `--param section.novelty_step=2.0 --sections-report` as above.
   - Batch G sweep: as Batch C's with `--param section.drop_rule=1 --param section.drop_bars=<4|8|16> --param section.drop_after_breakdown=<0|1>`; the grooves after builds: `psyight_analyse --drops` with the same parameters and the excludes.
   - Batch F: `python captures\review\sections\batch_f\candidates.py <psyight_show_check.exe> 6` (reads tools\python\packs\hex5_candidates.py from the sections-2 worktree; about 20 min).
+  - Batch H: `psyight_analyse --kick-coverage [--labelled-only] [--param beat.kick_click_contrast=2 --param bass.kick_click_contrast=2] <the folders or corpus>`; the section scores as Batch C's with those two parameters; `psyight_eval <audio> --kick-contrast 2`; the golden report `psyight_tests -tc="*Batch H report*" --no-skip`.
   - Batch E5: `psyight_live_check "<set>.mp3" --set --show psyight.psyproj --dwell` and the same with `--commit-bars 4 --resume`, for the 20 sets (two at a time, about 3 min each).
 
 ## Studio day: what to check with the DJM-A9 and the CDJs
