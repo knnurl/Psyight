@@ -18,6 +18,7 @@ One batch is one reviewable unit: it ends with the build clean, `ctest --preset 
 | D. Detail reaches the engine | No (labelled events only, new options off) | Nothing; independent of B and C |
 | E. Live mode | No (new options off until the owner switches them) | A (item A5) |
 | F. Scene candidates | No (nothing enters a pack before the owner picks) | D and E for the inputs they add |
+| G. Drops as the owner labels them | No (new parameters off) | The drop study (PROGRESS, 2026-11-12) |
 
 ## 1. Ground rules
 
@@ -207,7 +208,7 @@ Files: `app/src/engine/automation.*`, `inputs.*`, `modulation.*`; `app/src/analy
 - A build or a drop declared during the wait takes over at once.
 - Choose the value to propose from A5's breakdown lengths (the share under 4 and under 8 bars); do not change the default.
 
-**E2. Resumed groove.** `AutomationParams::live_resume` (bool, default false).
+**E2. Resumed groove.** (E6, added 2026-11-13 by the coordinator's decision for the owner: LiveState may also record the look each section shows, `LiveState::look`, `previous_look`, `earlier_look`: the section whose look it is, its occurrence, its energy at its end, its section count and the phrases that look ran before, so a groove resumes the look actually shown, through a chain of short breaks and after a held breakdown. Read only with `live_resume` on; with it off the output is byte-identical.) `AutomationParams::live_resume` (bool, default false).
 - When a groove starts after a breakdown that lasted under one phrase, with no build or drop between, and the section before that breakdown was a groove or drop: the groove takes that earlier section's look (scene, rotation step and variation), and its rotation continues from the phrases that section had run.
 - `LiveState` keeps only the section before the current one. Add, in `LiveBeat::set_section`, the same record for the one before that (label, occurrence, energy, length, as the existing `previous_*` fields) under new names. No existing field's value may change: the tests in `live_test.cpp` pass untouched, and a new test asserts the present fields against their values before the batch on the synthetic kick sequences already there.
 
@@ -241,6 +242,23 @@ Acceptance criteria targeted: Hexagon 4 has one breakdown scene (Nebula) and one
 
 **Stop for the owner with:** the sheets' paths, the table, and one line per candidate on what it is meant to show.
 
+## 7a. Batch G: drops as the owner labels them (file mode)
+
+Added 2026-11-13 (coordinator's decision for the owner). Acceptance criteria targeted: drop bars detected as drop (Batch A: 412 of 730 labelled drop bars detected as groove), without turning the grooves that follow a build into drops.
+
+**Definition (the working one, from the owner's words and labels):** a drop is the first stretch of full-kick music after a build, a pre-drop or a breakdown; it lasts one phrase by default (`section.drop_bars`, 8) and ends earlier at the next detected boundary; the rest is groove. Measured on the labels: median 8 bars, mostly 4, 8 or 16; 47 of 78 after a build or pre-drop, 11 after a breakdown, 14 after a groove (not covered by this rule).
+
+**G1. The rule.** New parameters, Tune tier, off by default so today's output is bit-identical:
+- `section.drop_rule` (0 today's: the first `drop_bars` bars after a kickless run of at least `drop_min_breakdown_bars`; 1: after any breakdown with a build, and after a breakdown alone when `section.drop_after_breakdown` is on);
+- `section.drop_after_breakdown` (0 or 1, default 1; read only by rule 1);
+- `section.drop_bars` keeps its meaning (the drop's length, at most); with rule 1 a texture, novelty or energy boundary inside the drop ends it there and the rest is groove.
+
+**G2. The kick inside drops.** The drop study found the detector hears no kick in the last two bars of 22 of 67 labelled drops. Measure the cause and report it; fix it only if the fix is small, behind a parameter and off by default.
+
+**G3. Tests** (synthetic): a build then the kick: a drop of `drop_bars` bars under rule 1, shorter where a texture boundary falls inside it; a short breakdown then the kick: a drop with `drop_after_breakdown` on, a groove with it off; rule 0 reproduces today's sections.
+
+**G4. Score and decide.** On the tune split with `--exclude`: drop and groove bars by detected label, bars alike, boundary F, for `drop_bars` 4, 8 and 16 (and `drop_after_breakdown` 0 and 1); then one held-out run of the chosen setting, and how many of the 19 labelled grooves after a build become drop. No default changes: the owner adopts after the studio day.
+
 ## 8. Verification, per batch
 
 | Check | How |
@@ -263,6 +281,7 @@ One concern per commit, each building and passing the tests.
 - **D:** 1 Events on the timeline and in recordings. 2 Inputs and modulation sources. 3 `fill_source` and `break_fill`. 4 The stutter mode. 5 `scene_by`. 6 The `break` tag. 7 Docs.
 - **E:** 1 `LiveState` additions. 2 Commit delay. 3 Resume. 4 Tension. 5 The live check's figures. 6 Docs.
 - **F:** 1 Candidates and sheets (prototype block). 2 After the picks: the pack, tests, docs.
+- **G:** 1 Spec. 2 The rule, its parameters and tests. 3 PROGRESS with the scores and the kick finding.
 
 ## 10. Stop and ask the owner when
 
