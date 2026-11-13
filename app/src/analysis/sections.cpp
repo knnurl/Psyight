@@ -251,7 +251,9 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
                 label[k] = "build";
             }
         }
-        if (end - begin >= p.drop_min_breakdown_bars) {
+        const bool drop = p.drop_rule >= 0.5 ? build >= 0 || p.drop_after_breakdown >= 0.5
+                                             : end - begin >= p.drop_min_breakdown_bars;
+        if (drop) {
             for (int k = end; k < std::min(bars, end + static_cast<int>(std::lround(p.drop_bars)));
                  ++k) {
                 if (!kick[k]) {
@@ -419,6 +421,17 @@ Result<std::vector<DetectedSection>> detect_sections(const FrontEndResult &f,
                 }
             }
             m = n;
+        }
+    }
+
+    // Drop rule 1: a boundary inside a drop ends it; the rest of it is groove.
+    if (p.drop_rule >= 0.5) {
+        for (int m = 1; m < bars; ++m) {
+            if (label[m] == "drop" && label[m - 1] == "drop" && cut[m]) {
+                for (int k = m; k < bars && label[k] == "drop"; ++k) {
+                    label[k] = "groove";
+                }
+            }
         }
     }
 
@@ -631,6 +644,8 @@ const ParamEntry kParamTable[] = {
     {&SectionParams::fill_distance, "section.fill_distance", "Fill distance", "", 0.2, 10.0, ParamTier::engineer, "A phrase's last bar this far (scaled over the track) from the rest of the phrase is a fill."},
     {&SectionParams::novelty_step, "section.novelty_step", "Novelty step", "", 0.0, 10.0, ParamTier::engineer, "Block novelty: how much the mean sound of the bars after a 4-bar line must differ from the bars before (texture step's unit) to start a new section there. 0: off."},
     {&SectionParams::novelty_bars, "section.novelty_bars", "Novelty bars", "bars", 1.0, 16.0, ParamTier::engineer, "Block novelty: the bars averaged on each side of the line."},
+    {&SectionParams::drop_rule, "section.drop_rule", "Drop rule", "", 0.0, 1.0, ParamTier::tune, "0: a drop is the bars after a long kickless run (8 bars or more). 1: the first bars of kick after any breakdown with a build (or alone, below), ending at the next boundary."},
+    {&SectionParams::drop_after_breakdown, "section.drop_after_breakdown", "Drop after breakdown", "", 0.0, 1.0, ParamTier::tune, "Drop rule 1: a breakdown without a build also ends in a drop (1) or in a groove (0)."},
     {&SectionParams::texture_step, "section.texture_step", "Texture step", "", 0.2, 10.0, ParamTier::tune, "How much a bar's sound (band levels, bass and hats density, scaled over the track) must change from the bar before to start a new section on a 4-bar line."},
 };
 // clang-format on

@@ -449,3 +449,86 @@ TEST_CASE("sections: block novelty splits where a layer comes in and stays, not 
         CHECK(again[i].start_s == found[i].start_s);
     }
 }
+
+TEST_CASE("sections: drop rule 1, a phrase of kick after a build or a breakdown, ended early at a "
+          "boundary") {
+    // The arranged track: breakdown 12, build 20, kick back at 24 (drop 24 to 32 today).
+    double downbeat_s = 0.0;
+    const std::vector<float> audio = arrangement(150.0, downbeat_s);
+    const Result<FrontEndResult> features = analyse_front_end(audio, kSampleRateHz, {});
+    REQUIRE(features.ok());
+    const Result<BeatTrackResult> beats = track_beats(features.value(), {});
+    REQUIRE(beats.ok());
+    const auto run = [&](const SectionParams &p) {
+        const Result<std::vector<DetectedSection>> found =
+            detect_sections(features.value(), beats.value(), p);
+        REQUIRE(found.ok());
+        return found.value();
+    };
+    const auto start_of = [&](const std::vector<DetectedSection> &found, const char *label) {
+        for (const DetectedSection &sec : found) {
+            if (sec.label == label) {
+                return static_cast<int>(std::lround((sec.start_s - downbeat_s) / 1.6));
+            }
+        }
+        return -1;
+    };
+    const auto end_of_drop = [&](const std::vector<DetectedSection> &found) {
+        for (const DetectedSection &sec : found) {
+            if (sec.label == "drop") {
+                return static_cast<int>(std::lround((sec.end_s - downbeat_s) / 1.6));
+            }
+        }
+        return -1;
+    };
+    SectionParams today;
+    SectionParams rule;
+    rule.drop_rule = 1.0;
+    for (const double bars : {4.0, 8.0}) {
+        CAPTURE(bars);
+        rule.drop_bars = bars;
+        const std::vector<DetectedSection> found = run(rule);
+        CAPTURE(summary_of(found, downbeat_s));
+        CHECK(start_of(found, "drop") == 24);
+        CHECK(end_of_drop(found) == 24 + static_cast<int>(bars));
+    }
+    // Rule 0 with any drop_after_breakdown is today's output.
+    SectionParams off = today;
+    off.drop_after_breakdown = 0.0;
+    const std::vector<DetectedSection> a = run(today);
+    const std::vector<DetectedSection> b = run(off);
+    REQUIRE(a.size() == b.size());
+    for (size_t i = 0; i < a.size(); ++i) {
+        CHECK(a[i].label == b[i].label);
+        CHECK(a[i].start_s == b[i].start_s);
+        CHECK(a[i].end_s == b[i].end_s);
+    }
+
+    // A four-bar breakdown without a build: the kick's return is a drop with
+    // drop_after_breakdown, a groove without it, and a groove today.
+    int offset = 0;
+    const auto kicks = [](int bar) { return bar >= 4 && bar < 36 && (bar < 18 || bar > 21); };
+    const auto steady = [](int) { return 1.0; };
+    std::vector<DetectedSection> found = sections_of(kicks, steady, downbeat_s, offset, {}, today);
+    CHECK(start_of(found, "drop") == -1);
+    rule.drop_bars = 8.0;
+    found = sections_of(kicks, steady, downbeat_s, offset, {}, rule);
+    CAPTURE(summary_of(found, downbeat_s));
+    CHECK(start_of(found, "drop") == 22);
+    SectionParams build_only = rule;
+    build_only.drop_after_breakdown = 0.0;
+    found = sections_of(kicks, steady, downbeat_s, offset, {}, build_only);
+    CHECK(start_of(found, "drop") == -1);
+
+    // A layer coming in on a 4-bar line inside the drop ends it there (a novelty boundary).
+    const int line = 24 + ((offset - 24) % 4 + 4) % 4;
+    REQUIRE(line < 30);
+    const std::function<double(int)> layer = [&](int bar) { return bar >= line ? 0.01 : 0.0; };
+    SectionParams with_novelty = rule;
+    with_novelty.novelty_step = 1.0;
+    found = sections_of(kicks, steady, downbeat_s, offset, layer, with_novelty);
+    CAPTURE(summary_of(found, downbeat_s));
+    CAPTURE(line);
+    CHECK(start_of(found, "drop") == 22);
+    CHECK(end_of_drop(found) == line);
+}

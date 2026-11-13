@@ -19,7 +19,10 @@
 // - build, otherwise: the end of a breakdown where the high band (hats, 8 to 12 kHz) rises at
 //   least build_min_rise_db above the breakdown's quietest bar, up to the kick's return;
 // - drop: the first drop_bars bars after a breakdown of at least drop_min_breakdown_bars
-//   (SPEC 18 A9: the kick returning after 8 bars or more is a drop);
+//   (SPEC 18 A9: the kick returning after 8 bars or more is a drop); with drop_rule 1 (off by
+//   default, Batch G) instead the first drop_bars bars of kick after any breakdown with a build,
+//   or after a breakdown alone with drop_after_breakdown, ending earlier at a boundary of the
+//   texture, novelty or energy rules inside it;
 // - groove: every other bar with kicks.
 // - energy: grooves split where the level changes by energy_step_db or more between phrases (a
 //   groove that steps up); every section then gets an energy level, low, mid or high, from its
@@ -80,6 +83,12 @@ struct SectionParams {
     // (texture_step's unit), the largest within 4 bars either side, each piece at least 4 bars.
     double novelty_step = 0.0;
     double novelty_bars = 4.0;
+    // Drops (Batch G): 0 today's rule (the first drop_bars bars after a kickless run of at least
+    // drop_min_breakdown_bars); 1 the owner's: the first drop_bars bars of kick after a breakdown
+    // with a build, or after a breakdown alone when drop_after_breakdown is 1, ending earlier at
+    // a texture, novelty or energy boundary inside it (the rest is groove).
+    double drop_rule = 0.0;
+    double drop_after_breakdown = 1.0;
 };
 
 // One bar of the grid as the section rules see it (also printed by psyight_analyse --bars).
