@@ -19,6 +19,7 @@ One batch is one reviewable unit: it ends with the build clean, `ctest --preset 
 | E. Live mode | No (new options off until the owner switches them) | A (item A5) |
 | F. Scene candidates | No (nothing enters a pack before the owner picks) | D and E for the inputs they add |
 | G. Drops as the owner labels them | No (new parameters off) | The drop study (PROGRESS, 2026-11-12) |
+| H. Kicks under a rolling bass | No (new parameters off) | H1's measurement (PROGRESS, 2026-11-13) |
 
 ## 1. Ground rules
 
@@ -259,6 +260,19 @@ Added 2026-11-13 (coordinator's decision for the owner). Acceptance criteria tar
 
 **G4. Score and decide.** On the tune split with `--exclude`: drop and groove bars by detected label, bars alike, boundary F, for `drop_bars` 4, 8 and 16 (and `drop_after_breakdown` 0 and 1); then one held-out run of the chosen setting, and how many of the 19 labelled grooves after a build become drop. No default changes: the owner adopts after the studio day.
 
+## 7b. Batch H: kicks missed under a rolling bass
+
+Added 2026-11-13 (coordinator's decision for the owner): the kick detector may be edited for this batch only, behind parameters off by default, default output bit-identical, goldens and existing assertions untouched.
+
+**H1 (measured, PROGRESS):** 7 of 32 labelled tracks and 19 of 140 corpus tracks miss many kicks that have a kick-like click; the misses cluster in drops on the worst ones (Source, Arjuna, Alien Army).
+
+**H2. A click-contrast kick.** Key decisions:
+- *Contrast, not click strength alone.* The coordinator's starting proposal (accept a strong grid-consistent click although the low-band rise is small) also accepts a clicky bass attack on the beat; a bass that attacks on every 16th clicks at the beat and at the 16ths beside it alike, a kick only at the beat. So a beat (or a kick candidate) counts when its click is at least `kick_click_contrast` times the click at the 16ths a quarter beat either side, the click is kick-like (the existing click to low-mid ratio checks), it reaches the existing click floor, and the low band sounds (at least its median over the track). Offbeat hats sit half a beat away and are never judged as beats; a quarter beat away they are the comparison, not a candidate.
+- *Two parameters, one per detector*, both 0 (off): `beat.kick_click_contrast` (the beat tracker's kick per beat, which the sections read) and `bass.kick_click_contrast` (the bass tracker's kick times, which mask the bass notes). H1 shows the two fail on different tracks (Arjuna: beat tracker 21%, bass tracker 99%; El Bonito: 93% and 6%), so one switch cannot serve both.
+- Not addressed: Arjuna's kind of miss (the low rise is there, 5.4 dB, but the presence threshold is relative to the track's strongest beats at 21 dB); a change to that threshold is a different rule, left for the owner.
+- *Tests:* on the synthetic case, the contrast never lowers recall, adds no kick off the beat and none in bars without a kick, and is today's detector when off.
+- *Score* with the parameters on: kick precision and recall on the synthetic set and the bass labels' regions, the golden metrics, the bass tracker on the labelled bass regions, then the section scores (tune and held out), the drop-bar confusion and Batch G's rule 1 again. No default changes.
+
 ## 8. Verification, per batch
 
 | Check | How |
@@ -282,6 +296,7 @@ One concern per commit, each building and passing the tests.
 - **E:** 1 `LiveState` additions. 2 Commit delay. 3 Resume. 4 Tension. 5 The live check's figures. 6 Docs.
 - **F:** 1 Candidates and sheets (prototype block). 2 After the picks: the pack, tests, docs.
 - **G:** 1 Spec. 2 The rule, its parameters and tests. 3 PROGRESS with the scores and the kick finding.
+- **H:** 1 The measuring tool and the synthetic case. 2 PROGRESS with H1. 3 Spec. 4 The contrast rule, its parameters and tests. 5 PROGRESS with the scores.
 
 ## 10. Stop and ask the owner when
 
