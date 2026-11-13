@@ -51,6 +51,10 @@
 // --drops <audio or folder> [more...] (with --exclude, --param) analyses the tracks marked done
 // and prints the detector's view of every labelled drop, of the groove after a drop and of a
 // groove after a build (drops_study), then counts and medians per kind. Read-only.
+// --kick-coverage <audio or folder> [more...] [--labelled-only] (Batch H1, read-only) prints per
+// track the share of grid beats with a detected kick in the kick-on bars and in the labelled
+// grooves and drops, and at the beats there without one whether the click sounds like a kick
+// (kick_coverage).
 // --param <id>=<value> (repeatable, every mode) sets a section parameter declared by
 // declare_section_params, for example --param section.texture_step=1.2; an unknown id or a value
 // outside the declared range is an error. The overrides are printed on the first line.
@@ -1333,6 +1337,154 @@ int drops_study(const std::vector<std::wstring> &paths,
     return views.empty() ? 1 : 0;
 }
 
+// --kick-coverage (Batch H1, read-only): how many grid beats carry a detected kick where the
+// music has one. Per track: the share of grid beats with a kick by the beat tracker
+// (beat_has_kick, what the sections read) and by the bass tracker (kick_times_s within 35 ms)
+// inside the bars the sections' kick state calls kick-on, and inside the labelled grooves and
+// drops when the track has labelled sections; and, at the beats without a beat-tracker kick
+// there, the click (peak click-band flux within 2 frames, over the track's 99th percentile), its
+// ratio to the low-mid flux, and the low band's rise in dB across it (as --kicks measures them). A
+// beat whose click is at least 0.4 of the 99th percentile and at least 0.2 of the low-mid flux
+// sounds like a kick the detector missed; one with a weak click is a real gap.
+struct KickView {
+    double click = 0.0; // Over the track's 99th percentile.
+    double ratio = 0.0; // Click over low-mid flux.
+    double rise_db = 0.0;
+};
+
+int kick_coverage(const std::vector<std::wstring> &paths,
+                  const std::vector<std::filesystem::path> &excludes,
+                  const TrackAnalysisOptions &base_options, bool labelled_only) {
+    std::vector<double> labelled_cov;
+    int tracks = 0;
+    std::printf(
+        "track | beats with a kick in kick-on bars: beat tracker, bass tracker | in labelled "
+        "grooves and drops: beat tracker, bass tracker | beats there without a kick: "
+        "count, kick-like click, median low rise dB (kick-like), median low rise dB (all "
+        "beats with a kick)\n");
+    for (const TrackEntry &track : tracks_from(paths, excludes)) {
+        Labels labels;
+        bool has_labels = false;
+        if (std::filesystem::exists(labels_path_for(track.path))) {
+            if (Result<Labels> l = load_labels(labels_path_for(track.path)); l) {
+                labels = l.value();
+                has_labels = !labels.sections.empty() && labels.sections_done;
+            }
+        }
+        if (labelled_only && !has_labels) {
+            continue;
+        }
+        TrackAnalysisOptions options = base_options;
+        options.source = analysis_stems_exist(stem_paths_for(track.path)) ? AnalysisSource::stems
+                                                                          : AnalysisSource::mix;
+        const Result<TrackAnalysis> analysis = analyse_track(track.path, options);
+        if (!analysis || analysis.value().beats.bpm <= 0.0) {
+            std::printf("%s | no tempo\n", track.name.c_str());
+            continue;
+        }
+        const TrackAnalysis &a = analysis.value();
+        const FrontEndResult &f = a.mix_features;
+        const double frame_s = static_cast<double>(f.hop_samples) / f.sample_rate_hz;
+        const double period_s = 60.0 / a.beats.bpm;
+        const std::vector<float> &click = f.bands[3].flux;
+        const std::vector<float> &lowmid = f.bands[2].flux;
+        const double click_p99 = std::max(1e-9, static_cast<double>(quantile(click, 0.99)));
+        std::vector<float> low(f.frames);
+        for (int i = 0; i < f.frames; ++i) {
+            low[i] = static_cast<float>(std::pow(10.0, f.bands[0].energy_db[i] / 10.0) +
+                                        std::pow(10.0, f.bands[1].energy_db[i] / 10.0));
+        }
+        low = box_mean(low, 2);
+        const auto view = [&](double t) {
+            KickView v;
+            const int centre = static_cast<int>(std::lround(t / frame_s));
+            int peak = -1;
+            for (int i = std::max(1, centre - 2); i <= std::min(f.frames - 2, centre + 2); ++i) {
+                peak = peak < 0 || click[i] > click[peak] ? i : peak;
+            }
+            if (peak < 4 || peak + 4 >= f.frames) {
+                return v;
+            }
+            float before = low[peak];
+            float after = low[peak];
+            for (int k = 1; k <= 4; ++k) {
+                before = std::min(before, low[peak - k]);
+                after = std::max(after, low[peak + k]);
+            }
+            v.click = click[peak] / click_p99;
+            v.ratio = click[peak] / std::max(lowmid[peak], 1e-6f);
+            v.rise_db = 10.0 * std::log10((after + 1e-12) / (before + 1e-12));
+            return v;
+        };
+        const auto bass_kick_near = [&](double t) {
+            const std::vector<double> &k = a.bass.kick_times_s;
+            const auto it = std::lower_bound(k.begin(), k.end(), t - 0.035);
+            return it != k.end() && *it <= t + 0.035;
+        };
+        const auto kick_on_bar = [&](double t) {
+            for (const SectionBar &b : a.section_bars) {
+                if (t >= b.start_s && t < b.start_s + 4.0 * period_s) {
+                    return b.kick;
+                }
+            }
+            return false;
+        };
+        const auto labelled_kick = [&](double t) {
+            const int i = section_at(labels.sections, t);
+            if (i < 0) {
+                return false;
+            }
+            std::string label = labels.sections[static_cast<size_t>(i)].label;
+            return label == "groove" || label == "drop";
+        };
+        int on = 0, on_beat = 0, on_bass = 0, lab = 0, lab_beat = 0, lab_bass = 0;
+        int gaps = 0, kick_like = 0;
+        std::vector<double> rise_missed, rise_kicked;
+        for (size_t k = 0; k < a.beats.beat_has_kick.size(); ++k) {
+            const double t = a.beats.first_kick_beat_s + static_cast<double>(k) * period_s;
+            const bool kicked = a.beats.beat_has_kick[k];
+            const bool bass = bass_kick_near(t);
+            const bool in_on = kick_on_bar(t);
+            const bool in_lab = has_labels && labelled_kick(t);
+            on += in_on;
+            on_beat += in_on && kicked;
+            on_bass += in_on && bass;
+            lab += in_lab;
+            lab_beat += in_lab && kicked;
+            lab_bass += in_lab && bass;
+            const KickView v = view(t);
+            if (kicked) {
+                rise_kicked.push_back(v.rise_db);
+            } else if (has_labels ? in_lab : in_on) {
+                ++gaps;
+                if (v.click >= 0.4 && v.ratio >= 0.2) {
+                    ++kick_like;
+                    rise_missed.push_back(v.rise_db);
+                }
+            }
+        }
+        ++tracks;
+        const auto pct = [](int n, int d) { return d > 0 ? 100.0 * n / d : 0.0; };
+        std::printf(
+            "%s | %.0f%%, %.0f%% of %d | %s | %d, %d (%.0f%%), %.2f, %.2f\n", track.name.c_str(),
+            pct(on_beat, on), pct(on_bass, on), on,
+            has_labels
+                ? (std::to_string(static_cast<int>(std::lround(pct(lab_beat, lab)))) + "%, " +
+                   std::to_string(static_cast<int>(std::lround(pct(lab_bass, lab)))) + "% of " +
+                   std::to_string(lab))
+                      .c_str()
+                : "-",
+            gaps, kick_like, pct(kick_like, gaps), median(rise_missed), median(rise_kicked));
+        std::fflush(stdout);
+        if (has_labels) {
+            labelled_cov.push_back(pct(lab_beat, lab));
+        }
+    }
+    std::printf("\n%d tracks; labelled grooves and drops, beat-tracker kick share median %.0f%%\n",
+                tracks, median(labelled_cov));
+    return tracks > 0 ? 0 : 1;
+}
+
 int wmain(int argc, wchar_t **argv) {
     bool kick_features = false;
     bool local_tempo = false;
@@ -1341,6 +1493,8 @@ int wmain(int argc, wchar_t **argv) {
     bool evaluate = false;
     bool label_statistics = false;
     bool drops = false;
+    bool coverage = false;
+    bool coverage_labelled_only = false;
     EvalFlags eval_flags;
     std::vector<std::filesystem::path> excludes;
     TrackAnalysisOptions options;
@@ -1364,6 +1518,10 @@ int wmain(int argc, wchar_t **argv) {
             label_statistics = true;
         } else if (std::wcscmp(argv[i], L"--drops") == 0) {
             drops = true;
+        } else if (std::wcscmp(argv[i], L"--kick-coverage") == 0) {
+            coverage = true;
+        } else if (std::wcscmp(argv[i], L"--labelled-only") == 0) {
+            coverage_labelled_only = true;
         } else if (std::wcscmp(argv[i], L"--texture-step") == 0 && i + 1 < argc) {
             texture_step = std::wcstod(argv[++i], nullptr);
         } else if (std::wcscmp(argv[i], L"--detail") == 0) {
@@ -1422,6 +1580,9 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (drops) {
         return drops_study(paths, excludes, options.sections);
+    }
+    if (coverage) {
+        return kick_coverage(paths, excludes, options, coverage_labelled_only);
     }
     if (evaluate) {
         return sections_eval(paths, eval_flags, options.sections, overrides, excludes);
