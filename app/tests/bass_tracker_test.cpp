@@ -3,6 +3,7 @@
 //   psyight_tests -tc="bass tracker: table" --no-skip
 
 #include "analysis/bass_tracker.h"
+#include "analysis/beat_tracker.h"
 #include "analysis/front_end.h"
 #include "analysis/scoring.h"
 #include "synthetic_set.h"
@@ -421,4 +422,93 @@ TEST_CASE("bass tracker: sweep" * doctest::skip()) {
             evaluate(params);
         }
     }
+}
+
+namespace {
+
+// Batch H: a kick under a rolling bass that fills the low band (a note on every 16th, the gate
+// fully open, loud, no sidechain), hats on the offbeats. The kick's low-band rise is buried, its
+// click is not. Exact ground truth from the generator.
+synth::SynthOutput buried_kicks() {
+    synth::SynthParams p;
+    p.bpm = 150.0;
+    p.bars = 16;
+    p.kick_level = 0.25;
+    p.bass_level = 0.9;
+    p.bass_decay_tau_ms = 2000.0;
+    p.filter_end_hz = 600.0;
+    p.hats = true;
+    p.hat_level = 0.15;
+    // Bars 0 to 3 leave the beat to the kick (K B B B), as a track's clearer passages do; from
+    // bar 4 the bass plays every 16th and fills the low band under the kick.
+    std::vector<synth::BassEvent> events;
+    for (int slot = 0; slot < 16 * p.bars; ++slot) {
+        if (slot < 64 && slot % 4 == 0) {
+            continue;
+        }
+        events.push_back({static_cast<double>(slot), 1.0, slot % 8 == 7 ? 41 : 29, 1.0, false});
+    }
+    return synth::render(p, events);
+}
+
+// Recall over the buried bars (4 on) only.
+struct KickRecall {
+    double bass_tracker = 0.0; // Labelled kicks the bass tracker finds within 20 ms.
+    double beat_tracker = 0.0; // Labelled kick beats the beat tracker marks.
+    int offbeat_kicks = 0;     // Kicks found off the beat (on the hats), anywhere.
+};
+
+KickRecall kick_recall(const synth::SynthOutput &audio, const BassTrackerParams &bass_params,
+                       const BeatTrackerParams &beat_params) {
+    KickRecall r;
+    const Result<FrontEndResult> features = analyse_front_end(audio.samples, kSampleRateHz, {});
+    REQUIRE(features.ok());
+    const Grid grid = grid_of(audio.labels);
+    const Result<BassTrackResult> tracked =
+        track_bass(audio.samples, features.value(), grid, bass_params);
+    REQUIRE(tracked.ok());
+    const double bar_s = 4.0 * 60.0 / audio.labels.grid.bpm;
+    std::vector<LabelEvent> kicks;
+    for (const LabelEvent &k : audio.labels.kicks) {
+        if (k.t_s >= audio.labels.grid.first_downbeat_s + 4.0 * bar_s - 0.01) {
+            kicks.push_back(k);
+        }
+    }
+    int found = 0;
+    for (const LabelEvent &k : kicks) {
+        found +=
+            std::any_of(tracked.value().kick_times_s.begin(), tracked.value().kick_times_s.end(),
+                        [&](double t) { return std::abs(t - k.t_s) <= 0.020; });
+    }
+    const double beat_s = 60.0 / audio.labels.grid.bpm;
+    for (const double t : tracked.value().kick_times_s) {
+        const double beats = (t - audio.labels.grid.first_downbeat_s) / beat_s;
+        r.offbeat_kicks += std::abs(beats - std::round(beats)) > 0.25;
+    }
+    r.bass_tracker = kicks.empty() ? 0.0 : static_cast<double>(found) / kicks.size();
+    const Result<BeatTrackResult> beats = track_beats(features.value(), beat_params);
+    REQUIRE(beats.ok());
+    int marked = 0;
+    for (const LabelEvent &k : kicks) {
+        const double index = (k.t_s - beats.value().first_kick_beat_s) / (60.0 / beats.value().bpm);
+        const auto i = static_cast<long long>(std::llround(index));
+        marked += i >= 0 && i < static_cast<long long>(beats.value().beat_has_kick.size()) &&
+                  beats.value().beat_has_kick[static_cast<size_t>(i)];
+    }
+    r.beat_tracker = kicks.empty() ? 0.0 : static_cast<double>(marked) / kicks.size();
+    return r;
+}
+
+} // namespace
+
+TEST_CASE("bass tracker: kicks buried under a rolling bass are missed today (Batch H1)") {
+    const synth::SynthOutput audio = buried_kicks();
+    REQUIRE(audio.labels.kicks.size() == 64);
+    const KickRecall today = kick_recall(audio, {}, {});
+    MESSAGE("buried bars: bass tracker recall " << today.bass_tracker << ", beat tracker "
+                                                << today.beat_tracker);
+    // The miss this batch is about: under the filled low band most kicks go unheard.
+    CHECK(today.bass_tracker < 0.6);
+    CHECK(today.beat_tracker < 0.8);
+    CHECK(today.offbeat_kicks == 0);
 }
