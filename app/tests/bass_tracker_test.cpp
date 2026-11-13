@@ -512,3 +512,84 @@ TEST_CASE("bass tracker: kicks buried under a rolling bass are missed today (Bat
     CHECK(today.beat_tracker < 0.8);
     CHECK(today.offbeat_kicks == 0);
 }
+
+TEST_CASE("bass tracker: the kick click contrast adds no kick off the beat or without a kick, "
+          "and is today's detector when off (Batch H2)") {
+    // The buried case's misses are kicks whose click is masked by the bass attacks (H1, PROGRESS):
+    // the contrast rule is for a clear click over a buried low rise (as on Alien Army), so here it
+    // must only do no harm.
+    const synth::SynthOutput audio = buried_kicks();
+    BassTrackerParams bass;
+    bass.kick_click_contrast = 2.0;
+    BeatTrackerParams beat;
+    beat.kick_click_contrast = 2.0;
+    const KickRecall today = kick_recall(audio, {}, {});
+    const KickRecall contrast = kick_recall(audio, bass, beat);
+    MESSAGE("buried bars, contrast 2: bass tracker recall "
+            << contrast.bass_tracker << ", beat tracker " << contrast.beat_tracker);
+    CHECK(contrast.bass_tracker >= today.bass_tracker);
+    CHECK(contrast.beat_tracker >= today.beat_tracker);
+    CHECK(contrast.offbeat_kicks == 0); // The offbeat hats stay hats.
+
+    // Bars with the bass and hats but no kick: the contrast rule adds no kick there.
+    synth::SynthParams p;
+    p.bpm = 150.0;
+    p.bars = 16;
+    p.kick = false;
+    p.bass_level = 0.9;
+    p.bass_decay_tau_ms = 2000.0;
+    p.filter_end_hz = 600.0;
+    p.hats = true;
+    p.hat_level = 0.15;
+    std::vector<synth::BassEvent> events;
+    for (int slot = 0; slot < 16 * p.bars; ++slot) {
+        events.push_back({static_cast<double>(slot), 1.0, slot % 8 == 7 ? 41 : 29, 1.0, false});
+    }
+    synth::SynthOutput mixed = synth::render(p, events);
+    synth::SynthParams k = p;
+    k.kick = true;
+    k.kick_level = 0.25;
+    k.bass_level = 0.0;
+    k.hats = false;
+    const synth::SynthOutput kicks_only = synth::render(k, {});
+    const double bar_s = 4.0 * 60.0 / p.bpm;
+    const double first_s = mixed.labels.grid.first_downbeat_s;
+    for (size_t i = 0; i < mixed.samples.size() && i < kicks_only.samples.size(); ++i) {
+        if (static_cast<double>(i) / kSampleRateHz < first_s + 8.0 * bar_s) {
+            mixed.samples[i] += kicks_only.samples[i]; // The kick in the first 8 bars only.
+        }
+    }
+    const Result<FrontEndResult> features = analyse_front_end(mixed.samples, kSampleRateHz, {});
+    REQUIRE(features.ok());
+    const auto late = [&](const BassTrackerParams &params) {
+        const Result<BassTrackResult> tracked =
+            track_bass(mixed.samples, features.value(), grid_of(mixed.labels), params);
+        REQUIRE(tracked.ok());
+        int n = 0;
+        for (const double t : tracked.value().kick_times_s) {
+            n += t > first_s + 8.0 * bar_s + 0.05;
+        }
+        return n;
+    };
+    CHECK(late(bass) == late({}));
+
+    // Off (0, the default) is today's detector exactly.
+    BassTrackerParams off;
+    off.kick_click_contrast = 0.0;
+    const Result<FrontEndResult> f2 = analyse_front_end(audio.samples, kSampleRateHz, {});
+    REQUIRE(f2.ok());
+    const Result<BassTrackResult> a =
+        track_bass(audio.samples, f2.value(), grid_of(audio.labels), {});
+    const Result<BassTrackResult> b =
+        track_bass(audio.samples, f2.value(), grid_of(audio.labels), off);
+    REQUIRE(a.ok());
+    REQUIRE(b.ok());
+    CHECK(a.value().kick_times_s == b.value().kick_times_s);
+    BeatTrackerParams beat_off;
+    beat_off.kick_click_contrast = 0.0;
+    const Result<BeatTrackResult> c = track_beats(f2.value(), {});
+    const Result<BeatTrackResult> d = track_beats(f2.value(), beat_off);
+    REQUIRE(c.ok());
+    REQUIRE(d.ok());
+    CHECK(c.value().beat_has_kick == d.value().beat_has_kick);
+}

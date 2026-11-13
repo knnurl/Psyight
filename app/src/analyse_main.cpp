@@ -931,9 +931,12 @@ bool parse_param(const wchar_t *arg, ParamValues &overrides) {
     const size_t eq = text.find('=');
     ParamRegistry registry;
     (void)declare_section_params(registry);
+    (void)declare_beat_tracker_params(registry);
+    (void)declare_bass_tracker_params(registry);
     const ParamSpec *spec = eq == std::string::npos ? nullptr : registry.find(text.substr(0, eq));
     if (spec == nullptr) {
-        std::fprintf(stderr, "--param %s: expected <id>=<value> with a section.* id\n",
+        std::fprintf(stderr,
+                     "--param %s: expected <id>=<value> with a section.*, beat.* or bass.* id\n",
                      text.c_str());
         return false;
     }
@@ -1571,6 +1574,8 @@ int wmain(int argc, wchar_t **argv) {
         return 2;
     }
     options.sections = section_params_from(overrides); // The defaults without --param.
+    options.beats = beat_tracker_params_from(overrides);
+    options.bass = bass_tracker_params_from(overrides);
     if (texture_step) {
         options.sections.texture_step = *texture_step;
     }

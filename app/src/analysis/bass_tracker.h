@@ -47,6 +47,12 @@ struct BassTrackerParams {
     // (Phase Change: 2.3 dB median at beats), so this only rejects flat-or-falling candidates; hats
     // fail the grid test and bass attacks the click ratio.
     double kick_min_low_rise_db = 1.0;
+    // Click contrast (Batch H, 0 off): a candidate on the grid whose low band does not rise by
+    // kick_min_low_rise_db is still a kick when its click is at least this many times the click
+    // at the 16ths either side (a quarter beat away) and the low band sounds (at least its median
+    // level): a kick under a bass that fills the low band. The click threshold and ratio and the
+    // run rule still apply.
+    double kick_click_contrast = 0.0;
     // Click-band flux over low-mid flux at the peak: a kick's click is broadband, a bass attack's
     // brightness falls off above its filter (synthetic: 0.03 to 0.07). Real kicks vary: median
     // 0.63 at the beats of OculusDrift, 0.19 at those of Hall of Purity (distorted kicks).

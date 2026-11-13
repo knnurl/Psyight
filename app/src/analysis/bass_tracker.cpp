@@ -155,6 +155,18 @@ void Tracker::detect_kicks() {
         return;
     }
     std::vector<Peak> kicks;
+    const double low_median_db = p_.kick_click_contrast > 0.0 ? quantile(low_db_, 0.5) : 0.0;
+    const double quarter_beat_frames =
+        grid_.slot_length_samples() / grid_.sample_rate_hz / frame_s_;
+    // The click near frame `at` (2 frames either side).
+    const auto click_near = [&](double at) {
+        const int centre = static_cast<int>(std::lround(at));
+        float c = 0.0f;
+        for (int i = std::max(0, centre - 2); i <= std::min(f_.frames - 1, centre + 2); ++i) {
+            c = std::max(c, click[i]);
+        }
+        return c;
+    };
     for (int f = 0; f < f_.frames; ++f) {
         if (click[f] < p_.kick_threshold * norm || !is_peak(click, f) ||
             click[f] < p_.kick_min_click_ratio * lowmid[f]) {
@@ -174,7 +186,12 @@ void Tracker::detect_kicks() {
         const bool on_grid =
             p_.kick_grid_tolerance_ms <= 0.0 ||
             std::abs(beat - std::round(beat)) * beat_s <= p_.kick_grid_tolerance_ms * 1e-3;
-        if (on_grid && after - before >= p_.kick_min_low_rise_db) {
+        const bool rises = after - before >= p_.kick_min_low_rise_db;
+        const bool contrast =
+            p_.kick_click_contrast > 0.0 && low_db_[f] >= low_median_db &&
+            click[f] >= p_.kick_click_contrast * std::max(click_near(f - quarter_beat_frames),
+                                                          click_near(f + quarter_beat_frames));
+        if (on_grid && (rises || contrast)) {
             add_with_gap(kicks, {peak_position(click, f), click[f], 0.0f},
                          frames(p_.kick_min_gap_ms));
         }
@@ -528,6 +545,7 @@ const BassTrackerParams kDefaults;
 // clang-format off
 const ParamEntry kParamTable[] = {
     {&BassTrackerParams::kick_threshold, "bass.kick_threshold", "Kick click threshold", "", 0.0, 1.0, ParamTier::engineer, "Click-band flux peak needed for a kick, as a fraction of the track's 99th percentile."},
+    {&BassTrackerParams::kick_click_contrast, "bass.kick_click_contrast", "Kick click contrast", "x", 0.0, 10.0, ParamTier::engineer, "0: off. A kick candidate on the grid whose low band does not rise is still a kick when its click is this many times the click at the 16ths either side, over a sounding low band (a kick under a rolling bass)."},
     {&BassTrackerParams::kick_min_low_rise_db, "bass.kick_min_low_rise_db", "Kick low rise", "dB", 0.0, 30.0, ParamTier::engineer, "Rise of sub plus bass energy across a kick."},
     {&BassTrackerParams::kick_min_click_ratio, "bass.kick_min_click_ratio", "Kick click ratio", "", 0.0, 10.0, ParamTier::engineer, "Click-band flux over low-mid flux needed for a kick: a kick's click is broadband, a bass attack's is not."},
     {&BassTrackerParams::kick_min_gap_ms, "bass.kick_min_gap_ms", "Kick minimum gap", "ms", 50.0, 1000.0, ParamTier::engineer, "Of two kicks closer than this, the stronger is kept."},

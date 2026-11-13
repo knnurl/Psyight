@@ -497,6 +497,46 @@ Result<BeatTrackResult> track_beats(const FrontEndResult &f, const BeatTrackerPa
     for (const float strength : beat_strength) {
         kick_present.push_back(strength >= presence_threshold);
     }
+    if (p.kick_click_contrast > 0.0) {
+        // Click contrast (off by default): the click at each beat and at the 16ths either side.
+        const auto click_near = [&](double t, float *ratio) {
+            const int centre = static_cast<int>(std::lround(t / frame_s));
+            float c = 0.0f;
+            for (int i = std::max(0, centre - 2); i <= std::min(frames - 1, centre + 2); ++i) {
+                if (click_n[i] > c) {
+                    c = click_n[i];
+                    if (ratio != nullptr) {
+                        *ratio = static_cast<float>(f.bands[click].flux[i] /
+                                                    std::max(f.bands[lowmid].flux[i], 1e-6f));
+                    }
+                }
+            }
+            return c;
+        };
+        std::vector<float> beat_click;
+        std::vector<float> beat_ratio;
+        std::vector<float> beat_side;
+        std::vector<float> beat_low;
+        for (int k = first_beat; k <= last_beat; ++k) {
+            const double t = origin_s + k * period_s;
+            float r = 0.0f;
+            beat_click.push_back(click_near(t, &r));
+            beat_ratio.push_back(r);
+            beat_side.push_back(std::max(click_near(t - 0.25 * period_s, nullptr),
+                                         click_near(t + 0.25 * period_s, nullptr)));
+            beat_low.push_back(
+                smooth[std::clamp(static_cast<int>(std::lround(t / frame_s)), 0, frames - 1)]);
+        }
+        const double click_floor = p.kick_presence_fraction * quantile(beat_click, 0.9);
+        const double low_median = quantile(smooth, 0.5);
+        for (size_t b = 0; b < kick_present.size(); ++b) {
+            if (!kick_present[b] && beat_click[b] >= click_floor &&
+                beat_click[b] >= p.kick_click_contrast * beat_side[b] &&
+                beat_ratio[b] >= p.click_ratio_full && beat_low[b] >= low_median) {
+                kick_present[b] = true;
+            }
+        }
+    }
     result.first_kick_beat_s = origin_s + first_beat * period_s;
     result.beat_has_kick = kick_present;
     int downbeat_phase = 0;
@@ -616,6 +656,7 @@ const ParamEntry kParamTable[] = {
     {&BeatTrackerParams::fit_strength_quantile, "beat.fit_strength_quantile", "Grid fit strength", "", 0.0, 0.95, ParamTier::engineer, "Beats stronger than this quantile anchor the constant-tempo grid."},
     {&BeatTrackerParams::fit_outlier_ms, "beat.fit_outlier_ms", "Grid fit outlier", "ms", 1.0, 200.0, ParamTier::engineer, "Beats further than this from the fitted grid are dropped from the fit."},
     {&BeatTrackerParams::beat_bias_ms, "beat.beat_bias_ms", "Beat time bias", "ms", -30.0, 30.0, ParamTier::engineer, "Subtracted from detected beat times."},
+    {&BeatTrackerParams::kick_click_contrast, "beat.kick_click_contrast", "Kick click contrast", "x", 0.0, 10.0, ParamTier::engineer, "0: off. A beat whose kick-like click is this many times the click at the 16ths either side, over a sounding low band, has a kick even when the low band does not rise (a kick under a rolling bass)."},
     {&BeatTrackerParams::kick_presence_fraction, "beat.kick_presence_fraction", "Kick presence", "", 0.01, 1.0, ParamTier::engineer, "A beat has a kick when its onset strength reaches this fraction of the track's strong beats (90th percentile)."},
     {&BeatTrackerParams::bars_per_phrase, "beat.bars_per_phrase", "Bars per phrase", "bars", 1.0, 64.0, ParamTier::tune, "Phrases are counted in groups of this many bars."},
 };

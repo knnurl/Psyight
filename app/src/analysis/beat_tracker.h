@@ -54,6 +54,14 @@ struct BeatTrackerParams {
     double fit_outlier_ms = 30.0;       // Beats further than this from the grid are not fitted.
     double beat_bias_ms = 0.0;          // Subtracted from beat times.
     double kick_presence_fraction = 0.3; // Of the strong beats' onset strength (p90).
+    // Click contrast (Batch H, 0 off): a beat whose onset strength misses the presence threshold
+    // still has a kick when its click is at least this many times the click at the 16ths either
+    // side of it (a quarter beat away, where a rolling bass also attacks but a kick never sounds),
+    // reaches kick_presence_fraction of the beats' click (p90), is kick-like (click / low-mid at
+    // least click_ratio_full) and the low band sounds (at least its median over the track): a
+    // kick under a bass that fills the low band, whose level rise is buried. Only grid beats are
+    // judged, so offbeat hats never count; a bass attacking on every 16th has no contrast.
+    double kick_click_contrast = 0.0;
     double bars_per_phrase = 8.0;
 };
 
