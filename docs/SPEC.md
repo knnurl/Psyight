@@ -421,7 +421,7 @@ The two browser prototypes in `prototypes/` demonstrate shockwave plus conveyor,
   - on a phrase boundary (rotate palette every N phrases)
   - on the low-confidence policy (section 6.7)
   - file mode, opt-in (6.6.1): fills from fill events, a fill over each break, grooves and drops picking their scene by phase, and short breakdowns between kicks taking the scenes tagged "break"
-  - live mode, opt-in (2026-11-12): a declared breakdown may wait `live_breakdown_commit_bars` bars before its scene (the look before it stays; a build or drop takes over at once), and a groove after a breakdown shorter than a phrase may take up the look of the groove or drop before that breakdown (`live_resume`)
+  - live mode, opt-in (2026-11-12): a declared breakdown may wait `live_breakdown_commit_bars` bars before its scene (the look before it stays; a build or drop takes over at once), and a groove after a breakdown shorter than a phrase may take up the look of the groove or drop before that breakdown (`live_resume`); LiveState records the look each section shows, so the resumed look holds through a chain of short breaks (2026-11-13)
 - A Tension input (0 to 1, climbing through a build and never falling in it; file mode the larger of the riser and the build progress; live mode half the remaining way each phrase, lifted by the riser) is a modulation source for build scenes.
 - Manual selection always overrides automation until released.
 - **Transitions:** cut on the next downbeat, or crossfade over N beats.

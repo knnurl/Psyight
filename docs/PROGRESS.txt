@@ -161,6 +161,16 @@ Last updated: 2026-11-11. Written so another agent can pick up without the origi
   - The detected label over most of a labelled drop's bars: groove 38, drop 15, breakdown 11, outro 6, intro 4, build 4.
   - What separates them, as measured: the drop and the groove after it differ by neither level (+0.1 dB median step) nor intensity (+0.02); the boundary is where the drop's length ends (4, 8 or 16 bars in 54 of 78). A drop and a groove after a build are not separated by the level step, the intensity step or the detector's kick gap (medians above); they differ in length (median 8 against 16 bars). Nothing here is proposed as a threshold.
 - Coordinator's decisions for the owner (2026-11-13, delegated by the owner): the changed kModSources assertion (index 29 instead of the last) is accepted; Batch E may add a look-shown record to LiveState (E6); the drop rule of Batch G is the working definition; every default stays unchanged in every batch, and the owner adopts defaults after the studio day.
+- Batch E6, look shown (2026-11-13; read only with live_resume on, so nothing changes by default: tests pass untouched, --dwell on OculusDrift identical with resume off). LiveState::look, previous_look and earlier_look record the look each section shows (the section whose look it is, its occurrence, its energy at its end, its section count, the phrases that look ran before); a groove after a breakdown under a phrase continues the look of the groove or drop before it, through any number of such breaks. 20 Hive sets, `--commit-bars 4 --resume` (captures/review/sections/batch_e/candidate_e6):
+
+  | Figure | Defaults | 4 bars, resume (E2) | 4 bars, resume with the look shown (E6) |
+  |---|---|---|---|
+  | Scene changes a minute | 1.27 | 1.05 | 0.97 (1976 in 2028 min) |
+  | Dwells under a phrase, drops and builds aside | 56.1% (1181 of 2106) | 47.6% (790 of 1658) | 43.9% (662 of 1509) |
+  | Drops caught | 119 of 178 | 119 of 178 | 119 of 178 |
+  | Live drop start to its scene | per-set median at most 1.65 s, max 2.02 s | identical | identical on every set |
+
+  - Still not met (target 14.0%). What remains, from the --dwell lists: of the dwells under a phrase, 623 show a breakdown's scene (it commits after 4 bars and the breakdown ends within a phrase: 272 into a build, 218 into another breakdown section, 118 into a groove), 269 a build's, 122 a drop's, and only 38 a groove's: the resumed look now holds the grooves; the breakdowns of 4 to 7 bars (186 of 1098 live breakdowns) and short build and breakdown runs carry the rest. Not iterated further (one fix allowed).
 - Batch C, block novelty (2026-11-13; `section.novelty_step` default 0, off, and `section.novelty_bars` 4; tests on the synthetic generator; every golden untouched; output at the defaults identical). `--sections-eval --only tune|held_out` scores one set alone. Sweep on the tune set only (14 tracks, duplicates excluded; texture "off" is `--texture-step 1000`), outputs in captures/review/sections/batch_c/:
 
   | novelty_step / texture_step | Within a bar P / R / F | Right bar F | Bars alike | Kick-continuous recall | None within 4 bars | Count ratio median | Detected | Worst track F loss |
