@@ -56,10 +56,10 @@ std::vector<BassNoteLabel> as_notes(const std::vector<double> &times_s) {
     return notes;
 }
 
-nlohmann::json measure(const synth::SyntheticCase &c) {
+nlohmann::json measure(const synth::SyntheticCase &c, const TrackAnalysisOptions &base = {}) {
     const synth::SynthOutput audio = synth::render(c.params, c.events);
     const Labels &truth = audio.labels;
-    TrackAnalysisOptions options;
+    TrackAnalysisOptions options = base;
     options.grid =
         Grid{truth.grid.bpm, seconds_to_samples(truth.grid.first_downbeat_s, kSampleRateHz),
              kSampleRateHz};
@@ -153,4 +153,31 @@ TEST_CASE("golden metrics: the full analysis on the synthetic set is no worse th
             }
         }
     }
+}
+
+// Batch H report (run with --no-skip): the golden metrics with the kick click contrast on in
+// both trackers, against the stored file; prints every metric that moves, fails nothing.
+TEST_CASE("golden metrics: with the kick click contrast on (Batch H report)" * doctest::skip()) {
+    std::ifstream file(golden_path());
+    REQUIRE(file.good());
+    const nlohmann::json golden = nlohmann::json::parse(file);
+    TrackAnalysisOptions options;
+    options.beats.kick_click_contrast = 2.0;
+    options.bass.kick_click_contrast = 2.0;
+    int worse = 0;
+    for (const synth::SyntheticCase &c : synth::synthetic_set()) {
+        const nlohmann::json now = measure(c, options);
+        for (const Metric &m : kMetrics) {
+            const double a = value_of(golden.at(c.name).at(m.name));
+            const double b = value_of(now.at(m.name));
+            if (std::isnan(a) || std::isnan(b) || std::abs(a - b) <= kSlack) {
+                continue;
+            }
+            const bool got_worse = m.higher_is_better ? b < a : b > a;
+            worse += got_worse;
+            MESSAGE(c.name << " " << m.name << ": " << a << " -> " << b
+                           << (got_worse ? " (worse)" : " (better)"));
+        }
+    }
+    MESSAGE("metrics worse: " << worse);
 }

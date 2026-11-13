@@ -14,7 +14,8 @@
 // analysis. --save-notes writes the analysis's bass notes and kicks as a labels-format file (for
 // tools/python/eval_mir.py, which recomputes the metrics with mir_eval). --student scores the M4
 // student (ml/student.h) on the mix instead, as live mode would hear it; the weights default to
-// data/m4/student.weights in the working directory. For private reference
+// data/m4/student.weights in the working directory. --kick-contrast <x> sets both trackers'
+// kick click contrast (Batch H; 0, the default, is off). For private reference
 // tracks: run locally, never in CI.
 
 #include "analysis/bass_tracker.h"
@@ -25,6 +26,7 @@
 #include "io/labels.h"
 #include "ml/student.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -115,6 +117,9 @@ int wmain(int argc, wchar_t **argv) {
             detail = true;
         } else if (std::wcscmp(argv[i], L"--stems") == 0) {
             options.source = AnalysisSource::stems;
+        } else if (std::wcscmp(argv[i], L"--kick-contrast") == 0 && i + 1 < argc) {
+            options.beats.kick_click_contrast = std::clamp(_wtof(argv[++i]), 0.0, 10.0);
+            options.bass.kick_click_contrast = options.beats.kick_click_contrast;
         } else {
             paths.emplace_back(argv[i]);
         }
