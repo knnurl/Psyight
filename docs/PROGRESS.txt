@@ -160,6 +160,28 @@ Last updated: 2026-11-11. Written so another agent can pick up without the origi
   - The detector's kick (Viterbi bars): off in both bars before the section: drop 35 of 78, groove after a build 6 of 19, groove after a drop 22 of 67; on in its first bar: 54 of 78, 14 of 19, 44 of 67. The 22 grooves after a drop whose two bars before (the drop's last bars) show no kick are kicks the detector misses inside labelled drops.
   - The detected label over most of a labelled drop's bars: groove 38, drop 15, breakdown 11, outro 6, intro 4, build 4.
   - What separates them, as measured: the drop and the groove after it differ by neither level (+0.1 dB median step) nor intensity (+0.02); the boundary is where the drop's length ends (4, 8 or 16 bars in 54 of 78). A drop and a groove after a build are not separated by the level step, the intensity step or the detector's kick gap (medians above); they differ in length (median 8 against 16 bars). Nothing here is proposed as a threshold.
+- Batch C, block novelty (2026-11-13; `section.novelty_step` default 0, off, and `section.novelty_bars` 4; tests on the synthetic generator; every golden untouched; output at the defaults identical). `--sections-eval --only tune|held_out` scores one set alone. Sweep on the tune set only (14 tracks, duplicates excluded; texture "off" is `--texture-step 1000`), outputs in captures/review/sections/batch_c/:
+
+  | novelty_step / texture_step | Within a bar P / R / F | Right bar F | Bars alike | Kick-continuous recall | None within 4 bars | Count ratio median | Detected | Worst track F loss |
+  |---|---|---|---|---|---|---|---|---|
+  | 0 / 1.5 (today) | 0.672 / 0.535 / 0.596 | 0.531 | 64.6% | 0.471 (128 of 272) | 101 | 1.00 | 247 | 0 |
+  | 0 / off | 0.679 / 0.294 / 0.410 | 0.329 | 64.6% | 0.195 | 174 | 0.46 | 134 | 0.67 |
+  | 1.0 / 1.5 | 0.538 / 0.600 / 0.567 | 0.497 | 64.6% | 0.544 | 72 | 1.36 | 346 | 0.23 |
+  | 1.0 / off | 0.530 / 0.481 / 0.504 | 0.416 | 64.6% | 0.408 | 89 | 1.05 | 281 | 0.30 |
+  | 1.25 / 1.5 | 0.563 / 0.587 / 0.575 | 0.506 | 64.6% | 0.529 | 78 | 1.30 | 323 | 0.12 |
+  | 1.25 / off | 0.562 / 0.465 / 0.509 | 0.420 | 64.6% | 0.390 | 98 | 1.00 | 256 | 0.27 |
+  | 1.5 / 1.5 | 0.598 / 0.581 / 0.589 | 0.520 | 64.6% | 0.522 | 84 | 1.14 | 301 | 0.09 |
+  | 1.5 / off | 0.606 / 0.442 / 0.511 | 0.422 | 64.6% | 0.364 | 113 | 0.87 | 226 | 0.28 |
+  | 2.0 / 1.5 | 0.638 / 0.568 / 0.601 | 0.532 | 64.6% | 0.507 (138 of 272) | 90 | 1.07 | 276 | 0.06 |
+  | 2.0 / off | 0.665 / 0.403 / 0.502 | 0.414 | 64.6% | 0.320 | 133 | 0.68 | 188 | 0.32 |
+  | 2.5 / 1.5 (beyond the spec's grid) | 0.659 / 0.542 / 0.595 | 0.531 | 64.6% | 0.478 | 99 | 1.00 | 255 | 0.03 |
+  | 3.0 / 1.5 (beyond) | 0.665 / 0.539 / 0.595 | 0.531 | 64.6% | 0.474 | 100 | 1.00 | 251 | 0.03 |
+  | 4.0 / 1.5 (beyond) | 0.667 / 0.535 / 0.594 | 0.530 | 64.6% | 0.471 | 101 | 1.00 | 249 | 0.02 |
+
+  - Bars alike cannot move: the novelty rule splits a groove or drop into two of the same label. The texture rule carries the score (off, F falls to 0.410); the novelty rule beside it is best at 2.0, F +0.005.
+  - Chosen (best tune F): novelty_step 2.0 with texture_step 1.5. Held out (18 tracks, run once): within a bar P 0.768 -> 0.725, R 0.582 -> 0.609, F 0.662 -> 0.662; right bar F 0.606 -> 0.605; bars alike 73.9% both; kick-continuous recall 0.542 -> 0.572 (161 -> 170 of 297); count ratio median 0.79 -> 0.84; detected 246 -> 273; worst track F loss 0.05 (Nargun).
+  - The drop study's question: of the 194 labelled boundaries with no detected boundary within 4 bars, 21 gain one (tune 101 -> 90, held out 93 -> 83). Kick-continuous recall: tune 0.471 -> 0.507, held out 0.542 -> 0.572. Over-splitting: short sections on the corpus (140 tracks) unchanged on every track (181 in all; median 1); sections a minute, median 2.42 -> 2.73; groove-to-groove recall tune 57 -> 62 of 105, held out 82 -> 84 of 124.
+  - Gate (1.2, condition 5 as corrected), for novelty 2.0: (1) tune F +0.02 or more: FAILS (+0.005, 0.596 -> 0.601); (2) held-out F not down more than 0.01: holds (+0.0002); (3) bars alike: holds (unchanged on both); (4) no track loses more than 0.10: holds (worst 0.06 tune, 0.05 held out); (5) corpus median short sections not above 1: holds (1, every track unchanged); (6) golden metrics: holds (sections are not among its metrics, and the default is unchanged); C's extra condition, count ratio median 0.7 to 1.3: holds (1.07 tune, 0.84 held out). Verdict: the gate fails on condition 1. The default stays 0 (off); per the spec the code and tests stay, and no further rule is tried.
 - Commands (from the main checkout, Release binaries of `sections-2`; the folders as listed above):
   - `psyight_analyse --sections-eval --detail --split --scores --exclude "data\Hidden Tribe.wav" --exclude "data\Conquest.mp3" --json captures\review\sections\baseline\sections_eval.json data C:\Users\ses634\Music\mel C:\Users\ses634\Music\Musify\Download\DEPURATUS ...\Electric ...\Hall-of-Purity ...\HITECH_UNIVERSE ...\MayDecks ...\msi\In_Hyperspace ...\Psyflow-to-Pixieland ...\Samples "...\Star Beings"` (about 15 min)
   - `psyight_analyse --labels-stats --exclude "data\Hidden Tribe.wav" --exclude "data\Conquest.mp3" <the same folders>` (36 s)
@@ -167,6 +189,7 @@ Last updated: 2026-11-11. Written so another agent can pick up without the origi
   - per set: `psyight_live_check "<set>.mp3" --set --show psyight.psyproj --dwell` for the 20 files in C:\Users\ses634\Music\Musify\Download\Modem26_Hive (about 3 min each, 3 GB of memory each; three at a time took 16 min).
   - Sweeps for B and C: add `--param section.<id>=<value>` and diff the --json files.
   - Drop study: `psyight_analyse --drops --exclude "data\Hidden Tribe.wav" --exclude "data\Conquest.mp3" <the folders>` (about 15 min) and `--labels-stats` as above.
+  - Batch C sweep, per setting: `psyight_analyse --sections-eval --detail --scores --only tune --exclude "data\Hidden Tribe.wav" --exclude "data\Conquest.mp3" --param section.novelty_step=<n> [--texture-step 1000] --json captures\review\sections\batch_c\<name>.json <the folders>`; the held-out run the same with `--only held_out`; the corpus with `--param section.novelty_step=2.0 --sections-report` as above.
   - Batch E5: `psyight_live_check "<set>.mp3" --set --show psyight.psyproj --dwell` and the same with `--commit-bars 4 --resume`, for the 20 sets (two at a time, about 3 min each).
 
 ## Studio day: what to check with the DJM-A9 and the CDJs
