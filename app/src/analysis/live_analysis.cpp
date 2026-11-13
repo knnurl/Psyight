@@ -508,6 +508,12 @@ double LiveBeat::position(const LiveState &s, double t_s) {
 }
 
 void LiveBeat::set_section(LiveState &s, LiveSection section, double start_s) {
+    // The look records shift first: the ending section's look takes its energy at its end.
+    s.earlier_look = s.previous_look;
+    s.previous_look = s.look;
+    if (s.previous_look.energy < 0) {
+        s.previous_look.energy = s.section_energy;
+    }
     s.has_earlier = s.has_previous;
     s.earlier_section = s.previous_section;
     s.earlier_occurrence = s.previous_occurrence;
@@ -522,6 +528,22 @@ void LiveBeat::set_section(LiveState &s, LiveSection section, double start_s) {
     s.section = section;
     s.section_start_s = start_s;
     ++s.section_count;
+    // A groove after a breakdown shorter than a phrase, with a groove or drop before that
+    // breakdown, continues that section's look (as shown: through earlier continuations too).
+    const double phrase_s = 4.0 * s.phrase_bars * (s.tempo_known ? s.period_s : 0.5);
+    if (section == LiveSection::groove && s.has_previous &&
+        s.previous_section == LiveSection::breakdown && s.previous_length_s < phrase_s - 1e-6 &&
+        s.has_earlier &&
+        (s.earlier_section == LiveSection::groove || s.earlier_section == LiveSection::drop)) {
+        s.look = s.earlier_look;
+        s.look.phrases_before +=
+            static_cast<long long>(std::floor(std::max(0.0, s.earlier_length_s / phrase_s - 1e-6)));
+        s.look.continued = true;
+    } else {
+        s.look = {section, std::max(0, s.section_occurrences[static_cast<size_t>(section)] - 1),
+                  -1,      s.section_count,
+                  0,       false};
+    }
     if (s.tempo_known) {
         s.phrase_beat = std::llround(position(s, start_s));
     }

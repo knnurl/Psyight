@@ -194,6 +194,23 @@ struct LiveState {
     int earlier_occurrence = 0;
     int earlier_energy = 1;
     double earlier_length_s = 0.0;
+    // The look a section shows when the automation's live_resume takes it up (Batch E6): the
+    // section whose look it is (itself, or the groove or drop it continues across breakdowns
+    // shorter than a phrase, through any number of them), that section's occurrence, its energy
+    // when it ended (-1 while it is the current section: the live energy) and its section count
+    // (the variations' seed), and the phrases that look had run before this section. Kept for the
+    // current section, the previous one and the one before that.
+    struct LookRecord {
+        LiveSection section = LiveSection::intro;
+        int occurrence = 0;
+        int energy = -1;
+        int key = 0;
+        long long phrases_before = 0;
+        bool continued = false; // Continues an earlier section's look.
+    };
+    LookRecord look;
+    LookRecord previous_look;
+    LookRecord earlier_look;
 };
 
 // The beat, downbeat, phrase and section half of the live analysis, driven by kick times: the

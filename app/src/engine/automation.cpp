@@ -520,13 +520,17 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
                         state.previous_length_s < phrase_s - 1e-6 && state.has_earlier &&
                         (state.earlier_section == LiveSection::groove ||
                          state.earlier_section == LiveSection::drop);
-    const std::string label = resume ? live_section_name(state.earlier_section) : inputs.section;
+    // The look shown by the section resumed (state.earlier_look): itself, or the look it
+    // continued in turn (Batch E6), its phrases going on.
+    const LiveState::LookRecord &origin = state.earlier_look;
+    const std::string label = resume ? live_section_name(origin.section) : inputs.section;
     const size_t shown_occurrence =
-        resume ? static_cast<size_t>(state.earlier_occurrence) : occurrence(state.section);
-    const int energy = resume ? state.earlier_energy : state.section_energy;
+        resume ? static_cast<size_t>(origin.occurrence) : occurrence(state.section);
+    const int energy = resume ? origin.energy : state.section_energy;
     const long long shown_phrases =
-        resume ? ended_phrases(state.earlier_length_s) + phrases : phrases;
-    const auto key = static_cast<std::uint64_t>(state.section_count - (resume ? 2 : 0));
+        resume ? origin.phrases_before + ended_phrases(state.earlier_length_s) + phrases : phrases;
+    const auto key = resume ? static_cast<std::uint64_t>(origin.key)
+                            : static_cast<std::uint64_t>(state.section_count);
     place_fill(mix, params, inputs.section, shown_phrases,
                state.section_start_s + static_cast<double>(phrases + 1) * phrase_s, false,
                inputs.t_s, beat_s, key);
@@ -541,17 +545,27 @@ SceneMix automate_live(const std::vector<Scene> &scenes, const LiveState &state,
                                energy, ended_phrases(length_s),
                                static_cast<std::uint64_t>(state.section_count - back));
     };
+    // With live_resume, a section's look as shown (its look record: a resumed groove shows the
+    // look it continued).
+    const auto shown_look = [&](const LiveState::LookRecord &r, double length_s) {
+        return look_in_section(scenes, params, live_section_name(r.section),
+                               static_cast<size_t>(r.occurrence), r.energy,
+                               r.phrases_before + ended_phrases(length_s),
+                               static_cast<std::uint64_t>(r.key));
+    };
     // The look the section before ended on, as shown: a breakdown shorter than the commit delay
     // never showed its own, so then the one before it.
     const double wait_s = std::clamp(params.live_breakdown_commit_bars, 0, 8) * 4.0 * beat_s;
     const auto previous_look = [&] {
         if (wait_s > 0.0 && state.previous_section == LiveSection::breakdown &&
             state.previous_length_s < wait_s && state.has_earlier) {
-            return ended_look(state.earlier_section, state.earlier_occurrence, state.earlier_energy,
-                              state.earlier_length_s, 2);
+            return params.live_resume ? shown_look(state.earlier_look, state.earlier_length_s)
+                                      : ended_look(state.earlier_section, state.earlier_occurrence,
+                                                   state.earlier_energy, state.earlier_length_s, 2);
         }
-        return ended_look(state.previous_section, state.previous_occurrence, state.previous_energy,
-                          state.previous_length_s, 1);
+        return params.live_resume ? shown_look(state.previous_look, state.previous_length_s)
+                                  : ended_look(state.previous_section, state.previous_occurrence,
+                                               state.previous_energy, state.previous_length_s, 1);
     };
     const bool waiting = wait_s > 0.0 && state.section == LiveSection::breakdown;
     if (waiting && state.has_previous && into_s < wait_s) { // Not committed yet.

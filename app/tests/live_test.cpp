@@ -666,3 +666,32 @@ TEST_CASE("live beat: on silence a locked beat stops predicting") {
     CHECK(in.since_kick_s > 6.0); // The last real kick, not a predicted beat.
     CHECK(in.beat_phase == 0.0);
 }
+
+TEST_CASE("live beat: the look records follow grooves through short breaks") {
+    BeatRig rig;
+    const auto beat_s = [](int b) { return 1.0 + b * 0.4; };
+    for (int b = 0; b < 64; ++b) {
+        rig.kick(beat_s(b));
+    }
+    REQUIRE(rig.state.section == LiveSection::groove);
+    const LiveState::LookRecord first = rig.state.look;
+    CHECK_FALSE(first.continued);
+    CHECK(first.section == LiveSection::groove);
+    // Two short breaks (three kickless bars each would stay a groove: use five) between grooves.
+    int b = 64;
+    for (int round = 0; round < 2; ++round) {
+        for (int k = 0; k < 20; ++k) { // Five bars without a kick: a breakdown under a phrase.
+            rig.advance_to(beat_s(b + k));
+        }
+        b += 20;
+        for (int k = 0; k < 24; ++k) {
+            rig.kick(beat_s(b + k));
+        }
+        b += 24;
+        CAPTURE(round);
+        REQUIRE(rig.state.section == LiveSection::groove);
+        CHECK(rig.state.look.continued);
+        CHECK(rig.state.look.key == first.key);
+        CHECK(rig.state.look.occurrence == first.occurrence);
+    }
+}

@@ -568,6 +568,11 @@ LiveState live_locked() {
 
 // A live section change, as LiveBeat::set_section makes it.
 void enter(LiveState &s, LiveSection section, double start_s) {
+    s.earlier_look = s.previous_look;
+    s.previous_look = s.look;
+    if (s.previous_look.energy < 0) {
+        s.previous_look.energy = s.section_energy;
+    }
     s.has_earlier = s.has_previous;
     s.earlier_section = s.previous_section;
     s.earlier_occurrence = s.previous_occurrence;
@@ -582,6 +587,20 @@ void enter(LiveState &s, LiveSection section, double start_s) {
     s.section = section;
     s.section_start_s = start_s;
     ++s.section_count;
+    const double phrase_s = 4.0 * s.phrase_bars * s.period_s;
+    if (section == LiveSection::groove && s.has_previous &&
+        s.previous_section == LiveSection::breakdown && s.previous_length_s < phrase_s - 1e-6 &&
+        s.has_earlier &&
+        (s.earlier_section == LiveSection::groove || s.earlier_section == LiveSection::drop)) {
+        s.look = s.earlier_look;
+        s.look.phrases_before +=
+            static_cast<long long>(std::floor(std::max(0.0, s.earlier_length_s / phrase_s - 1e-6)));
+        s.look.continued = true;
+    } else {
+        s.look = {section, std::max(0, s.section_occurrences[static_cast<size_t>(section)] - 1),
+                  -1,      s.section_count,
+                  0,       false};
+    }
 }
 
 constexpr double kBarS = 4 * kBeatS;
@@ -691,6 +710,30 @@ TEST_CASE("automation: live resumed groove") {
         enter(s, LiveSection::groove, g1_end + 3 * kBarS);
         CHECK(automate_live(scenes, s, inputs_at(s, g1_end + 3 * kBarS + 0.1), both).to == last.to);
     }
+}
+
+TEST_CASE("automation: live resume through a chain of short breaks keeps the look shown") {
+    const std::vector<Scene> scenes = default_scenes();
+    AutomationParams resume;
+    resume.live_resume = true;
+    // Groove 1 a phrase and a half from 10 s, then breakdown, groove, breakdown, groove, each
+    // break 3 bars and each groove between them 4 bars.
+    LiveState s = live_locked();
+    enter(s, LiveSection::groove, 10.0);
+    double t = 10.0 + 1.5 * kPhraseS;
+    const SceneMix shown = automate_live(scenes, s, inputs_at(s, t - 0.01), resume);
+    for (int k = 0; k < 2; ++k) {
+        enter(s, LiveSection::breakdown, t);
+        t += 3 * kBarS;
+        enter(s, LiveSection::groove, t);
+        CAPTURE(k);
+        const SceneMix m = automate_live(scenes, s, inputs_at(s, t + 0.1), resume);
+        CHECK(m.to == shown.to); // The second break resumes it too (E2 alone did not).
+        CHECK(s.look.continued);
+        CHECK(s.look.key == 1);
+        t += 4 * kBarS;
+    }
+    CHECK(s.look.phrases_before == 1); // Groove 1 ended in its phrase 1; the 4-bar groove adds 0.
 }
 
 TEST_CASE("automation: phrase-end fills in long grooves, before rotations, not at the end") {
