@@ -1361,7 +1361,7 @@ int kick_coverage(const std::vector<std::wstring> &paths,
         "track | beats with a kick in kick-on bars: beat tracker, bass tracker | in labelled "
         "grooves and drops: beat tracker, bass tracker | beats there without a kick: "
         "count, kick-like click, median low rise dB (kick-like), median low rise dB (all "
-        "beats with a kick)\n");
+        "beats with a kick) | labelled drops: beat-tracker kick share\n");
     for (const TrackEntry &track : tracks_from(paths, excludes)) {
         Labels labels;
         bool has_labels = false;
@@ -1437,7 +1437,12 @@ int kick_coverage(const std::vector<std::wstring> &paths,
             std::string label = labels.sections[static_cast<size_t>(i)].label;
             return label == "groove" || label == "drop";
         };
+        const auto labelled_drop = [&](double t) {
+            const int i = section_at(labels.sections, t);
+            return i >= 0 && labels.sections[static_cast<size_t>(i)].label == "drop";
+        };
         int on = 0, on_beat = 0, on_bass = 0, lab = 0, lab_beat = 0, lab_bass = 0;
+        int drop = 0, drop_beat = 0;
         int gaps = 0, kick_like = 0;
         std::vector<double> rise_missed, rise_kicked;
         for (size_t k = 0; k < a.beats.beat_has_kick.size(); ++k) {
@@ -1452,6 +1457,9 @@ int kick_coverage(const std::vector<std::wstring> &paths,
             lab += in_lab;
             lab_beat += in_lab && kicked;
             lab_bass += in_lab && bass;
+            const bool in_drop = has_labels && labelled_drop(t);
+            drop += in_drop;
+            drop_beat += in_drop && kicked;
             const KickView v = view(t);
             if (kicked) {
                 rise_kicked.push_back(v.rise_db);
@@ -1466,15 +1474,16 @@ int kick_coverage(const std::vector<std::wstring> &paths,
         ++tracks;
         const auto pct = [](int n, int d) { return d > 0 ? 100.0 * n / d : 0.0; };
         std::printf(
-            "%s | %.0f%%, %.0f%% of %d | %s | %d, %d (%.0f%%), %.2f, %.2f\n", track.name.c_str(),
-            pct(on_beat, on), pct(on_bass, on), on,
+            "%s | %.0f%%, %.0f%% of %d | %s | %d, %d (%.0f%%), %.2f, %.2f | drops %.0f%% of %d\n",
+            track.name.c_str(), pct(on_beat, on), pct(on_bass, on), on,
             has_labels
                 ? (std::to_string(static_cast<int>(std::lround(pct(lab_beat, lab)))) + "%, " +
                    std::to_string(static_cast<int>(std::lround(pct(lab_bass, lab)))) + "% of " +
                    std::to_string(lab))
                       .c_str()
                 : "-",
-            gaps, kick_like, pct(kick_like, gaps), median(rise_missed), median(rise_kicked));
+            gaps, kick_like, pct(kick_like, gaps), median(rise_missed), median(rise_kicked),
+            pct(drop_beat, drop), drop);
         std::fflush(stdout);
         if (has_labels) {
             labelled_cov.push_back(pct(lab_beat, lab));
