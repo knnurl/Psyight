@@ -414,6 +414,9 @@ int analyse(const std::filesystem::path &audio_path, const TrackAnalysisOptions 
 
 } // namespace
 
+// The trackers' parameters from --param (beat.*, bass.*), for every mode that analyses tracks.
+static TrackAnalysisOptions g_tracker_options;
+
 struct SectionStats {
     double per_minute = 0.0;
     double median_bars = 0.0;
@@ -428,6 +431,8 @@ std::optional<SectionStats> section_report(const std::filesystem::path &path,
     options.source =
         analysis_stems_exist(stem_paths_for(path)) ? AnalysisSource::stems : AnalysisSource::mix;
     options.sections = section_params;
+    options.beats = g_tracker_options.beats;
+    options.bass = g_tracker_options.bass;
     const Result<TrackAnalysis> analysis = analyse_track(path, options);
     if (!analysis || analysis.value().beats.bpm <= 0.0) {
         std::printf("%-60s  no tempo\n", path_to_utf8(path.filename()).substr(0, 60).c_str());
@@ -767,6 +772,8 @@ int sections_eval(const std::vector<std::wstring> &paths, const EvalFlags &flags
         options.source = analysis_stems_exist(stem_paths_for(track.path)) ? AnalysisSource::stems
                                                                           : AnalysisSource::mix;
         options.sections = section_params;
+        options.beats = g_tracker_options.beats;
+        options.bass = g_tracker_options.bass;
         const Result<TrackAnalysis> analysis = analyse_track(track.path, options);
         if (!analysis) {
             std::printf("%-50s  %s\n", track.name.substr(0, 50).c_str(),
@@ -1175,6 +1182,8 @@ int drops_study(const std::vector<std::wstring> &paths,
         options.source = analysis_stems_exist(stem_paths_for(track.path)) ? AnalysisSource::stems
                                                                           : AnalysisSource::mix;
         options.sections = section_params;
+        options.beats = g_tracker_options.beats;
+        options.bass = g_tracker_options.bass;
         const Result<TrackAnalysis> analysis = analyse_track(track.path, options);
         if (!analysis) {
             std::printf("%-50s  %s\n", track.name.substr(0, 50).c_str(),
@@ -1576,6 +1585,7 @@ int wmain(int argc, wchar_t **argv) {
     options.sections = section_params_from(overrides); // The defaults without --param.
     options.beats = beat_tracker_params_from(overrides);
     options.bass = bass_tracker_params_from(overrides);
+    g_tracker_options = options;
     if (texture_step) {
         options.sections.texture_step = *texture_step;
     }
