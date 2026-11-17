@@ -1867,6 +1867,131 @@ std::vector<ScenePreset> builtin_scene_presets() {
         looks.push_back(std::move(p));
     }
     {
+        ScenePreset p{"Tendrils",
+                      "Arm-led: two slow swells travel round the piece, each lighting the "
+                      "arms it passes from the centre outwards like a tentacle curling, a bar "
+                      "a step; a faint light circling the halo once a phrase, the rest dark.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"breakdown"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 7.0},
+                                              {"clock", 4.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 0.2},
+                                              {"colour_spread", 0.3}},
+                                             "screen", 1.0f, "halo"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 3.0},
+                                              {"rate", 0.25},
+                                              {"shape", 4.0},
+                                              {"spread", 0.8},
+                                              {"width", 0.35},
+                                              {"level", 0.6},
+                                              {"colour_spread", 0.6},
+                                              {"turn_offset", 2.0}},
+                                             "screen", 1.0f, "arms"));
+        p.scene.post.push_back({AfterglowParams{1.0, 0.4}, true});
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Spores",
+                      "Dome-led: each dome swells from its middle to its edge once a bar, the "
+                      "swell carrying on out through the panels and rim as a slow ring, the "
+                      "three domes a third of a bar apart; the arms dark.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"breakdown"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"radial_from", 1.0},
+                                              {"clock", 3.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 0.7},
+                                              {"colour_spread", 0.4},
+                                              {"turn_offset", 1.0}},
+                                             "add", 1.0f, "domes"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 3.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.6},
+                                              {"level", 0.5},
+                                              {"colour_spread", 0.5}},
+                                             "screen", 1.0f, "panels"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 3.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.6},
+                                              {"level", 0.4},
+                                              {"colour_spread", 0.5}},
+                                             "screen", 1.0f, "rim"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 7.0},
+                                              {"clock", 4.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 0.2},
+                                              {"colour_spread", 0.3}},
+                                             "screen", 1.0f, "halo"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Undertow",
+                      "The bassline at breakdown pace: each note on the next arm five round, "
+                      "drawn out and slow to fade, its last notes trailing; the panels a slow "
+                      "tide coloured by the bass pitch, so the piece stays alive when the "
+                      "bass drops out.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"breakdown"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 4.0},
+                                              {"rate", -1.0},
+                                              {"shape", 0.0},
+                                              {"spread", 1.0},
+                                              {"level", 0.35},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "panels"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 7.0},
+                                              {"clock", 4.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 0.2},
+                                              {"colour_spread", 0.3}},
+                                             "screen", 1.0f, "halo"));
+        p.scene.layers.push_back(layer_by_id("arm_notes",
+                                             {{"arm_mode", 3.0},
+                                              {"step", 5.0},
+                                              {"per_16th", 0.5},
+                                              {"release", 6.0},
+                                              {"trail", 3.0},
+                                              {"colours", 2.0},
+                                              {"confidence", 0.3},
+                                              {"level", 0.7}},
+                                             "screen", 1.0f, "arms"));
+        p.scene.routes.push_back(route_by_id("bass_pitch", "hue_shift", 0, 120.0, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
         ScenePreset p{"Held breath",
                       "The domes hold a dim glow, the arms dark, each bass note a short flick "
                       "at the arm roots.",
@@ -2012,7 +2137,8 @@ std::vector<ShowPack> builtin_show_packs() {
             {find(looks, "Dormant"), find(looks, "First light"), find(looks, "Nerve"),
              find(looks, "Tide"), find(looks, "Spine"), find(looks, "Lure"), find(looks, "Inhale"),
              find(looks, "Swarm"), find(looks, "Bloom"), find(looks, "Strike"),
-             find(looks, "Drift"), find(looks, "Held breath"), find(looks, "Afterimage")},
+             find(looks, "Drift"), find(looks, "Tendrils"), find(looks, "Spores"),
+             find(looks, "Undertow"), find(looks, "Held breath"), find(looks, "Afterimage")},
             {{"Dormant", {"Ember", "Ember tide"}},
              {"First light", {"Ember", "Ember tide"}},
              {"Nerve", {"Ember", "Amber"}},
@@ -2024,6 +2150,9 @@ std::vector<ShowPack> builtin_show_packs() {
              {"Bloom", {"Ember", "Ember tide"}},
              {"Strike", {"Ember", "Ember tide"}},
              {"Drift", {"Ember", "Ember tide"}},
+             {"Tendrils", {"Ember", "Ember tide"}},
+             {"Spores", {"Ember", "Ember tide"}},
+             {"Undertow", {"Ember", "Ember tide"}},
              {"Held breath", {"Ember", "Ember tide"}},
              {"Afterimage", {"Ember", "Ember tide"}}});
         for (Scene &s : pack.scenes) {
@@ -2040,7 +2169,8 @@ std::vector<ShowPack> builtin_show_packs() {
             {find(looks, "Dormant"), find(looks, "First light"), find(looks, "Nerve"),
              find(looks, "Tide"), find(looks, "Spine"), find(looks, "Lure"), find(looks, "Inhale"),
              find(looks, "Swarm"), find(looks, "Bloom"), find(looks, "Strike"),
-             find(looks, "Drift"), find(looks, "Held breath"), find(looks, "Afterimage")},
+             find(looks, "Drift"), find(looks, "Tendrils"), find(looks, "Spores"),
+             find(looks, "Undertow"), find(looks, "Held breath"), find(looks, "Afterimage")},
             {{"Dormant", {"Moss", "Mono violet"}},
              {"First light", {"Moss", "Mono violet"}},
              {"Nerve", {"Moss", "Fern glow"}},
@@ -2052,6 +2182,9 @@ std::vector<ShowPack> builtin_show_packs() {
              {"Bloom", {"Fern glow", "Moss"}},
              {"Strike", {"Fern glow", "Moss"}},
              {"Drift", {"Moss", "Mono violet"}},
+             {"Tendrils", {"Moss", "Mono violet"}},
+             {"Spores", {"Moss", "Mono violet"}},
+             {"Undertow", {"Moss", "Mono violet"}},
              {"Held breath", {"Moss", "Mono violet"}},
              {"Afterimage", {"Moss", "Mono violet"}}});
         for (Scene &s : pack.scenes) {
@@ -2407,6 +2540,115 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"colour_spread", 0.4}},
                                                "screen", 1.0f, "arms"));
             }
+            if (s.name == "Tendrils") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 7.0},
+                                                {"clock", 4.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 0.2},
+                                                {"colour_spread", 0.3}},
+                                               "screen", 0.4f, "halo"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", 0.25},
+                                                {"shape", 4.0},
+                                                {"spread", 0.8},
+                                                {"width", 0.35},
+                                                {"level", 0.6},
+                                                {"colour_spread", 0.6},
+                                                {"turn_offset", 2.0}},
+                                               "screen", 1.0f, "arms"));
+                s.post.push_back({AfterglowParams{1.0, 0.4}, true});
+            }
+            if (s.name == "Spores") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 0.7},
+                                                {"colour_spread", 0.4},
+                                                {"turn_offset", 1.0}},
+                                               "add", 0.4f, "domes"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.6},
+                                                {"level", 0.5},
+                                                {"colour_spread", 0.5}},
+                                               "screen", 0.4f, "panels"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.6},
+                                                {"level", 0.4},
+                                                {"colour_spread", 0.5}},
+                                               "screen", 0.4f, "rim"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 7.0},
+                                                {"clock", 4.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 0.2},
+                                                {"colour_spread", 0.3}},
+                                               "screen", 0.4f, "halo"));
+            }
+            if (s.name == "Undertow") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 4.0},
+                                                {"rate", -1.0},
+                                                {"shape", 0.0},
+                                                {"spread", 1.0},
+                                                {"level", 0.35},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "panels"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 7.0},
+                                                {"clock", 4.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 0.2},
+                                                {"colour_spread", 0.3}},
+                                               "screen", 0.4f, "halo"));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 5.0},
+                                                {"per_16th", 0.5},
+                                                {"release", 6.0},
+                                                {"trail", 3.0},
+                                                {"colours", 2.0},
+                                                {"confidence", 0.3},
+                                                {"level", 0.7}},
+                                               "screen", 1.0f, "arms"));
+                s.routes.push_back(route_by_id("bass_pitch", "hue_shift", 0, 120.0, "", false));
+            }
             if (s.name == "Held breath") {
                 s.layers.clear();
                 s.routes.clear();
@@ -2477,7 +2719,8 @@ std::vector<ShowPack> builtin_show_packs() {
             {find(looks, "Dormant"), find(looks, "First light"), find(looks, "Nerve"),
              find(looks, "Tide"), find(looks, "Spine"), find(looks, "Lure"), find(looks, "Inhale"),
              find(looks, "Swarm"), find(looks, "Bloom"), find(looks, "Strike"),
-             find(looks, "Drift"), find(looks, "Held breath"), find(looks, "Afterimage")},
+             find(looks, "Drift"), find(looks, "Tendrils"), find(looks, "Spores"),
+             find(looks, "Undertow"), find(looks, "Held breath"), find(looks, "Afterimage")},
             {{"Dormant", {"Ocean UV", "Abyss"}},
              {"First light", {"Ocean UV", "Abyss"}},
              {"Nerve", {"Abyss", "UV violet"}},
@@ -2489,6 +2732,9 @@ std::vector<ShowPack> builtin_show_packs() {
              {"Bloom", {"Abyss", "Magenta storm"}},
              {"Strike", {"Abyss", "Magenta storm"}},
              {"Drift", {"Ocean UV", "Abyss"}},
+             {"Tendrils", {"Ocean UV", "Abyss"}},
+             {"Spores", {"Ocean UV", "Abyss"}},
+             {"Undertow", {"Ocean UV", "Abyss"}},
              {"Held breath", {"Ocean UV", "Abyss"}},
              {"Afterimage", {"Ocean UV", "Abyss"}}});
         for (Scene &s : pack.scenes) {
@@ -2714,6 +2960,41 @@ std::vector<ShowPack> builtin_show_packs() {
                                                "screen", 0.15f, "rim"));
                 s.routes.push_back(route_by_id("kick", "opacity", 1, 0.85, "", false));
                 s.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+            }
+            if (s.name == "Undertow") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 4.0},
+                                                {"rate", -1.0},
+                                                {"shape", 0.0},
+                                                {"spread", 1.0},
+                                                {"level", 0.35},
+                                                {"colour_spread", 0.3}},
+                                               "add", 1.0f, "panels"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 7.0},
+                                                {"clock", 4.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 0.2},
+                                                {"colour_spread", 0.3}},
+                                               "screen", 1.0f, "halo"));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 5.0},
+                                                {"per_16th", 0.5},
+                                                {"release", 3.0},
+                                                {"trail", 3.0},
+                                                {"colours", 2.0},
+                                                {"confidence", 0.3},
+                                                {"level", 0.7}},
+                                               "screen", 1.0f, "arms"));
+                s.routes.push_back(route_by_id("bass_pitch", "hue_shift", 0, 120.0, "", false));
             }
             if (s.name == "Held breath") {
                 s.layers.clear();

@@ -157,6 +157,14 @@
         "quarter_above_20": 0.0,
         "seconds": 0.0
       },
+      "Spores": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
       "Strike": {
         "flashes_alone": 508,
         "max_byte": 0,
@@ -173,6 +181,14 @@
         "quarter_above_20": 0.07086614173228346,
         "seconds": 6.35
       },
+      "Tendrils": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
       "Tide": {
         "flashes_alone": 248,
         "max_byte": 172,
@@ -180,6 +196,14 @@
         "median_lit_pixels": 384.0,
         "quarter_above_20": 0.1607843137254902,
         "seconds": 12.75
+      },
+      "Undertow": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
       }
     }
   },
@@ -341,6 +365,14 @@
         "quarter_above_20": 0.0,
         "seconds": 19.7
       },
+      "Spores": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
       "Strike": {
         "flashes_alone": 508,
         "max_byte": 0,
@@ -357,6 +389,14 @@
         "quarter_above_20": 0.25984251968503935,
         "seconds": 6.35
       },
+      "Tendrils": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
       "Tide": {
         "flashes_alone": 248,
         "max_byte": 172,
@@ -364,6 +404,14 @@
         "median_lit_pixels": 372.0,
         "quarter_above_20": 0.15294117647058825,
         "seconds": 12.75
+      },
+      "Undertow": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
       }
     }
   }

@@ -19,7 +19,7 @@ import copy
 from cagan_candidates import CANDIDATES
 
 PICKS = ["Dormant", "First light", "Nerve", "Tide", "Spine", "Lure", "Inhale", "Swarm", "Bloom",
-         "Strike", "Drift", "Held breath", "Afterimage"]
+         "Strike", "Drift", "Tendrils", "Spores", "Undertow", "Held breath", "Afterimage"]
 
 # Section tags for the packs (energy tags steer grooves; untagged kinds take every scene).
 SECTIONS = {
@@ -34,6 +34,9 @@ SECTIONS = {
     "Bloom": ["drop"],
     "Strike": ["drop"],
     "Drift": ["breakdown"],
+    "Tendrils": ["breakdown"],
+    "Spores": ["breakdown"],
+    "Undertow": ["breakdown"],
     "Held breath": ["break"],
     "Afterimage": ["break"],
 }
@@ -51,7 +54,8 @@ GLOW_ZONES = {"panels", "rim", "halo", "glow", "domes", "centre"}
 
 # Palette lists per pack, by the scene's role: quiet (intros, outros, breakdowns, breaks),
 # groove, build, drop.
-ROLE = {"Dormant": "quiet", "First light": "quiet", "Drift": "quiet", "Held breath": "quiet",
+ROLE = {"Dormant": "quiet", "First light": "quiet", "Drift": "quiet", "Tendrils": "quiet", "Spores": "quiet",
+        "Undertow": "quiet", "Held breath": "quiet",
         "Afterimage": "quiet", "Nerve": "groove", "Tide": "groove", "Spine": "groove",
         "Lure": "groove", "Inhale": "build", "Swarm": "build", "Bloom": "drop",
         "Strike": "drop"}
