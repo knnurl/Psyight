@@ -13,9 +13,9 @@ come from psyight_show_check.
 groups: the bare rig with each group lit in turn, both views, in <out>/groups.png.
 candidates: every candidate of cagan_candidates.py held by --scene over each track of the times
 file, 16 frames a sheet at the times given for the candidate's first section kind, and a
-whole-track report each, run one at a time so the render cost is measured alone. The review
-project is the base project with the rig replaced, the flash limiter on and only the candidates
-as scenes; limits, palettes and the power budget are the base project's (extra palettes from
+whole-track report each, run one at a time so the render cost is measured alone. A review
+project is the base project with the rig replaced, the flash limiter on and the candidates as its
+only scenes (all of them in <out>/cagan.psyproj, one each in <out>/projects for the runs); limits, palettes and the power budget are the base project's (extra palettes from
 cagan_candidates.PALETTES are appended). The times file holds the private paths:
     {"tracks": {"<track>": {"audio": "<path>",
                             "times": {"<section kind>": ["<caption>", [t_s, ...]]}}}}
@@ -39,7 +39,7 @@ GROUPS = ["arms", "arms_inner", "arms_outer", "sharp", "domes", "dome_1", "dome_
           "panels", "rim", "halo", "centre", "glow", "left", "right"]
 
 
-def review_project(base_path, rig_path, scenes, palettes, out_dir):
+def review_project(base_path, rig_path, scenes, palettes, out_dir, file_name="cagan.psyproj"):
     base = json.load(open(base_path, encoding="utf-8"))
     rig = json.load(open(rig_path, encoding="utf-8"))
     p = json.loads(json.dumps(base))
@@ -53,7 +53,7 @@ def review_project(base_path, rig_path, scenes, palettes, out_dir):
             p["palettes"].append({"name": name, "colours": colours})
             names.append(name)
     p["scenes"] = [scene_json(s, names) for s in scenes]
-    path = os.path.join(out_dir, "cagan.psyproj")
+    path = os.path.join(out_dir, file_name)
     json.dump(p, open(path, "w", encoding="utf-8"), indent=1)
     return path, p, rig
 
@@ -202,7 +202,8 @@ def candidates_sheets(a):
     for d in ("frames", "report"):
         os.makedirs(os.path.join(a.out, d), exist_ok=True)
     cfg = json.load(open(a.times, encoding="utf-8"))["tracks"]
-    proj, p, rig = review_project(a.project, a.rig, cc.CANDIDATES, cc.PALETTES, a.out)
+    # Every candidate in one project (cagan.psyproj), to open in the app; the runs use one each.
+    _, p, rig = review_project(a.project, a.rig, cc.CANDIDATES, cc.PALETTES, a.out)
     gain = 1.0 / p["limiter"]["brightness_cap"]
     chosen = [s for s in cc.CANDIDATES if not a.only or s["name"] in a.only.split(",")]
     jobs = [(s, t) for s in chosen for t in cfg if s["sections"][0] in cfg[t]["times"]]
@@ -210,10 +211,16 @@ def candidates_sheets(a):
     def slug(*parts):
         return "_".join(parts).replace(" ", "_")
 
+    # One project per candidate, holding it alone: the reports then render nothing else.
+    os.makedirs(os.path.join(a.out, "projects"), exist_ok=True)
+    alone = {s["name"]: review_project(a.project, a.rig, [s], cc.PALETTES,
+                                       os.path.join(a.out, "projects"),
+                                       slug(s["name"]) + ".psyproj")[0] for s in chosen}
+
     def frames(job):
         s, t = job
         times = cfg[t]["times"][s["sections"][0]][1]
-        return run_frames(a.exe, proj, s["name"], times, cfg[t]["audio"],
+        return run_frames(a.exe, alone[s["name"]], s["name"], times, cfg[t]["audio"],
                           os.path.join(a.out, "frames", slug(t, s["name"]) + ".jsonl"))
 
     with ThreadPoolExecutor(a.workers) as pool:
@@ -240,7 +247,8 @@ def candidates_sheets(a):
         return
     rows = []
     for s, t in jobs:  # One at a time: the render cost is measured alone.
-        r = subprocess.run([a.exe, "--project", proj, "--scene", s["name"], cfg[t]["audio"]],
+        r = subprocess.run([a.exe, "--project", alone[s["name"]], "--scene", s["name"],
+                            cfg[t]["audio"]],
                            capture_output=True, text=True)
         text = r.stdout + r.stderr
         open(os.path.join(a.out, "report", slug(t, s["name"]) + ".txt"), "w",
