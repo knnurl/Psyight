@@ -265,6 +265,58 @@ TEST_CASE("arm notes: a slide lights two arms, a rest leaves the arms dark") {
     CHECK(std::all_of(dark.begin(), dark.end(), [](const Rgb &c) { return level(c) == 0.0f; }));
 }
 
+TEST_CASE("arm notes: each note in turn, arms a note, palette by pitch") {
+    const Rig rig = flower();
+    ArmNotesParams p;
+    p.confidence = 0.0;
+    p.arm_mode = 3;
+    p.step = 5;
+    // The same pitch over and over still moves on: note 100 (the 100th) on arm 99 % 12 * 5 % 12.
+    EngineInputs in = bass(36, 1.0, 0.2, false);
+    CHECK(lit_arms(rig, render({p}, rig, in)) == std::vector<int>{3});
+    in.bass_notes_so_far = 101;
+    CHECK(lit_arms(rig, render({p}, rig, in)) == std::vector<int>{8});
+    // Twelve notes in a row at step 5 visit every arm once.
+    std::vector<int> seen;
+    for (long long n = 1; n <= 12; ++n) {
+        in.bass_notes_so_far = n;
+        const std::vector<int> lit = lit_arms(rig, render({p}, rig, in));
+        REQUIRE(lit.size() == 1);
+        seen.push_back(lit[0]);
+    }
+    std::sort(seen.begin(), seen.end());
+    CHECK(std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+    // Three arms a note, evenly round.
+    ArmNotesParams three = p;
+    three.arms_per_note = 3;
+    in.bass_notes_so_far = 1;
+    CHECK(lit_arms(rig, render({three}, rig, in)) == std::vector<int>{0, 4, 8});
+    // Palette by pitch: the colour follows the pitch, not the arm.
+    ArmNotesParams by_pitch = p;
+    by_pitch.colours = 2;
+    in.bass_notes_so_far = 1;
+    const Frame c1 = render({by_pitch}, rig, in);
+    in.bass_notes_so_far = 2;
+    const Frame c2 = render({by_pitch}, rig, in);
+    const auto lit_colour = [&](const Frame &f) { // The brightest pixel's.
+        Rgb best{};
+        for (const Rgb &c : f) {
+            if (level(c) > level(best)) {
+                best = c;
+            }
+        }
+        return best;
+    };
+    CHECK(lit_colour(c1) == lit_colour(c2)); // Same pitch on another arm: the same colour.
+    in.bass_midi = 42;
+    CHECK(!(lit_colour(render({by_pitch}, rig, in)) == lit_colour(c2)));
+    // The defaults stay: pitch class, one arm, pitch hue.
+    const ArmNotesParams d;
+    CHECK(d.arm_mode == 0);
+    CHECK(d.arms_per_note == 1);
+    CHECK(d.colours == 0);
+}
+
 TEST_CASE("arm notes: scale step, trail, and the same frame twice") {
     const Rig rig = flower();
     ArmNotesParams p;

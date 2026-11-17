@@ -539,12 +539,22 @@ template <> const std::vector<Field<PitchClockParams>> &fields<PitchClockParams>
 template <> const std::vector<Field<ArmNotesParams>> &fields<ArmNotesParams>() {
     using P = ArmNotesParams;
     static const std::vector<Field<P>> f = {
-        {{"arm_mode", "Arms", "", 0.0, 2.0, true,
+        {{"arm_mode", "Arms", "", 0.0, 3.0, true,
           "Which arm a note lights: by pitch class (modulo the arms), by its rank among the "
-          "recent notes' pitches spread round the arms, or every arm",
-          "Pitch class|Scale step|All arms"},
+          "recent notes' pitches spread round the arms, every arm, or the next arm on each note "
+          "whatever its pitch",
+          "Pitch class|Scale step|All arms|Each note in turn"},
          nullptr,
          &P::arm_mode},
+        {{"step", "Step", "arms", 1.0, 11.0, true,
+          "Each note in turn: how many arms on the next note lands (1 crawls round, 5 jumps "
+          "across)"},
+         nullptr,
+         &P::step},
+        {{"arms_per_note", "Arms a note", "", 1.0, 6.0, true,
+          "Arms each note lights, spread evenly round the piece"},
+         nullptr,
+         &P::arms_per_note},
         {{"top_pitch", "First arm", "", 0.0, 11.0, true,
           "Pitch class on the first arm round from the top (0 = C)"},
          nullptr,
@@ -561,8 +571,9 @@ template <> const std::vector<Field<ArmNotesParams>> &fields<ArmNotesParams>() {
         {{"trail", "Trail", "", 0.0, 7.0, true, "Earlier notes kept on their arms, dimmer by age"},
          nullptr,
          &P::trail},
-        {{"colours", "Colour", "", 0.0, 1.0, true, "Hue from pitch, or a palette step per arm",
-          "Pitch hue|Palette"},
+        {{"colours", "Colour", "", 0.0, 2.0, true,
+          "Hue from pitch, a palette step per arm, or the palette by pitch class",
+          "Pitch hue|Palette|Palette by pitch"},
          nullptr,
          &P::colours},
         {{"confidence", "Doubt", "", 0.0, 1.0, false,

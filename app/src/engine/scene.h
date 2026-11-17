@@ -423,15 +423,19 @@ struct RingAutomatonParams {
 // not a closed ring) as an instrument. Arms are taken in turn round the centre from the top,
 // clockwise; a note picks its arm by pitch and lights it from the end nearer the centre outwards
 // (by distance from the centre, so the wiring direction does not matter) as far as it is held,
-// then fades with its decay. A slide cross-fades from the previous note's arm.
+// then fades with its decay. A slide cross-fades from the previous note's arm. "Each note in
+// turn" moves on `step` arms a note whatever its pitch (a bassline on one pitch does not hold one
+// arm); "Palette by pitch" keeps pitch in the colour instead.
 struct ArmNotesParams {
-    int arm_mode = 0;         // Pitch class, scale step, all arms.
+    int arm_mode = 0;         // Pitch class, scale step, all arms, each note in turn.
+    int step = 5;             // Each note in turn: arms moved on a note.
+    int arms_per_note = 1;    // Arms a note lights, spread evenly round (not with all arms).
     int top_pitch = 0;        // Pitch class on the first arm (0 = C).
     double per_16th = 1.0;    // Share of the arm per 16th held: 1 reaches the gate ratio.
     double release = 1.0;     // Fade after the note: times its decay time constant.
     double slide_16ths = 1.0; // A slide's cross-fade, in 16ths.
     int trail = 0;            // Earlier notes (EngineInputs::notes) kept, dimmer by age.
-    int colours = 0;          // Pitch hue, palette.
+    int colours = 0;          // Pitch hue, palette by arm, palette by pitch.
     double confidence = 0.5;  // Doubtful notes dimmer: level times 1 - this * (1 - confidence).
     double level = 1.0;
 };

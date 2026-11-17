@@ -865,8 +865,8 @@ class ArmNotes final : public Effect {
             std::sort(pitches.begin(), pitches.end());
             pitches.erase(std::unique(pitches.begin(), pitches.end()), pitches.end());
         }
-        // The arm a pitch lights; -1: every arm.
-        const auto arm_for = [&](int midi) {
+        // The arm the k-th note of the history (0 the latest) lights; -1: every arm.
+        const auto arm_for = [&](int midi, int k) {
             switch (p_.arm_mode) {
             case 0:
                 return ((((midi - p_.top_pitch) % 12) + 12) % 12) % arms;
@@ -875,6 +875,10 @@ class ArmNotes final : public Effect {
                     std::lower_bound(pitches.begin(), pitches.end(), midi) - pitches.begin());
                 const int distinct = std::max(1, static_cast<int>(pitches.size()));
                 return std::min(arms - 1, rank * arms / distinct);
+            }
+            case 3: { // Each note in turn: the note's number, step arms a note.
+                const long long n = in.bass_notes_so_far - 1 - k;
+                return static_cast<int>((n % arms) * std::max(1, p_.step) % arms);
             }
             default:
                 return -1;
@@ -885,19 +889,26 @@ class ArmNotes final : public Effect {
         std::vector<Rgb> colour(static_cast<size_t>(arms));
         // A note on its arm (or every arm), lit from the inner end to `reach`; the brightest
         // note on an arm wins.
+        const int per_note = std::clamp(p_.arms_per_note, 1, arms);
         const auto put = [&](int arm, double reach, double v, double pitch) {
             if (v < 2e-3 || reach <= 0.0) {
                 return;
             }
             const int first = arm < 0 ? 0 : arm;
             const int last = arm < 0 ? arms - 1 : arm;
-            for (int k = first; k <= last; ++k) {
-                const auto u = static_cast<size_t>(k);
-                if (v > value[u]) {
-                    value[u] = v;
-                    head[u] = reach;
-                    colour[u] = p_.colours == 0 ? hsv(270.0 + 28.0 * pitch, 1.0, 1.0)
-                                                : c.palette.at(static_cast<double>(k) / arms);
+            const double pitch_class =
+                std::fmod(std::fmod(pitch - p_.top_pitch, 12.0) + 12.0, 12.0) / 12.0;
+            for (int j = first; j <= last; ++j) {
+                for (int m = 0; m < (arm < 0 ? 1 : per_note); ++m) {
+                    const int k = (j + m * arms / per_note) % arms;
+                    const auto u = static_cast<size_t>(k);
+                    if (v > value[u]) {
+                        value[u] = v;
+                        head[u] = reach;
+                        colour[u] = p_.colours == 0   ? hsv(270.0 + 28.0 * pitch, 1.0, 1.0)
+                                    : p_.colours == 2 ? c.palette.at(pitch_class)
+                                                      : c.palette.at(static_cast<double>(k) / arms);
+                    }
                 }
             }
         };
@@ -922,7 +933,7 @@ class ArmNotes final : public Effect {
             const double conf = 1.0 - std::clamp(p_.confidence, 0.0, 1.0) *
                                           (1.0 - std::clamp(e.confidence, 0.0, 1.0));
             const double by_age = 1.0 - static_cast<double>(k) / (trail + 1);
-            put(arm_for(e.midi), reach,
+            put(arm_for(e.midi, k), reach,
                 p_.level * conf * std::clamp(e.velocity, 0.0, 1.0) * fade * by_age,
                 e.midi + e.cents / 100.0);
         }
@@ -936,9 +947,9 @@ class ArmNotes final : public Effect {
         const double v0 = p_.level * confidence_scale(p_.confidence, in) *
                           std::clamp(in.bass_velocity, 0.0, 1.0) * env;
         const double pitch = in.bass_midi + in.bass_cents / 100.0;
-        const int arm = arm_for(in.bass_midi);
+        const int arm = arm_for(in.bass_midi, 0);
         const NoteEvent &prev = in.notes[1];
-        const int from = notes > 1 ? arm_for(prev.midi) : arm;
+        const int from = notes > 1 ? arm_for(prev.midi, 1) : arm;
         if (in.bass_slide && arm >= 0 && from != arm) {
             // A slide: from the previous note's arm to this one's over slide_16ths.
             const double w = std::clamp(
