@@ -51,9 +51,11 @@ INTROS = [
 ]
 
 GROOVES = [
-    scene("Nerve", "The bassline on the arms, one arm per pitch class; the domes thumping on "
-          "the kick; everything else dark.", ["groove", "low", "mid"], ["Ember"],
-          [L("arm_notes", group="arms", colours=1, per_16th=1.5, confidence=0.3),
+    scene("Nerve", "The bassline on the arms, each note on the next arm five round (jumping "
+          "across the piece whatever its pitch), coloured by pitch; the domes thumping on the "
+          "kick; everything else dark.", ["groove", "low", "mid"], ["Ember"],
+          [L("arm_notes", group="arms", arm_mode=3, step=5, colours=2, per_16th=1.5,
+             confidence=0.3),
            dome_kick()],
           [kick_route(1)]),
     scene("Tide", "Every bass note on all twelve arms, a slow radial wave in the panels a bar "
@@ -63,11 +65,13 @@ GROOVES = [
            L("arm_notes", "screen", 0.8, group="arms", arm_mode=2, colours=1, confidence=0.3),
            dome_kick()],
           [kick_route(2)]),
-    scene("Spine", "The bassline on the arms with its last four notes trailing, the kick "
-          "stepping round the three domes one at a time, the halo dim.", ["groove", "mid"],
+    scene("Spine", "The bassline crawling round the arms a note at a time, coloured by pitch, "
+          "its last four notes trailing; the kick stepping round the three domes one at a time, "
+          "the halo dim.", ["groove", "mid"],
           ["Ember"],
           [glow("halo", 0.1),
-           L("arm_notes", "screen", group="arms", colours=1, trail=4, confidence=0.3),
+           L("arm_notes", "screen", group="arms", arm_mode=3, step=1, colours=2, trail=4,
+             confidence=0.3),
            L("wave", "screen", 0.15, group="domes", mapping=4, clock=6, rate=1.0 / 3.0, shape=4,
              spread=0.0, width=0.3, level=1.0, colour_spread=0.4, turn_offset=1.0)],
           [kick_route(2)]),
@@ -108,13 +112,15 @@ BUILDS = [
 
 DROPS = [
     scene("Bloom", "The kick as a coloured shockwave from the centre across the whole piece, "
-          "the bassline on the arms at full level, panels and rim in full colour.", ["drop"],
+          "each bass note on three arms evenly round, moving on a note and coloured by pitch, "
+          "panels and rim in full colour.", ["drop"],
           ["Ember", "Magenta storm"],
           [L("polar_noise", group="glow", level=0.55, floor=0.3, flow=0.25, clock=2,
              colour_spread=1.0),
            L("wave", "screen", 0.2, mapping=3, clock=2, rate=1.0, shape=4, spread=1.0,
              width=0.3, level=1.0, colour_spread=0.6),
-           L("arm_notes", "screen", group="arms", colours=1, confidence=0.2)],
+           L("arm_notes", "screen", group="arms", arm_mode=3, step=1, arms_per_note=3, colours=2,
+             confidence=0.2)],
           [kick_route(1, 0.8)]),
     scene("Strike", "The kick on the domes and the rim together, all twelve arms firing "
           "outwards on each bass note, the panels dark for contrast.", ["drop"], ["Ember"],
@@ -150,8 +156,8 @@ BREAKS = [
     scene("Held breath", "The domes hold a dim glow, the arms dark, each bass note a short "
           "flick at the arm roots.", ["break"], ["Ember"],
           [glow("domes", 0.2),
-           L("arm_notes", "screen", group="arms", per_16th=0.4, release=0.5, colours=1,
-             confidence=0.3, level=1.0)]),
+           L("arm_notes", "screen", group="arms", arm_mode=3, step=5, per_16th=0.4, release=0.5,
+             colours=2, confidence=0.3, level=1.0)]),
     scene("Afterimage", "The halo and panels held dim under a long afterglow, hats sparking on "
           "the arm tips and leaving trails (a scene's afterglow holds its own frames, not the "
           "last scene's).", ["break"], ["Ember", "Ocean UV"],
