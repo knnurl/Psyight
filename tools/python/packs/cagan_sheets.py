@@ -9,6 +9,7 @@ come from psyight_show_check.
                                   --rig <Cagan flat.json> --audio <any audio file> --out <dir>
     python cagan_sheets.py candidates --exe ... --project ... --rig ... --times <times.json>
                                       --out <dir> [--only name,name] [--workers 4]
+                                      [--no-reports] [--redraw]
 
 groups: the bare rig with each group lit in turn, both views, in <out>/groups.png.
 candidates: every candidate of cagan_candidates.py held by --scene over each track of the times
@@ -118,11 +119,13 @@ class View:
         g = self.glow_gain
         glow = glow.filter(ImageFilter.GaussianBlur(self.sigma_px)).point(
             lambda v: min(255, int(v * g)))
-        im = ImageChops.add(Image.new("RGB", glow.size, GROUND), glow)
-        d = ImageDraw.Draw(im)
+        # Sharp pixels as dots, added to what is behind them (a dim pixel never darkens it).
+        dots = Image.new("RGB", glow.size, (0, 0, 0))
+        d = ImageDraw.Draw(dots)
         for (px, py), c, sharp in zip(self.xy, colours, self.sharp):
             if sharp and any(c):
                 d.ellipse((px - 1.6, py - 1.6, px + 1.6, py + 1.6), fill=c)
+        im = ImageChops.add(ImageChops.add(Image.new("RGB", glow.size, GROUND), glow), dots)
         ImageDraw.Draw(im).text((4, 3), label, fill=(170, 170, 170))
         return im
 
@@ -204,7 +207,11 @@ def candidates_sheets(a):
     cfg = json.load(open(a.times, encoding="utf-8"))["tracks"]
     # Every candidate in one project (cagan.psyproj), to open in the app; the runs use one each.
     _, p, rig = review_project(a.project, a.rig, cc.CANDIDATES, cc.PALETTES, a.out)
-    gain = 1.0 / p["limiter"]["brightness_cap"]
+    # Bytes back to the level the scene asked for: undo the gamma and the brightness cap. A
+    # monitor's own gamma then shows light in proportion to the LEDs', scaled up by 1/cap.
+    cap = p["limiter"]["brightness_cap"]
+    gamma = p["limiter"].get("gamma", 2.2)
+    shade = [min(255, int(round(255.0 * (b / 255.0) ** (1.0 / gamma) / cap))) for b in range(256)]
     chosen = [s for s in cc.CANDIDATES if not a.only or s["name"] in a.only.split(",")]
     jobs = [(s, t) for s in chosen for t in cfg if s["sections"][0] in cfg[t]["times"]]
 
@@ -220,6 +227,9 @@ def candidates_sheets(a):
     def frames(job):
         s, t = job
         times = cfg[t]["times"][s["sections"][0]][1]
+        out = os.path.join(a.out, "frames", slug(t, s["name"]) + ".jsonl")
+        if a.redraw and os.path.exists(out):
+            return out
         return run_frames(a.exe, alone[s["name"]], s["name"], times, cfg[t]["audio"],
                           os.path.join(a.out, "frames", slug(t, s["name"]) + ".jsonl"))
 
@@ -235,10 +245,11 @@ def candidates_sheets(a):
             tiles = []
             for f in fr[:16]:
                 rgb = f["rgb"]
-                colours = [tuple(min(255, int(v * gain)) for v in rgb[3 * i:3 * i + 3])
+                colours = [tuple(shade[v] for v in rgb[3 * i:3 * i + 3])
                            for i in range(len(pixels))]
                 tiles.append(draw(colours, f"{f['t_s']:.2f} s"))
-            title = (f"{s['name']} ({s['sections'][0]}): {t}, {caption} (gain 1/{1 / gain:.4f}"
+            title = (f"{s['name']} ({s['sections'][0]}): {t}, {caption} (bytes shown as "
+                     f"levels: gamma {gamma}, cap {cap}"
                      f"{', plain' if kind else ', diffuser view'})")
             name = f"sheet_{slug(t, s['name'])}{kind}.png"
             grid(tiles, 8, title).save(os.path.join(a.out, name))
@@ -279,6 +290,7 @@ def main():
     ap.add_argument("--only")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--no-reports", action="store_true")
+    ap.add_argument("--redraw", action="store_true", help="reuse frames already rendered")
     a = ap.parse_args()
     groups_sheet(a) if a.mode == "groups" else candidates_sheets(a)
 
