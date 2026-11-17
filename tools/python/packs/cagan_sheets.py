@@ -10,6 +10,7 @@ come from psyight_show_check.
     python cagan_sheets.py candidates --exe ... --project ... --rig ... --times <times.json>
                                       --out <dir> [--only name,name] [--workers 4]
                                       [--no-reports] [--redraw] [--brightness-cap 1.0]
+                                      [--pack <name of a pack in cagan_packs.py>]
     python cagan_sheets.py clips      (the same arguments as candidates)
 
 groups: the bare rig with each group lit in turn, both views, in <out>/groups.png.
@@ -32,6 +33,7 @@ import os
 import re
 import subprocess
 import sys
+import types
 from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
@@ -208,6 +210,19 @@ def report_figures(text):
     return f
 
 
+def candidate_source(a):
+    """The scenes to render: cagan_candidates.py, or with --pack one of cagan_packs.py's packs
+    (its scenes with that pack's arc, each on its palette list in the pack)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    if not a.pack:
+        import cagan_candidates
+        return cagan_candidates
+    import cagan_packs
+    pack = cagan_packs.packs()[a.pack]
+    scenes = [dict(s, palettes=pack["lists"][s["name"]]) for s in pack["scenes"]]
+    return types.SimpleNamespace(CANDIDATES=scenes, PALETTES=cagan_packs.PALETTES)
+
+
 def slug(*parts):
     return "_".join(parts).replace(" ", "_")
 
@@ -249,8 +264,7 @@ def clip_window(times):
 def candidates_clips(a):
     """Silent animated clips (diffuser view, animated WebP) of every candidate on every track,
     and a page to pick from: <out>/picker.html."""
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import cagan_candidates as cc
+    cc = candidate_source(a)
     os.makedirs(os.path.join(a.out, "clips"), exist_ok=True)
     cfg = json.load(open(a.times, encoding="utf-8"))["tracks"]
     cap, gamma, shade, chosen, jobs, alone, rig = prepare(a, cc, cfg)
@@ -372,8 +386,7 @@ update();
 
 
 def candidates_sheets(a):
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import cagan_candidates as cc
+    cc = candidate_source(a)
     os.makedirs(a.out, exist_ok=True)
     for d in ("frames", "report"):
         os.makedirs(os.path.join(a.out, d), exist_ok=True)
@@ -458,6 +471,7 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--no-reports", action="store_true")
     ap.add_argument("--redraw", action="store_true", help="reuse frames already rendered")
+    ap.add_argument("--pack", help="a pack of cagan_packs.py in place of the candidates")
     ap.add_argument("--brightness-cap", type=float,
                     help="the piece's brightness cap in place of the base project's")
     a = ap.parse_args()
