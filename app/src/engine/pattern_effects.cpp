@@ -61,6 +61,32 @@ class Chase final : public Effect {
     ChaseParams p_;
 };
 
+// Per strip: the turn of its pixels' mean position round the bounding box's centre, 0 at the top
+// and growing clockwise (Wave's turn offset).
+std::vector<double> strip_turns(const Rig &rig) {
+    std::vector<double> sx(rig.strips.size(), 0.0);
+    std::vector<double> sy(rig.strips.size(), 0.0);
+    std::vector<int> n(rig.strips.size(), 0);
+    for (const Pixel &p : rig.pixels) {
+        const auto s = static_cast<size_t>(p.strip);
+        if (s < n.size()) {
+            sx[s] += p.position.x;
+            sy[s] += p.position.y;
+            ++n[s];
+        }
+    }
+    const double cx = 0.5 * (rig.min.x + rig.max.x);
+    const double cy = 0.5 * (rig.min.y + rig.max.y);
+    std::vector<double> turn(rig.strips.size(), 0.0);
+    for (size_t s = 0; s < turn.size(); ++s) {
+        if (n[s] > 0) {
+            const double a = std::atan2(sx[s] / n[s] - cx, sy[s] / n[s] - cy) / (2.0 * kPi);
+            turn[s] = a - std::floor(a);
+        }
+    }
+    return turn;
+}
+
 class Wave final : public Effect {
   public:
     explicit Wave(const WaveParams &p) : p_(p) {}
@@ -72,9 +98,15 @@ class Wave final : public Effect {
                                           : map_pixels(c.rig, mapping, c.seed);
         const double cycles = clock_cycles(c.in, clock_of(p_.clock), p_.rate);
         const double width = std::clamp(p_.width, 0.01, 1.0);
+        const std::vector<double> strip_turn =
+            p_.turn_offset != 0.0 ? strip_turns(c.rig) : std::vector<double>{};
         for (size_t i = 0; i < out.size(); ++i) {
             const double x = fold_wings(u[i], p_.wings);
-            const double f = frac(p_.spread * x - cycles);
+            double f = frac(p_.spread * x - cycles);
+            if (!strip_turn.empty()) {
+                const auto s = static_cast<size_t>(c.rig.pixels[i].strip);
+                f = frac(f + p_.turn_offset * (s < strip_turn.size() ? strip_turn[s] : 0.0));
+            }
             double v = 0.0;
             switch (p_.shape) {
             case 0: // Sine.

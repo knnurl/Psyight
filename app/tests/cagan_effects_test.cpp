@@ -117,3 +117,30 @@ TEST_CASE("wave: radial from each strip's centre, off by default") {
     REQUIRE(from != infos.end());
     CHECK(effect_option_name(*from, 1) == "Each strip's centre");
 }
+
+TEST_CASE("wave: turn offset, off by default, steps the strips round the centre") {
+    const Rig rig = flower();
+    WaveParams p;
+    p.mapping = static_cast<int>(Mapping::by_strip);
+    p.spread = 0.0; // Every pixel the same phase but for the offset.
+    p.shape = 0;
+    p.colour_spread = 0.0;
+    const EngineInputs in = grid_at(40, 0.0); // A bar line: the top arm at the trough.
+    const Frame base = render({p}, rig, in);
+    WaveParams zero = p;
+    zero.turn_offset = 0.0;
+    CHECK(render({zero}, rig, in) == base);
+    // One cycle per turn: the arm at the top and the one opposite are half a cycle apart.
+    WaveParams turning = p;
+    turning.turn_offset = 1.0;
+    const Frame out = render({turning}, rig, in);
+    const float top = level(out[pixels_of(rig, 0)[10]]);
+    const float bottom = level(out[pixels_of(rig, 6)[10]]);
+    const float side = level(out[pixels_of(rig, 3)[10]]);
+    CHECK(std::abs(top - bottom) > 0.5f);
+    CHECK(side == doctest::Approx(0.5f * (top + bottom)).epsilon(0.02));
+    // Every pixel of an arm shares its phase.
+    for (const size_t i : pixels_of(rig, 3)) {
+        CHECK(level(out[i]) == doctest::Approx(side));
+    }
+}

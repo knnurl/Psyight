@@ -183,6 +183,9 @@ struct WaveParams {
     double width = 0.3;  // Square duty, bump width.
     double level = 0.8;
     double colour_spread = 0.5; // Palette span across the mapping.
+    // Cycles added per turn round the rig's centre, each strip by the turn of its mean position
+    // (0 at the top, clockwise), so strips round the piece pulse one after another (0: off).
+    double turn_offset = 0.0;
     // With the radial mapping: from the rig's centre (0), or from each strip's own centre (1:
     // engine/space.h strip_radial), so a pulse runs from each dome's middle to its edge.
     int radial_from = 0;
