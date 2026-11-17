@@ -10,8 +10,9 @@
 #
 # Arcs:
 # - Cagan ember: the scenes as picked (lush intros and breakdowns, sparse grooves, full drops).
-# - Cagan forest: dark and sparse throughout: every layer on a glow zone at 40% (its opacity and
-#   the routes that lift it), so the arms carry the show.
+# - Cagan forest: dark and sparse throughout: every layer on a glow zone at 40% of its light
+#   (its opacity and the routes that lift it at 0.66, see FOREST_GLOW), so the arms carry the
+#   show.
 # - Cagan abyss: by layer: the arms tight (arm notes released at half the time), the glow slow
 #   (glow-zone layers on the beat clock move on the bar instead; the kick still lifts them).
 import copy
@@ -107,12 +108,22 @@ def with_layer(layer, **changes):
     return (effect, blend, opacity, group, params)
 
 
+# Forest's glow at 40% of the light. Opacity scales the level before the gamma (bytes go as the
+# level to the power 2.2), so 40% of the light is 0.4^(1/2.2) = 0.66 of the level; 0.4 itself
+# left glow-only scenes near black (Spores at byte 13). A pack is data with no project, so the
+# usual gamma, 2.2, is a constant here.
+FOREST_GLOW_LIGHT = 0.4
+GAMMA = 2.2
+FOREST_GLOW = round(FOREST_GLOW_LIGHT ** (1.0 / GAMMA), 4)
+
+
 def forest(s):
     s = copy.deepcopy(s)
     glow = [k for k, l in enumerate(s["layers"]) if l[3] in GLOW_ZONES]
-    s["layers"] = [with_layer(l, opacity=round(l[2] * 0.4, 4)) if k in glow else l
+    s["layers"] = [with_layer(l, opacity=round(l[2] * FOREST_GLOW, 4)) if k in glow else l
                    for k, l in enumerate(s["layers"])]
-    s["routes"] = [(src, t, layer, round(a * 0.4, 4) if t == "opacity" and layer in glow else a,
+    s["routes"] = [(src, t, layer,
+                    round(a * FOREST_GLOW, 4) if t == "opacity" and layer in glow else a,
                     prm, inv) for src, t, layer, a, prm, inv in s["routes"]]
     return s
 

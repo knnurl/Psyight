@@ -2202,7 +2202,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.12},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "halo"));
+                                               "add", 0.6594f, "halo"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 0.0},
                                                 {"clock", 4.0},
@@ -2211,11 +2211,11 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"spread", 0.0},
                                                 {"level", 0.35},
                                                 {"colour_spread", 0.3}},
-                                               "screen", 0.4f, "halo"));
+                                               "screen", 0.6594f, "halo"));
                 s.layers.push_back(
                     layer_by_id("polar_noise",
                                 {{"level", 0.3}, {"floor", 0.12}, {"flow", 0.05}, {"clock", 3.0}},
-                                "screen", 0.4f, "panels"));
+                                "screen", 0.6594f, "panels"));
                 s.layers.push_back(layer_by_id("corner_sparks",
                                                {{"sites", 1.0},
                                                 {"count", 6.0},
@@ -2237,7 +2237,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.1},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "halo"));
+                                               "add", 0.6594f, "halo"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 0.0},
                                                 {"clock", 0.0},
@@ -2247,7 +2247,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.05},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "panels"));
+                                               "add", 0.6594f, "panels"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 4.0},
@@ -2281,8 +2281,8 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 1.0},
                                                 {"colour_spread", 0.4}},
-                                               "screen", 0.06f, "domes"));
-                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.34, "", false));
+                                               "screen", 0.0989f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.5605, "", false));
             }
             if (s.name == "Tide") {
                 s.layers.clear();
@@ -2296,7 +2296,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"spread", 1.0},
                                                 {"level", 0.35},
                                                 {"colour_spread", 0.5}},
-                                               "add", 0.4f, "panels"));
+                                               "add", 0.6594f, "panels"));
                 s.layers.push_back(layer_by_id(
                     "arm_notes", {{"arm_mode", 2.0}, {"colours", 1.0}, {"confidence", 0.3}},
                     "screen", 0.8f, "arms"));
@@ -2310,8 +2310,8 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 1.0},
                                                 {"colour_spread", 0.4}},
-                                               "screen", 0.06f, "domes"));
-                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+                                               "screen", 0.0989f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.5605, "", false));
             }
             if (s.name == "Spine") {
                 s.layers.clear();
@@ -2326,7 +2326,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.1},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "halo"));
+                                               "add", 0.6594f, "halo"));
                 s.layers.push_back(layer_by_id("arm_notes",
                                                {{"arm_mode", 3.0},
                                                 {"step", 1.0},
@@ -2344,8 +2344,8 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"level", 1.0},
                                                 {"colour_spread", 0.4},
                                                 {"turn_offset", 1.0}},
-                                               "screen", 0.06f, "domes"));
-                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+                                               "screen", 0.0989f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.5605, "", false));
             }
             if (s.name == "Lure") {
                 s.layers.clear();
@@ -2359,7 +2359,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"spread", 0.5},
                                                 {"level", 0.6},
                                                 {"colour_spread", 0.2}},
-                                               "add", 0.4f, "panels"));
+                                               "add", 0.6594f, "panels"));
                 s.layers.push_back(layer_by_id("corner_sparks",
                                                {{"sites", 1.0},
                                                 {"count", 6.0},
@@ -2377,10 +2377,10 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 1.0},
                                                 {"colour_spread", 0.4}},
-                                               "screen", 0.06f, "domes"));
+                                               "screen", 0.0989f, "domes"));
                 s.routes.push_back(route_by_id("bass_pitch", "hue_shift", 0, 360.0, "", false));
-                s.routes.push_back(route_by_id("bass_active", "opacity", 0, 0.2, "", false));
-                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+                s.routes.push_back(route_by_id("bass_active", "opacity", 0, 0.3297, "", false));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.5605, "", false));
             }
             if (s.name == "Inhale") {
                 s.layers.clear();
@@ -2395,7 +2395,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 0.6},
                                                 {"colour_spread", 0.4}},
-                                               "add", 0.4f, "glow"));
+                                               "add", 0.6594f, "glow"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 0.0},
@@ -2428,7 +2428,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.6},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.08f, "domes"));
+                                               "add", 0.1319f, "domes"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 0.0},
                                                 {"clock", 0.0},
@@ -2438,12 +2438,12 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.5},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.12f, "halo"));
+                                               "add", 0.1978f, "halo"));
                 s.layers.push_back(
                     layer_by_id("stutter", {{"mode", 5.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
                 s.routes.push_back(route_by_id("tension", "setting", 0, 0.75, "density", false));
-                s.routes.push_back(route_by_id("tension", "opacity", 1, 0.32, "", false));
-                s.routes.push_back(route_by_id("tension", "opacity", 2, 0.28, "", false));
+                s.routes.push_back(route_by_id("tension", "opacity", 1, 0.5275, "", false));
+                s.routes.push_back(route_by_id("tension", "opacity", 2, 0.4616, "", false));
             }
             if (s.name == "Bloom") {
                 s.layers.clear();
@@ -2455,7 +2455,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"flow", 0.25},
                                                 {"clock", 2.0},
                                                 {"colour_spread", 1.0}},
-                                               "add", 0.4f, "glow"));
+                                               "add", 0.6594f, "glow"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 2.0},
@@ -2493,7 +2493,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 1.0},
                                                 {"colour_spread", 0.4}},
-                                               "screen", 0.06f, "domes"));
+                                               "screen", 0.0989f, "domes"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 2.0},
@@ -2503,9 +2503,9 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.4},
                                                 {"level", 0.9},
                                                 {"colour_spread", 0.5}},
-                                               "screen", 0.06f, "rim"));
-                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.34, "", false));
-                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+                                               "screen", 0.0989f, "rim"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.5605, "", false));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.5605, "", false));
             }
             if (s.name == "Drift") {
                 s.layers.clear();
@@ -2514,11 +2514,11 @@ std::vector<ShowPack> builtin_show_packs() {
                 s.layers.push_back(
                     layer_by_id("polar_noise",
                                 {{"level", 0.45}, {"floor", 0.2}, {"flow", 0.05}, {"clock", 3.0}},
-                                "add", 0.4f, "panels"));
+                                "add", 0.6594f, "panels"));
                 s.layers.push_back(
                     layer_by_id("polar_noise",
                                 {{"level", 0.35}, {"floor", 0.15}, {"flow", -0.04}, {"clock", 3.0}},
-                                "add", 0.4f, "rim"));
+                                "add", 0.6594f, "rim"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 4.0},
                                                 {"clock", 3.0},
@@ -2529,7 +2529,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"level", 0.5},
                                                 {"colour_spread", 0.4},
                                                 {"turn_offset", 1.0}},
-                                               "screen", 0.4f, "domes"));
+                                               "screen", 0.6594f, "domes"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 3.0},
@@ -2553,7 +2553,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 0.2},
                                                 {"colour_spread", 0.3}},
-                                               "screen", 0.4f, "halo"));
+                                               "screen", 0.6594f, "halo"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 3.0},
@@ -2582,7 +2582,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"level", 0.7},
                                                 {"colour_spread", 0.4},
                                                 {"turn_offset", 1.0}},
-                                               "add", 0.4f, "domes"));
+                                               "add", 0.6594f, "domes"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 3.0},
@@ -2592,7 +2592,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.6},
                                                 {"level", 0.5},
                                                 {"colour_spread", 0.5}},
-                                               "screen", 0.4f, "panels"));
+                                               "screen", 0.6594f, "panels"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 3.0},
                                                 {"clock", 3.0},
@@ -2602,7 +2602,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.6},
                                                 {"level", 0.4},
                                                 {"colour_spread", 0.5}},
-                                               "screen", 0.4f, "rim"));
+                                               "screen", 0.6594f, "rim"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 7.0},
                                                 {"clock", 4.0},
@@ -2612,7 +2612,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 0.2},
                                                 {"colour_spread", 0.3}},
-                                               "screen", 0.4f, "halo"));
+                                               "screen", 0.6594f, "halo"));
             }
             if (s.name == "Undertow") {
                 s.layers.clear();
@@ -2626,7 +2626,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"spread", 1.0},
                                                 {"level", 0.35},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "panels"));
+                                               "add", 0.6594f, "panels"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 7.0},
                                                 {"clock", 4.0},
@@ -2636,7 +2636,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 0.5},
                                                 {"level", 0.2},
                                                 {"colour_spread", 0.3}},
-                                               "screen", 0.4f, "halo"));
+                                               "screen", 0.6594f, "halo"));
                 s.layers.push_back(layer_by_id("arm_notes",
                                                {{"arm_mode", 3.0},
                                                 {"step", 5.0},
@@ -2662,7 +2662,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.2},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "domes"));
+                                               "add", 0.6594f, "domes"));
                 s.layers.push_back(layer_by_id("arm_notes",
                                                {{"arm_mode", 3.0},
                                                 {"step", 5.0},
@@ -2686,7 +2686,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.08},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "halo"));
+                                               "add", 0.6594f, "halo"));
                 s.layers.push_back(layer_by_id("wave",
                                                {{"mapping", 0.0},
                                                 {"clock", 0.0},
@@ -2696,7 +2696,7 @@ std::vector<ShowPack> builtin_show_packs() {
                                                 {"width", 1.0},
                                                 {"level", 0.03},
                                                 {"colour_spread", 0.3}},
-                                               "add", 0.4f, "panels"));
+                                               "add", 0.6594f, "panels"));
                 s.layers.push_back(layer_by_id("corner_sparks",
                                                {{"sites", 1.0},
                                                 {"count", 6.0},
