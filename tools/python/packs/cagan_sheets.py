@@ -428,8 +428,19 @@ def candidates_sheets(a):
         print(s["name"], t, f, flush=True)
     keys = ["dark_pct", "quarter_pct", "max_byte", "median_lit", "mean_a", "p95_a", "max_a",
             "power_limited_pct", "flashes_after", "flashes_1s", "p50_ms", "p99_ms"]
-    with open(os.path.join(a.out, "figures.txt"), "w", encoding="utf-8") as out:
+    fig_path = os.path.join(a.out, "figures.txt")
+    # Rows of earlier runs into the same <out> are kept (an --only run adds to them).
+    kept = []
+    if os.path.exists(fig_path):
+        ran = {(name, t) for name, t, _ in rows}
+        for line in open(fig_path, encoding="utf-8").read().splitlines()[1:]:
+            cells = [v.strip() for v in line.split("|")]
+            if (cells[0], cells[1]) not in ran:
+                kept.append(line)
+    with open(fig_path, "w", encoding="utf-8") as out:
         out.write("candidate | track | " + " | ".join(keys) + "\n")
+        for line in kept:
+            out.write(line + "\n")
         for name, t, f in rows:
             out.write(f"{name} | {t} | " + " | ".join(str(f[k]) for k in keys) + "\n")
 
