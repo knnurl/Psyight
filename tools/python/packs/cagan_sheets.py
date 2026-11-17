@@ -9,12 +9,16 @@ come from psyight_show_check.
                                   --rig <Cagan flat.json> --audio <any audio file> --out <dir>
     python cagan_sheets.py candidates --exe ... --project ... --rig ... --times <times.json>
                                       --out <dir> [--only name,name] [--workers 4]
-                                      [--no-reports] [--redraw]
+                                      [--no-reports] [--redraw] [--brightness-cap 1.0]
+    python cagan_sheets.py clips      (the same arguments as candidates)
 
 groups: the bare rig with each group lit in turn, both views, in <out>/groups.png.
 candidates: every candidate of cagan_candidates.py held by --scene over each track of the times
 file, 16 frames a sheet at the times given for the candidate's first section kind, and a
-whole-track report each, run one at a time so the render cost is measured alone. A review
+whole-track report each, run one at a time so the render cost is measured alone.
+clips: a silent animated clip (diffuser view, animated WebP) of every candidate on every track,
+and <out>/picker.html to look at them side by side and tick the picks; it shows the figures of a
+candidates run into the same <out> when there is one. A review
 project is the base project with the rig replaced, the flash limiter on and the candidates as its
 only scenes (all of them in <out>/cagan.psyproj, one each in <out>/projects for the runs); limits, palettes and the power budget are the base project's (extra palettes from
 cagan_candidates.PALETTES are appended). The times file holds the private paths:
@@ -40,10 +44,13 @@ GROUPS = ["arms", "arms_inner", "arms_outer", "sharp", "domes", "dome_1", "dome_
           "panels", "rim", "halo", "centre", "glow", "left", "right"]
 
 
-def review_project(base_path, rig_path, scenes, palettes, out_dir, file_name="cagan.psyproj"):
+def review_project(base_path, rig_path, scenes, palettes, out_dir, file_name="cagan.psyproj",
+                   cap=None):
     base = json.load(open(base_path, encoding="utf-8"))
     rig = json.load(open(rig_path, encoding="utf-8"))
     p = json.loads(json.dumps(base))
+    if cap is not None:  # The piece's own brightness cap in place of the base project's.
+        p["limiter"]["brightness_cap"] = cap
     order = base["rig"]["strips"][0].get("colour_order", "grb")
     p["rig"] = {"source": {"preset": rig["name"], "locked": False, "values": {}},
                 "strips": [dict(s, colour_order=order) for s in rig["strips"]]}
@@ -110,7 +117,8 @@ class View:
         self.glow_gain = (math.sqrt(2 * math.pi) * self.sigma_px * min(pitch_px, 2 * DOT_PX) /
                           (math.pi * DOT_PX ** 2))
 
-    def diffuser(self, colours, label):
+    def diffuser(self, colours, label, ghost=False):
+        """ghost: unlit pixels as faint dots, so a clip shows where on the piece the light is."""
         glow = Image.new("RGB", (self.size, self.size), (0, 0, 0))
         d = ImageDraw.Draw(glow)
         for (px, py), c, sharp in zip(self.xy, colours, self.sharp):
@@ -125,6 +133,8 @@ class View:
         for (px, py), c, sharp in zip(self.xy, colours, self.sharp):
             if sharp and any(c):
                 d.ellipse((px - 1.6, py - 1.6, px + 1.6, py + 1.6), fill=c)
+            elif ghost and not any(c):
+                d.point((px, py), fill=(30, 26, 22))
         im = ImageChops.add(ImageChops.add(Image.new("RGB", glow.size, GROUND), glow), dots)
         ImageDraw.Draw(im).text((4, 3), label, fill=(170, 170, 170))
         return im
@@ -198,15 +208,15 @@ def report_figures(text):
     return f
 
 
-def candidates_sheets(a):
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import cagan_candidates as cc
-    os.makedirs(a.out, exist_ok=True)
-    for d in ("frames", "report"):
-        os.makedirs(os.path.join(a.out, d), exist_ok=True)
-    cfg = json.load(open(a.times, encoding="utf-8"))["tracks"]
+def slug(*parts):
+    return "_".join(parts).replace(" ", "_")
+
+
+def prepare(a, cc, cfg):
+    """The review projects, the shading of bytes for the screen and the (candidate, track) jobs."""
     # Every candidate in one project (cagan.psyproj), to open in the app; the runs use one each.
-    _, p, rig = review_project(a.project, a.rig, cc.CANDIDATES, cc.PALETTES, a.out)
+    _, p, rig = review_project(a.project, a.rig, cc.CANDIDATES, cc.PALETTES, a.out,
+                               cap=a.brightness_cap)
     # Bytes back to the level the scene asked for: undo the gamma and the brightness cap. A
     # monitor's own gamma then shows light in proportion to the LEDs', scaled up by 1/cap.
     cap = p["limiter"]["brightness_cap"]
@@ -214,15 +224,161 @@ def candidates_sheets(a):
     shade = [min(255, int(round(255.0 * (b / 255.0) ** (1.0 / gamma) / cap))) for b in range(256)]
     chosen = [s for s in cc.CANDIDATES if not a.only or s["name"] in a.only.split(",")]
     jobs = [(s, t) for s in chosen for t in cfg if s["sections"][0] in cfg[t]["times"]]
-
-    def slug(*parts):
-        return "_".join(parts).replace(" ", "_")
-
     # One project per candidate, holding it alone: the reports then render nothing else.
     os.makedirs(os.path.join(a.out, "projects"), exist_ok=True)
     alone = {s["name"]: review_project(a.project, a.rig, [s], cc.PALETTES,
                                        os.path.join(a.out, "projects"),
-                                       slug(s["name"]) + ".psyproj")[0] for s in chosen}
+                                       slug(s["name"]) + ".psyproj", cap=a.brightness_cap)[0]
+             for s in chosen}
+    return cap, gamma, shade, chosen, jobs, alone, rig
+
+
+CLIP_FPS = 30
+CLIP_TILE = 320
+
+
+def clip_window(times):
+    """A stretch of 10 to 14 s from the sheet's first time: through to its last time when that is
+    within 14 s (a build into its drop, a breakdown's phrase), else 12 s (the intro's sheet jumps
+    to the outro)."""
+    start = times[0]
+    end = times[-1] + 0.5 if times[-1] - start <= 14.0 else start + 12.0
+    return start, max(end, start + 10.0)
+
+
+def candidates_clips(a):
+    """Silent animated clips (diffuser view, animated WebP) of every candidate on every track,
+    and a page to pick from: <out>/picker.html."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import cagan_candidates as cc
+    os.makedirs(os.path.join(a.out, "clips"), exist_ok=True)
+    cfg = json.load(open(a.times, encoding="utf-8"))["tracks"]
+    cap, gamma, shade, chosen, jobs, alone, rig = prepare(a, cc, cfg)
+
+    def clip(job):
+        s, t = job
+        start, end = clip_window(cfg[t]["times"][s["sections"][0]][1])
+        out = os.path.join(a.out, "clips", slug(t, s["name"]) + ".webp")
+        if a.redraw and os.path.exists(out):  # Only the page again (new figures).
+            return start, end
+        times = [start + k / CLIP_FPS for k in range(int((end - start) * CLIP_FPS))]
+        path = os.path.join(a.out, "clips", slug(t, s["name"]) + ".jsonl")
+        if not run_frames(a.exe, alone[s["name"]], s["name"], times, cfg[t]["audio"], path):
+            return None
+        pixels, fr = read_frames(path)
+        view = View(pixels, rig, CLIP_TILE)
+        ims = [view.diffuser([tuple(shade[v] for v in f["rgb"][3 * i:3 * i + 3])
+                              for i in range(len(pixels))], f"{f['t_s']:.2f} s", ghost=True)
+               for f in fr]
+        ims[0].save(out, save_all=True, append_images=ims[1:], duration=1000 // CLIP_FPS,
+                    loop=0, quality=80, method=4)
+        os.remove(path)
+        print("clip", s["name"], t, flush=True)
+        return start, end
+
+    with ThreadPoolExecutor(a.workers) as pool:
+        windows = list(pool.map(clip, jobs))
+    figures = {}
+    fig_path = os.path.join(a.out, "figures.txt")
+    if os.path.exists(fig_path):
+        lines = open(fig_path, encoding="utf-8").read().splitlines()
+        keys = [k.strip() for k in lines[0].split("|")]
+        for line in lines[1:]:
+            row = dict(zip(keys, (v.strip() for v in line.split("|"))))
+            figures[(row["candidate"], row["track"])] = row
+    write_picker(a.out, cc, cfg, jobs, windows, figures, cap)
+
+
+SECTION_ORDER = ["intro", "groove", "build", "drop", "breakdown", "break"]
+
+
+def write_picker(out, cc, cfg, jobs, windows, figures, cap):
+    import html
+    clips = {}
+    for (s, t), w in zip(jobs, windows):
+        if w:
+            clips.setdefault(s["name"], []).append((t, w))
+    cards = {k: [] for k in SECTION_ORDER}
+    for s in cc.CANDIDATES:
+        if s["name"] not in clips:
+            continue
+        media = []
+        for t, (start, end) in clips[s["name"]]:
+            f = figures.get((s["name"], t))
+            fig = (f"max byte {f['max_byte']}, {f['mean_a']} A mean, {f['max_a']} A max, "
+                   f"power limited {f['power_limited_pct']}%, flashes {f['flashes_after']}"
+                   if f else "")
+            src = f"clips/{slug(t, s['name'])}.webp"
+            media.append(
+                f'<figure><a href="{src}" target="_blank"><img loading="lazy" src="{src}" '
+                f'alt="{html.escape(s["name"])} on {html.escape(t)}"></a>'
+                f'<figcaption><b>{html.escape(t)}</b>, {start:.1f} to {end:.1f} s'
+                f'<span>{fig}</span></figcaption></figure>')
+        name = html.escape(s["name"])
+        cards[s["sections"][0]].append(
+            f'<article data-name="{name}"><header><label><input type="checkbox"> '
+            f'<h3>{name}</h3></label><small>{html.escape(", ".join(s["sections"]))} · '
+            f'{html.escape(", ".join(s["palettes"]))}</small></header>'
+            f'<p>{html.escape(s["description"])}</p><div class="media">{"".join(media)}</div>'
+            f'</article>')
+    body = "".join(f'<section><h2>{k.capitalize()}</h2>{"".join(v)}</section>'
+                   for k, v in cards.items() if v)
+    page = PICKER_HTML.replace("{CAP}", f"{cap:g}").replace("{BODY}", body)
+    open(os.path.join(out, "picker.html"), "w", encoding="utf-8").write(page)
+    print(os.path.join(out, "picker.html"))
+
+
+PICKER_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Cagan picks</title>
+<style>
+:root{--bg:#0d0b0a;--card:#1a1613;--line:#33291f;--text:#e9e2da;--muted:#a1958a;--accent:#e8913a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
+font:15px/1.45 system-ui,sans-serif}
+.bar{position:sticky;top:0;z-index:2;display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+padding:12px 16px;background:#0d0b0aee;border-bottom:1px solid var(--line)}
+.bar h1{font-size:18px;margin:0 auto 0 0}.bar button{background:var(--accent);color:#1a0f05;
+border:0;border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}
+.bar output{color:var(--muted)}main{padding:8px 16px 40px;max-width:1500px;margin:auto}
+.note{color:var(--muted);margin:12px 0}h2{margin:28px 0 8px;font-size:20px}
+article{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+margin:12px 0}article.picked{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+header label{display:flex;gap:10px;align-items:center;cursor:pointer}
+header input{width:20px;height:20px;accent-color:var(--accent)}h3{margin:0;font-size:17px}
+small{color:var(--muted)}p{margin:6px 0 10px}.media{display:flex;gap:12px;flex-wrap:wrap}
+figure{margin:0;flex:1 1 300px;max-width:420px}img{width:100%;height:auto;border-radius:6px;
+display:block;background:#000}figcaption{font-size:13px;color:var(--muted);margin-top:4px}
+figcaption span{display:block}
+</style></head><body>
+<div class="bar"><h1>Cagan scene candidates</h1><output id="count">0 picked</output>
+<button id="copy">Copy picks</button></div>
+<main><p class="note">Silent clips of each candidate held over a stretch of the track, diffuser
+view: glow zones blurred behind the white layer, the arms as sharp dots. Brightness cap {CAP}.
+Click a clip to open it full size. Tick the ones you want, then copy the list and paste it to
+Claude.</p>{BODY}</main>
+<script>
+const key='cagan-picks';let saved=[];try{saved=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
+const boxes=[...document.querySelectorAll('article')].map(a=>{const b=a.querySelector('input');
+b.checked=saved.includes(a.dataset.name);a.classList.toggle('picked',b.checked);
+b.addEventListener('change',()=>{a.classList.toggle('picked',b.checked);update()});return [a,b]});
+function picks(){return boxes.filter(([a,b])=>b.checked).map(([a])=>a.dataset.name)}
+function update(){const p=picks();document.getElementById('count').textContent=p.length+' picked';
+try{localStorage.setItem(key,JSON.stringify(p))}catch(e){}}
+document.getElementById('copy').addEventListener('click',async()=>{const t='Cagan picks: '+
+(picks().join(', ')||'none');try{await navigator.clipboard.writeText(t);
+document.getElementById('count').textContent='Copied: '+t}catch(e){prompt('Copy this:',t)}});
+update();
+</script></body></html>
+"""
+
+
+def candidates_sheets(a):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import cagan_candidates as cc
+    os.makedirs(a.out, exist_ok=True)
+    for d in ("frames", "report"):
+        os.makedirs(os.path.join(a.out, d), exist_ok=True)
+    cfg = json.load(open(a.times, encoding="utf-8"))["tracks"]
+    cap, gamma, shade, chosen, jobs, alone, rig = prepare(a, cc, cfg)
 
     def frames(job):
         s, t = job
@@ -280,7 +436,7 @@ def candidates_sheets(a):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["groups", "candidates"])
+    ap.add_argument("mode", choices=["groups", "candidates", "clips"])
     ap.add_argument("--exe", required=True)
     ap.add_argument("--project", required=True)
     ap.add_argument("--rig", required=True)
@@ -291,8 +447,15 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--no-reports", action="store_true")
     ap.add_argument("--redraw", action="store_true", help="reuse frames already rendered")
+    ap.add_argument("--brightness-cap", type=float,
+                    help="the piece's brightness cap in place of the base project's")
     a = ap.parse_args()
-    groups_sheet(a) if a.mode == "groups" else candidates_sheets(a)
+    if a.mode == "groups":
+        groups_sheet(a)
+    elif a.mode == "clips":
+        candidates_clips(a)
+    else:
+        candidates_sheets(a)
 
 
 if __name__ == "__main__":
