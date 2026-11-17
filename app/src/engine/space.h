@@ -84,6 +84,11 @@ double hash_unit(std::uint64_t a, std::uint64_t b, std::uint64_t c);
 // physical speed and size on every strip).
 std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t seed);
 
+// Radial, per strip: every pixel's distance from its own strip's centroid, 0 there and 1 at that
+// strip's farthest pixel, so a strip of rings (a dome) runs from its middle to its edge (Wave's
+// "Radial from").
+std::vector<double> strip_radial(const Rig &rig);
+
 // u folded into `wings` mirrored copies: 1 leaves it, 2 runs 0 to 1 and back, and so on.
 double fold_wings(double u, int wings);
 

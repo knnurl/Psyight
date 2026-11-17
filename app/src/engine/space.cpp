@@ -9,6 +9,8 @@ namespace {
 
 constexpr double kStepGlideS = 0.04;
 
+double gap_m(const Vec3 &a, const Vec3 &b) { return std::hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
+
 double unit(double v, double lo, double hi) {
     return hi - lo > 1e-9 ? std::clamp((v - lo) / (hi - lo), 0.0, 1.0) : 0.5;
 }
@@ -227,6 +229,37 @@ std::vector<double> map_pixels(const Rig &rig, Mapping mapping, std::uint64_t se
             u[i] = per_m > 0.0 && longest_m > 0.0 ? (p.index + 0.5) / per_m / longest_m : 0.0;
             break;
         }
+        }
+    }
+    return u;
+}
+
+std::vector<double> strip_radial(const Rig &rig) {
+    std::vector<Vec3> centre(rig.strips.size(), Vec3{});
+    std::vector<double> reach(rig.strips.size(), 0.0);
+    std::vector<int> n(rig.strips.size(), 0);
+    for (const Pixel &p : rig.pixels) {
+        if (static_cast<size_t>(p.strip) < rig.strips.size()) {
+            Vec3 &c = centre[p.strip];
+            c = {c.x + p.position.x, c.y + p.position.y, c.z + p.position.z};
+            ++n[p.strip];
+        }
+    }
+    for (size_t s = 0; s < centre.size(); ++s) {
+        const double k = 1.0 / std::max(1, n[s]);
+        centre[s] = {centre[s].x * k, centre[s].y * k, centre[s].z * k};
+    }
+    for (const Pixel &p : rig.pixels) {
+        if (static_cast<size_t>(p.strip) < rig.strips.size()) {
+            reach[p.strip] = std::max(reach[p.strip], gap_m(p.position, centre[p.strip]));
+        }
+    }
+    std::vector<double> u(rig.pixels.size(), 0.0);
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        const Pixel &p = rig.pixels[i];
+        const auto s = static_cast<size_t>(p.strip);
+        if (s < rig.strips.size() && reach[s] > 1e-9) {
+            u[i] = std::clamp(gap_m(p.position, centre[s]) / reach[s], 0.0, 1.0);
         }
     }
     return u;

@@ -210,6 +210,11 @@ template <> const std::vector<Field<WaveParams>> &fields<WaveParams>() {
         {{"level", "Level", "", 0.0, 1.0, false, "Wave brightness"}, &P::level},
         {{"colour_spread", "Colours", "", 0.0, 2.0, false, "Palette span across the mapping"},
          &P::colour_spread},
+        {{"radial_from", "Radial from", "", 0.0, 1.0, true,
+          "With the radial mapping: from the rig's centre, or from each strip's own centre",
+          "Rig centre|Each strip's centre"},
+         nullptr,
+         &P::radial_from},
     };
     return f;
 }

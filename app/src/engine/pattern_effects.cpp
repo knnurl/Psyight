@@ -66,7 +66,10 @@ class Wave final : public Effect {
     explicit Wave(const WaveParams &p) : p_(p) {}
     const char *name() const override { return "Wave"; }
     void render(const EffectContext &c, std::span<Rgb> out) const override {
-        const std::vector<double> u = map_pixels(c.rig, mapping_of(p_.mapping), c.seed);
+        const Mapping mapping = mapping_of(p_.mapping);
+        const std::vector<double> u = mapping == Mapping::radial && p_.radial_from == 1
+                                          ? strip_radial(c.rig)
+                                          : map_pixels(c.rig, mapping, c.seed);
         const double cycles = clock_cycles(c.in, clock_of(p_.clock), p_.rate);
         const double width = std::clamp(p_.width, 0.01, 1.0);
         for (size_t i = 0; i < out.size(); ++i) {
