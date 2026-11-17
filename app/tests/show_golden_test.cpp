@@ -5,7 +5,8 @@
 // compared with tests/golden/show_baseline.json. Any change fails, so every phase that changes
 // the show shows its effect as a diff of that file. After an intended change, rewrite it with
 //   set PSYIGHT_UPDATE_GOLDEN=1 && psyight_tests -tc="golden*"
-// and explain every changed line in the commit message.
+// and explain every changed line in the commit message. The Cagan ember pack has its own file,
+// show_cagan_baseline.json, measured on a stand-in for the piece with no brightness cap.
 
 #include "analysis/track_analysis.h"
 #include "engine/inputs.h"
@@ -19,6 +20,7 @@
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -144,17 +146,75 @@ AutomationParams with_options(AutomationParams a) {
     return a;
 }
 
+// A stand-in for the Cagan piece (docs/PLAN_CAGAN_PACK.md section 2; the real rig is private):
+// its zones and groups, not its shape. Twelve straight arms (odd ones wired inwards), three domes
+// of two rings each, six panel loops, six rim loops, a halo ring and a short centre stub.
+Rig cagan_stand_in() {
+    constexpr double kPi = 3.14159265358979323846;
+    std::vector<StripSpec> strips;
+    const auto add = [&](std::string name, std::vector<Vec3> line, double per_m, int count,
+                         std::vector<std::string> groups) {
+        StripSpec s;
+        s.name = std::move(name);
+        s.polyline = std::move(line);
+        s.pixels_per_m = per_m;
+        s.count = count;
+        s.fills = false;
+        s.groups = std::move(groups);
+        strips.push_back(std::move(s));
+    };
+    // A circle of radius r about (cx, cy), 36 sides, from the top.
+    const auto circle = [&](double cx, double cy, double r) {
+        std::vector<Vec3> p;
+        for (int k = 0; k <= 36; ++k) {
+            const double a = 2.0 * kPi * k / 36.0;
+            p.push_back({cx + r * std::sin(a), cy + r * std::cos(a), 0.0});
+        }
+        return p;
+    };
+    const auto at = [&](double r, double deg) {
+        return std::pair<double, double>{r * std::sin(deg * kPi / 180.0),
+                                         r * std::cos(deg * kPi / 180.0)};
+    };
+    add("Halo", circle(0.0, 0.0, 0.95), 30.0, 170, {"halo", "glow"});
+    for (int k = 0; k < 12; ++k) {
+        const auto [x0, y0] = at(0.05, 30.0 * k);
+        const auto [x1, y1] = at(0.55, 30.0 * k);
+        std::vector<Vec3> line = {{x0, y0, 0.02}, {x1, y1, 0.02}};
+        if (k % 2 == 1) {
+            std::reverse(line.begin(), line.end());
+        }
+        add("Arm", line, 60.0, 30, {"arms", k % 2 == 0 ? "arms_inner" : "arms_outer", "sharp"});
+    }
+    for (int k = 0; k < 6; ++k) {
+        const auto [px, py] = at(0.40, 15.0 + 60.0 * k);
+        add("Panel", circle(px, py, 0.06), 60.0, 22, {"panels", "glow"});
+        const auto [rx, ry] = at(0.72, 60.0 * k);
+        add("Rim", circle(rx, ry, 0.10), 60.0, 37, {"rim", "glow"});
+    }
+    add("Centre", {{0.0, 0.0, 0.03}, {0.0, 0.0, 0.09}}, 60.0, 3, {"centre", "glow"});
+    for (int k = 0; k < 3; ++k) {
+        const auto [dx, dy] = at(0.40, 45.0 + 120.0 * k);
+        std::vector<Vec3> dome = circle(dx, dy, 0.034);
+        const std::vector<Vec3> outer = circle(dx, dy, 0.066);
+        dome.insert(dome.end(), outer.begin(), outer.end());
+        add("Dome", dome, 60.0, 36, {"domes", "dome_" + std::to_string(k + 1), "glow"});
+    }
+    return build_rig(strips);
+}
+
 nlohmann::json measure(const ShowPack &pack,
                        std::shared_ptr<const SectionTimeline> sections = nullptr,
-                       std::optional<AutomationParams> automation = std::nullopt) {
+                       std::optional<AutomationParams> automation = std::nullopt,
+                       const Rig *rig = nullptr, double brightness_cap = 0.4375) {
     const Track &t = track();
     ShowConfig config;
     config.analysis = t.analysis;
     config.grid = t.grid;
     config.sections = sections != nullptr ? sections : t.sections;
-    config.rig = mandala();
+    config.rig = rig != nullptr ? *rig : mandala();
     config.patch = build_patch(config.rig);
-    config.limiter.brightness_cap = 0.4375; // The owner's hexagon project.
+    config.limiter.brightness_cap = brightness_cap; // 0.4375: the owner's hexagon project.
     config.limiter.budget_a = 3.75;
     config.limiter.flash_limiter = false;
     config.scenes = pack.scenes;
@@ -253,6 +313,42 @@ TEST_CASE("golden show options: breaks, fills, pre-drop and phases on, Hexagon 4
     }
     std::ifstream file(golden_path("show_options_baseline.json"));
     REQUIRE_MESSAGE(file.good(), "missing show_options_baseline.json; set "
+                                 "PSYIGHT_UPDATE_GOLDEN=1 to create it");
+    compare(nlohmann::json::parse(file), current, "");
+}
+
+TEST_CASE("golden show Cagan: Cagan ember on a stand-in for the piece, uncapped, with and without "
+          "the Batch D options") {
+    const Rig rig = cagan_stand_in();
+    nlohmann::json current;
+    for (const ShowPack &pack : builtin_show_packs()) {
+        if (pack.name == "Cagan ember") {
+            // No brightness cap: the owner's decision for the piece (2026-11-17).
+            current["Cagan ember"] =
+                measure(pack, detailed_sections(), with_options(pack.automation), &rig, 1.0);
+            current["Cagan ember, options off"] = measure(pack, nullptr, std::nullopt, &rig, 1.0);
+        }
+    }
+    REQUIRE(current.size() == 2);
+    // A scene for every section of the track plays. Not played here: First light (the intro and
+    // outro are a phrase each and both take the first intro scene), Strike (the one drop takes the
+    // first drop scene), Lure (tagged low; the track's grooves are mid and high), Held breath and
+    // Afterimage (the track has no
+    // short breakdown between grooves, which is what plays the break scenes).
+    for (const char *scene :
+         {"Dormant", "Nerve", "Tide", "Spine", "Inhale", "Swarm", "Bloom", "Drift"}) {
+        CAPTURE(scene);
+        CHECK(current["Cagan ember"]["scenes"][scene]["seconds"].get<double>() +
+                  current["Cagan ember, options off"]["scenes"][scene]["seconds"].get<double>() >
+              0.0);
+    }
+    if (update_requested()) {
+        std::ofstream(golden_path("show_cagan_baseline.json")) << current.dump(2) << "\n";
+        MESSAGE("wrote " << golden_path("show_cagan_baseline.json").string());
+        return;
+    }
+    std::ifstream file(golden_path("show_cagan_baseline.json"));
+    REQUIRE_MESSAGE(file.good(), "missing show_cagan_baseline.json; set "
                                  "PSYIGHT_UPDATE_GOLDEN=1 to create it");
     compare(nlohmann::json::parse(file), current, "");
 }

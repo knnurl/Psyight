@@ -1,0 +1,370 @@
+{
+  "Cagan ember": {
+    "current_max_a": 3.728411764705882,
+    "current_mean_a": 1.437615116328523,
+    "dark_before_mean": 0.6901312418927621,
+    "dark_mean": 0.7658018945050628,
+    "flashes_after": 62,
+    "flashes_before": 63,
+    "groups": {
+      "arms": {
+        "dark_share": 0.06073752711496746,
+        "max_byte": 190,
+        "mean_byte": 6.691500964087726
+      },
+      "arms_inner": {
+        "dark_share": 0.28524945770065074,
+        "max_byte": 190,
+        "mean_byte": 6.697851892022185
+      },
+      "arms_outer": {
+        "dark_share": 0.2901301518438178,
+        "max_byte": 178,
+        "mean_byte": 6.685150036153296
+      },
+      "centre": {
+        "dark_share": 0.8486984815618221,
+        "max_byte": 167,
+        "mean_byte": 2.8705712219812005
+      },
+      "dome_1": {
+        "dark_share": 0.21203904555314534,
+        "max_byte": 194,
+        "mean_byte": 9.411439503494835
+      },
+      "dome_2": {
+        "dark_share": 0.2158351409978308,
+        "max_byte": 194,
+        "mean_byte": 9.361593154977113
+      },
+      "dome_3": {
+        "dark_share": 0.21366594360086769,
+        "max_byte": 194,
+        "mean_byte": 9.380438057363225
+      },
+      "domes": {
+        "dark_share": 0.1420824295010846,
+        "max_byte": 194,
+        "mean_byte": 9.384490238611711
+      },
+      "glow": {
+        "dark_share": 0.06616052060737528,
+        "max_byte": 194,
+        "mean_byte": 3.5082173296667514
+      },
+      "halo": {
+        "dark_share": 0.7174620390455532,
+        "max_byte": 156,
+        "mean_byte": 2.415519331376801
+      },
+      "panels": {
+        "dark_share": 0.4956616052060738,
+        "max_byte": 78,
+        "mean_byte": 3.7320219549069877
+      },
+      "rim": {
+        "dark_share": 0.6892624728850325,
+        "max_byte": 155,
+        "mean_byte": 1.3617845068495833
+      },
+      "sharp": {
+        "dark_share": 0.06073752711496746,
+        "max_byte": 190,
+        "mean_byte": 6.691500964087726
+      }
+    },
+    "max_after_in_1s": 4,
+    "max_before_in_1s": 4,
+    "power_limited_frames": 20,
+    "scenes": {
+      "Afterimage": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Bloom": {
+        "flashes_alone": 232,
+        "max_byte": 185,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 752.0,
+        "quarter_above_20": 0.06640625,
+        "seconds": 12.8
+      },
+      "Dormant": {
+        "flashes_alone": 0,
+        "max_byte": 161,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 310.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.9
+      },
+      "Drift": {
+        "flashes_alone": 0,
+        "max_byte": 137,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 690.0,
+        "quarter_above_20": 0.007782101167315175,
+        "seconds": 12.85
+      },
+      "First light": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Held breath": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Inhale": {
+        "flashes_alone": 231,
+        "max_byte": 171,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 327.0,
+        "quarter_above_20": 0.24242424242424243,
+        "seconds": 1.65
+      },
+      "Lure": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Nerve": {
+        "flashes_alone": 0,
+        "max_byte": 194,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 60.0,
+        "quarter_above_20": 0.0,
+        "seconds": 38.9
+      },
+      "Spine": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Strike": {
+        "flashes_alone": 508,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 8,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Swarm": {
+        "flashes_alone": 0,
+        "max_byte": 190,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 308.0,
+        "quarter_above_20": 0.07086614173228346,
+        "seconds": 6.35
+      },
+      "Tide": {
+        "flashes_alone": 248,
+        "max_byte": 172,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 384.0,
+        "quarter_above_20": 0.1607843137254902,
+        "seconds": 12.75
+      }
+    }
+  },
+  "Cagan ember, options off": {
+    "current_max_a": 3.5332745098039213,
+    "current_mean_a": 1.422865041895284,
+    "dark_before_mean": 0.6413946086179275,
+    "dark_mean": 0.7575736600573364,
+    "flashes_after": 63,
+    "flashes_before": 63,
+    "groups": {
+      "arms": {
+        "dark_share": 0.014099783080260303,
+        "max_byte": 200,
+        "mean_byte": 7.324676126777539
+      },
+      "arms_inner": {
+        "dark_share": 0.15238611713665945,
+        "max_byte": 200,
+        "mean_byte": 7.3288111593155145
+      },
+      "arms_outer": {
+        "dark_share": 0.1502169197396963,
+        "max_byte": 199,
+        "mean_byte": 7.3205410942395766
+      },
+      "centre": {
+        "dark_share": 0.8546637744034707,
+        "max_byte": 167,
+        "mean_byte": 2.7832610267534346
+      },
+      "dome_1": {
+        "dark_share": 0.3335140997830803,
+        "max_byte": 194,
+        "mean_byte": 7.861141238852745
+      },
+      "dome_2": {
+        "dark_share": 0.33731019522776573,
+        "max_byte": 194,
+        "mean_byte": 7.838575560375997
+      },
+      "dome_3": {
+        "dark_share": 0.3329718004338395,
+        "max_byte": 194,
+        "mean_byte": 7.803928657507831
+      },
+      "domes": {
+        "dark_share": 0.19251626898047722,
+        "max_byte": 194,
+        "mean_byte": 7.83454848557889
+      },
+      "glow": {
+        "dark_share": 0.008676789587852495,
+        "max_byte": 194,
+        "mean_byte": 3.267013681315924
+      },
+      "halo": {
+        "dark_share": 0.5075921908893709,
+        "max_byte": 39,
+        "mean_byte": 2.794864106163071
+      },
+      "panels": {
+        "dark_share": 0.4967462039045553,
+        "max_byte": 77,
+        "mean_byte": 3.645586833629133
+      },
+      "rim": {
+        "dark_share": 0.7060737527114967,
+        "max_byte": 50,
+        "mean_byte": 1.187965351468606
+      },
+      "sharp": {
+        "dark_share": 0.014099783080260303,
+        "max_byte": 200,
+        "mean_byte": 7.324676126777539
+      }
+    },
+    "max_after_in_1s": 4,
+    "max_before_in_1s": 4,
+    "power_limited_frames": 0,
+    "scenes": {
+      "Afterimage": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Bloom": {
+        "flashes_alone": 232,
+        "max_byte": 185,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 752.0,
+        "quarter_above_20": 0.06640625,
+        "seconds": 12.8
+      },
+      "Dormant": {
+        "flashes_alone": 0,
+        "max_byte": 161,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 310.0,
+        "quarter_above_20": 0.0,
+        "seconds": 6.9
+      },
+      "Drift": {
+        "flashes_alone": 0,
+        "max_byte": 137,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 690.0,
+        "quarter_above_20": 0.007782101167315175,
+        "seconds": 12.85
+      },
+      "First light": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Held breath": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Inhale": {
+        "flashes_alone": 234,
+        "max_byte": 171,
+        "max_flashes_alone_in_1s": 6,
+        "median_lit_pixels": 327.0,
+        "quarter_above_20": 0.24242424242424243,
+        "seconds": 1.65
+      },
+      "Lure": {
+        "flashes_alone": 0,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Nerve": {
+        "flashes_alone": 0,
+        "max_byte": 194,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 61.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.2
+      },
+      "Spine": {
+        "flashes_alone": 0,
+        "max_byte": 151,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 309.0,
+        "quarter_above_20": 0.0,
+        "seconds": 19.7
+      },
+      "Strike": {
+        "flashes_alone": 508,
+        "max_byte": 0,
+        "max_flashes_alone_in_1s": 8,
+        "median_lit_pixels": 0.0,
+        "quarter_above_20": 0.0,
+        "seconds": 0.0
+      },
+      "Swarm": {
+        "flashes_alone": 0,
+        "max_byte": 200,
+        "max_flashes_alone_in_1s": 0,
+        "median_lit_pixels": 318.0,
+        "quarter_above_20": 0.25984251968503935,
+        "seconds": 6.35
+      },
+      "Tide": {
+        "flashes_alone": 248,
+        "max_byte": 172,
+        "max_flashes_alone_in_1s": 5,
+        "median_lit_pixels": 372.0,
+        "quarter_above_20": 0.15294117647058825,
+        "seconds": 12.75
+      }
+    }
+  }
+}

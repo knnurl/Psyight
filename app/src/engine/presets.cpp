@@ -129,6 +129,13 @@ std::vector<Palette> builtin_palettes() {
         {"Sunset", {{1.0f, 0.4f, 0.0f}, {1.0f, 0.0f, 0.4f}, {0.5f, 0.0f, 0.8f}}},
         {"Aurora", {{0.0f, 1.0f, 0.5f}, {0.0f, 0.7f, 0.9f}, {0.6f, 0.0f, 1.0f}}},
         {"Ocean UV", {{0.0f, 0.3f, 1.0f}, {0.4f, 0.0f, 1.0f}, {0.0f, 0.7f, 0.8f}}},
+        // BEGIN Cagan palettes (generated from cagan_packs.py)
+        {"Amber", {{1.0f, 0.45f, 0.0f}, {1.0f, 0.2f, 0.0f}, {0.9f, 0.6f, 0.1f}}},
+        {"Ember tide", {{0.9f, 0.1f, 0.0f}, {1.0f, 0.4f, 0.0f}, {0.0f, 0.45f, 0.8f}}},
+        {"Moss", {{0.0f, 0.5f, 0.1f}, {0.0f, 0.6f, 0.4f}, {0.3f, 0.0f, 0.6f}}},
+        {"Fern glow", {{0.1f, 0.8f, 0.2f}, {0.0f, 0.5f, 0.5f}, {1.0f, 0.3f, 0.0f}}},
+        {"Abyss", {{0.0f, 0.8f, 1.0f}, {1.0f, 0.0f, 0.6f}, {0.2f, 0.0f, 1.0f}}},
+        // END Cagan palettes
     };
     palettes.insert(palettes.end(), more.begin(), more.end());
     return palettes;
@@ -1467,6 +1474,465 @@ std::vector<ScenePreset> builtin_scene_presets() {
         looks.push_back(std::move(p));
     }
     // END Hexagon 3 scenes
+    // BEGIN Cagan scenes (generated from cagan_packs.py)
+    {
+        ScenePreset p{"Dormant",
+                      "The halo breathing once a phrase over a dim glow, a faint drift in the "
+                      "panels, hats as single sparks on the arm tips.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"intro", "outro"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.12},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "halo"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 4.0},
+                                              {"rate", 1.0},
+                                              {"shape", 0.0},
+                                              {"spread", 0.0},
+                                              {"level", 0.35},
+                                              {"colour_spread", 0.3}},
+                                             "screen", 1.0f, "halo"));
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.3}, {"floor", 0.12}, {"flow", 0.05}, {"clock", 3.0}},
+            "screen", 1.0f, "panels"));
+        p.scene.layers.push_back(layer_by_id(
+            "corner_sparks",
+            {{"sites", 1.0}, {"count", 6.0}, {"span", 1.0}, {"decay_s", 0.1}, {"level", 0.9}},
+            "add", 1.0f, "arms"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"First light",
+                      "The arms lighting one after another round the piece, twice a phrase, "
+                      "the light flowing out along each; domes dark, the halo and panels a "
+                      "dim glow.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"intro", "outro"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.1},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "halo"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.05},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "panels"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 4.0},
+                                              {"rate", 2.0},
+                                              {"shape", 4.0},
+                                              {"spread", 0.5},
+                                              {"width", 0.25},
+                                              {"level", 0.8},
+                                              {"colour_spread", 0.5},
+                                              {"turn_offset", 1.0}},
+                                             "screen", 1.0f, "arms"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Nerve",
+                      "The bassline on the arms, each note on the next arm five round "
+                      "(jumping across the piece whatever its pitch), coloured by pitch; the "
+                      "domes thumping on the kick; everything else dark.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"groove", "low", "mid", "high"};
+        p.scene.layers.push_back(layer_by_id("arm_notes",
+                                             {{"arm_mode", 3.0},
+                                              {"step", 5.0},
+                                              {"colours", 2.0},
+                                              {"per_16th", 1.5},
+                                              {"confidence", 0.3}},
+                                             "add", 1.0f, "arms"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"radial_from", 1.0},
+                                              {"clock", 2.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 1.0},
+                                              {"colour_spread", 0.4}},
+                                             "screen", 0.15f, "domes"));
+        p.scene.routes.push_back(route_by_id("kick", "opacity", 1, 0.85, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Tide",
+                      "Every bass note on all twelve arms, a slow radial wave in the panels a "
+                      "bar long, the kick on the domes; the rim dark.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"groove", "mid", "high"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 3.0},
+                                              {"rate", -1.0},
+                                              {"shape", 0.0},
+                                              {"spread", 1.0},
+                                              {"level", 0.35},
+                                              {"colour_spread", 0.5}},
+                                             "add", 1.0f, "panels"));
+        p.scene.layers.push_back(
+            layer_by_id("arm_notes", {{"arm_mode", 2.0}, {"colours", 1.0}, {"confidence", 0.3}},
+                        "screen", 0.8f, "arms"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"radial_from", 1.0},
+                                              {"clock", 2.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 1.0},
+                                              {"colour_spread", 0.4}},
+                                             "screen", 0.15f, "domes"));
+        p.scene.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Spine",
+                      "The bassline crawling round the arms a note at a time, coloured by "
+                      "pitch, its last four notes trailing; the kick stepping round the three "
+                      "domes one at a time, the halo dim.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"groove", "low", "mid"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.1},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "halo"));
+        p.scene.layers.push_back(layer_by_id("arm_notes",
+                                             {{"arm_mode", 3.0},
+                                              {"step", 1.0},
+                                              {"colours", 2.0},
+                                              {"trail", 4.0},
+                                              {"confidence", 0.3}},
+                                             "screen", 1.0f, "arms"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 4.0},
+                                              {"clock", 6.0},
+                                              {"rate", 0.3333333333333333},
+                                              {"shape", 4.0},
+                                              {"spread", 0.0},
+                                              {"width", 0.3},
+                                              {"level", 1.0},
+                                              {"colour_spread", 0.4},
+                                              {"turn_offset", 1.0}},
+                                             "screen", 0.15f, "domes"));
+        p.scene.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Lure",
+                      "The glow-led alternative: arms dark but for hats at their tips, the "
+                      "bass colouring the panels by pitch and lifting them on each note, the "
+                      "kick on the domes.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"groove", "low"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 3.0},
+                                              {"rate", -0.5},
+                                              {"shape", 0.0},
+                                              {"spread", 0.5},
+                                              {"level", 0.6},
+                                              {"colour_spread", 0.2}},
+                                             "add", 1.0f, "panels"));
+        p.scene.layers.push_back(layer_by_id(
+            "corner_sparks",
+            {{"sites", 1.0}, {"count", 6.0}, {"span", 1.0}, {"decay_s", 0.1}, {"level", 0.9}},
+            "add", 1.0f, "arms"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"radial_from", 1.0},
+                                              {"clock", 2.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 1.0},
+                                              {"colour_spread", 0.4}},
+                                             "screen", 0.15f, "domes"));
+        p.scene.routes.push_back(route_by_id("bass_pitch", "hue_shift", 0, 360.0, "", false));
+        p.scene.routes.push_back(route_by_id("bass_active", "opacity", 0, 0.5, "", false));
+        p.scene.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Inhale",
+                      "Light drawn from the rim into the centre on every beat, faster and "
+                      "brighter as the tension climbs; the arms filling from the centre "
+                      "outwards through the build; dark over the pre-drop.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 2.0},
+                                              {"rate", -1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 0.6},
+                                              {"colour_spread", 0.4}},
+                                             "add", 1.0f, "glow"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 1.8},
+                                              {"width", 0.01},
+                                              {"level", 0.7},
+                                              {"colour_spread", 0.3}},
+                                             "screen", 1.0f, "arms"));
+        p.scene.layers.push_back(
+            layer_by_id("stutter", {{"mode", 5.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+        p.scene.routes.push_back(route_by_id("tension", "brightness", 0, 0.4, "", false));
+        p.scene.routes.push_back(route_by_id("tension", "setting", 0, -0.0625, "rate", false));
+        p.scene.routes.push_back(route_by_id("build_progress", "setting", 1, 1.0, "width", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Swarm",
+                      "Sparks on the arms growing denser with the tension, the domes "
+                      "brightening and the halo rising; dark over the pre-drop.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"build"};
+        p.scene.layers.push_back(
+            layer_by_id("sparkle", {{"density", 0.02}, {"decay_s", 0.12}}, "add", 1.0f, "arms"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.6},
+                                              {"colour_spread", 0.3}},
+                                             "add", 0.2f, "domes"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.5},
+                                              {"colour_spread", 0.3}},
+                                             "add", 0.3f, "halo"));
+        p.scene.layers.push_back(
+            layer_by_id("stutter", {{"mode", 5.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+        p.scene.routes.push_back(route_by_id("tension", "setting", 0, 0.75, "density", false));
+        p.scene.routes.push_back(route_by_id("tension", "opacity", 1, 0.8, "", false));
+        p.scene.routes.push_back(route_by_id("tension", "opacity", 2, 0.7, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Bloom",
+                      "The kick as a coloured shockwave from the centre across the whole "
+                      "piece, each bass note on three arms evenly round, moving on a note and "
+                      "coloured by pitch, panels and rim in full colour.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"drop"};
+        p.scene.layers.push_back(layer_by_id("polar_noise",
+                                             {{"level", 0.55},
+                                              {"floor", 0.3},
+                                              {"flow", 0.25},
+                                              {"clock", 2.0},
+                                              {"colour_spread", 1.0}},
+                                             "add", 1.0f, "glow"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 2.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.3},
+                                              {"level", 1.0},
+                                              {"colour_spread", 0.6}},
+                                             "screen", 0.2f, ""));
+        p.scene.layers.push_back(layer_by_id("arm_notes",
+                                             {{"arm_mode", 3.0},
+                                              {"step", 1.0},
+                                              {"arms_per_note", 3.0},
+                                              {"colours", 2.0},
+                                              {"confidence", 0.2}},
+                                             "screen", 1.0f, "arms"));
+        p.scene.routes.push_back(route_by_id("kick", "opacity", 1, 0.8, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Strike",
+                      "The kick on the domes and the rim together, all twelve arms firing "
+                      "outwards on each bass note, the panels dark for contrast.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"drop"};
+        p.scene.layers.push_back(layer_by_id(
+            "arm_notes",
+            {{"arm_mode", 2.0}, {"colours", 1.0}, {"per_16th", 2.0}, {"confidence", 0.2}}, "add",
+            1.0f, "arms"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"radial_from", 1.0},
+                                              {"clock", 2.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.5},
+                                              {"level", 1.0},
+                                              {"colour_spread", 0.4}},
+                                             "screen", 0.15f, "domes"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 2.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 1.0},
+                                              {"width", 0.4},
+                                              {"level", 0.9},
+                                              {"colour_spread", 0.5}},
+                                             "screen", 0.15f, "rim"));
+        p.scene.routes.push_back(route_by_id("kick", "opacity", 1, 0.85, "", false));
+        p.scene.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Drift",
+                      "Polar smoke in the panels and rim, the three domes breathing in turn "
+                      "once a bar, the arms as a slow outward ripple.",
+                      {},
+                      palette_named("Ocean UV")};
+        p.scene.sections = {"breakdown"};
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.45}, {"floor", 0.2}, {"flow", 0.05}, {"clock", 3.0}}, "add",
+            1.0f, "panels"));
+        p.scene.layers.push_back(layer_by_id(
+            "polar_noise", {{"level", 0.35}, {"floor", 0.15}, {"flow", -0.04}, {"clock", 3.0}},
+            "add", 1.0f, "rim"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 4.0},
+                                              {"clock", 3.0},
+                                              {"rate", 1.0},
+                                              {"shape", 4.0},
+                                              {"spread", 0.0},
+                                              {"width", 0.5},
+                                              {"level", 0.5},
+                                              {"colour_spread", 0.4},
+                                              {"turn_offset", 1.0}},
+                                             "screen", 1.0f, "domes"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 3.0},
+                                              {"clock", 3.0},
+                                              {"rate", 1.0},
+                                              {"shape", 0.0},
+                                              {"spread", 2.0},
+                                              {"level", 0.3},
+                                              {"colour_spread", 0.4}},
+                                             "screen", 1.0f, "arms"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Held breath",
+                      "The domes hold a dim glow, the arms dark, each bass note a short flick "
+                      "at the arm roots.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"break"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.2},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "domes"));
+        p.scene.layers.push_back(layer_by_id("arm_notes",
+                                             {{"arm_mode", 3.0},
+                                              {"step", 5.0},
+                                              {"per_16th", 0.4},
+                                              {"release", 0.5},
+                                              {"colours", 2.0},
+                                              {"confidence", 0.3},
+                                              {"level", 1.0}},
+                                             "screen", 1.0f, "arms"));
+        looks.push_back(std::move(p));
+    }
+    {
+        ScenePreset p{"Afterimage",
+                      "The halo and panels held dim under a long afterglow, hats sparking on "
+                      "the arm tips and leaving trails.",
+                      {},
+                      palette_named("Ember")};
+        p.scene.sections = {"break"};
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.08},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "halo"));
+        p.scene.layers.push_back(layer_by_id("wave",
+                                             {{"mapping", 0.0},
+                                              {"clock", 0.0},
+                                              {"rate", 0.0},
+                                              {"shape", 3.0},
+                                              {"spread", 0.0},
+                                              {"width", 1.0},
+                                              {"level", 0.03},
+                                              {"colour_spread", 0.3}},
+                                             "add", 1.0f, "panels"));
+        p.scene.layers.push_back(layer_by_id("corner_sparks",
+                                             {{"sites", 1.0},
+                                              {"count", 6.0},
+                                              {"span", 2.0},
+                                              {"keep", 4.0},
+                                              {"decay_s", 0.2},
+                                              {"level", 1.0}},
+                                             "add", 1.0f, "arms"));
+        p.scene.post.push_back({AfterglowParams{4.0, 0.85}, true});
+        looks.push_back(std::move(p));
+    }
+    // END Cagan scenes
     for (ScenePreset &p : looks) {
         p.scene.name = p.name;
         p.scene.palette = 0;
@@ -1535,6 +2001,748 @@ std::vector<ShowPack> builtin_show_packs() {
     forest.automation.palette_every_phrases = 4;
     forest.automation.crossfade_beats = 8.0;
     packs.push_back(std::move(forest));
+    // BEGIN Cagan packs (generated from cagan_packs.py)
+    {
+        ShowPack pack = rotating_pack(
+            "Cagan ember",
+            "For the Cagan piece in warm reds and ambers with cool "
+            "accents: lush glow in the intros and breakdowns, the "
+            "bassline on the arms and the kick on the domes in "
+            "grooves, everything lit in the drops.",
+            {find(looks, "Dormant"), find(looks, "First light"), find(looks, "Nerve"),
+             find(looks, "Tide"), find(looks, "Spine"), find(looks, "Lure"), find(looks, "Inhale"),
+             find(looks, "Swarm"), find(looks, "Bloom"), find(looks, "Strike"),
+             find(looks, "Drift"), find(looks, "Held breath"), find(looks, "Afterimage")},
+            {{"Dormant", {"Ember", "Ember tide"}},
+             {"First light", {"Ember", "Ember tide"}},
+             {"Nerve", {"Ember", "Amber"}},
+             {"Tide", {"Ember", "Amber"}},
+             {"Spine", {"Ember", "Amber"}},
+             {"Lure", {"Ember", "Amber"}},
+             {"Inhale", {"Amber", "Ember"}},
+             {"Swarm", {"Amber", "Ember"}},
+             {"Bloom", {"Ember", "Ember tide"}},
+             {"Strike", {"Ember", "Ember tide"}},
+             {"Drift", {"Ember", "Ember tide"}},
+             {"Held breath", {"Ember", "Ember tide"}},
+             {"Afterimage", {"Ember", "Ember tide"}}});
+        for (Scene &s : pack.scenes) {
+            s.palette = s.palette_list.front(); // Its own list, not the look's.
+        }
+        packs.push_back(std::move(pack));
+    }
+    {
+        ShowPack pack = rotating_pack(
+            "Cagan forest",
+            "For the Cagan piece in deep greens, teals and violets "
+            "with rare hot accents: the glow zones held low "
+            "throughout, the arms carry the show.",
+            {find(looks, "Dormant"), find(looks, "First light"), find(looks, "Nerve"),
+             find(looks, "Tide"), find(looks, "Spine"), find(looks, "Lure"), find(looks, "Inhale"),
+             find(looks, "Swarm"), find(looks, "Bloom"), find(looks, "Strike"),
+             find(looks, "Drift"), find(looks, "Held breath"), find(looks, "Afterimage")},
+            {{"Dormant", {"Moss", "Mono violet"}},
+             {"First light", {"Moss", "Mono violet"}},
+             {"Nerve", {"Moss", "Fern glow"}},
+             {"Tide", {"Moss", "Fern glow"}},
+             {"Spine", {"Moss", "Fern glow"}},
+             {"Lure", {"Moss", "Fern glow"}},
+             {"Inhale", {"Fern glow", "Toxic"}},
+             {"Swarm", {"Fern glow", "Toxic"}},
+             {"Bloom", {"Fern glow", "Moss"}},
+             {"Strike", {"Fern glow", "Moss"}},
+             {"Drift", {"Moss", "Mono violet"}},
+             {"Held breath", {"Moss", "Mono violet"}},
+             {"Afterimage", {"Moss", "Mono violet"}}});
+        for (Scene &s : pack.scenes) {
+            s.palette = s.palette_list.front(); // Its own list, not the look's.
+            if (s.name == "Dormant") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.12},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "halo"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 4.0},
+                                                {"rate", 1.0},
+                                                {"shape", 0.0},
+                                                {"spread", 0.0},
+                                                {"level", 0.35},
+                                                {"colour_spread", 0.3}},
+                                               "screen", 0.4f, "halo"));
+                s.layers.push_back(
+                    layer_by_id("polar_noise",
+                                {{"level", 0.3}, {"floor", 0.12}, {"flow", 0.05}, {"clock", 3.0}},
+                                "screen", 0.4f, "panels"));
+                s.layers.push_back(layer_by_id("corner_sparks",
+                                               {{"sites", 1.0},
+                                                {"count", 6.0},
+                                                {"span", 1.0},
+                                                {"decay_s", 0.1},
+                                                {"level", 0.9}},
+                                               "add", 1.0f, "arms"));
+            }
+            if (s.name == "First light") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.1},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "halo"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.05},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "panels"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 4.0},
+                                                {"rate", 2.0},
+                                                {"shape", 4.0},
+                                                {"spread", 0.5},
+                                                {"width", 0.25},
+                                                {"level", 0.8},
+                                                {"colour_spread", 0.5},
+                                                {"turn_offset", 1.0}},
+                                               "screen", 1.0f, "arms"));
+            }
+            if (s.name == "Nerve") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 5.0},
+                                                {"colours", 2.0},
+                                                {"per_16th", 1.5},
+                                                {"confidence", 0.3}},
+                                               "add", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 2.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.06f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.34, "", false));
+            }
+            if (s.name == "Tide") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", -1.0},
+                                                {"shape", 0.0},
+                                                {"spread", 1.0},
+                                                {"level", 0.35},
+                                                {"colour_spread", 0.5}},
+                                               "add", 0.4f, "panels"));
+                s.layers.push_back(layer_by_id(
+                    "arm_notes", {{"arm_mode", 2.0}, {"colours", 1.0}, {"confidence", 0.3}},
+                    "screen", 0.8f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 2.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.06f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+            }
+            if (s.name == "Spine") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.1},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "halo"));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 1.0},
+                                                {"colours", 2.0},
+                                                {"trail", 4.0},
+                                                {"confidence", 0.3}},
+                                               "screen", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 4.0},
+                                                {"clock", 6.0},
+                                                {"rate", 0.3333333333333333},
+                                                {"shape", 4.0},
+                                                {"spread", 0.0},
+                                                {"width", 0.3},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4},
+                                                {"turn_offset", 1.0}},
+                                               "screen", 0.06f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+            }
+            if (s.name == "Lure") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", -0.5},
+                                                {"shape", 0.0},
+                                                {"spread", 0.5},
+                                                {"level", 0.6},
+                                                {"colour_spread", 0.2}},
+                                               "add", 0.4f, "panels"));
+                s.layers.push_back(layer_by_id("corner_sparks",
+                                               {{"sites", 1.0},
+                                                {"count", 6.0},
+                                                {"span", 1.0},
+                                                {"decay_s", 0.1},
+                                                {"level", 0.9}},
+                                               "add", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 2.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.06f, "domes"));
+                s.routes.push_back(route_by_id("bass_pitch", "hue_shift", 0, 360.0, "", false));
+                s.routes.push_back(route_by_id("bass_active", "opacity", 0, 0.2, "", false));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+            }
+            if (s.name == "Inhale") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 2.0},
+                                                {"rate", -1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 0.6},
+                                                {"colour_spread", 0.4}},
+                                               "add", 0.4f, "glow"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 1.8},
+                                                {"width", 0.01},
+                                                {"level", 0.7},
+                                                {"colour_spread", 0.3}},
+                                               "screen", 1.0f, "arms"));
+                s.layers.push_back(
+                    layer_by_id("stutter", {{"mode", 5.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+                s.routes.push_back(route_by_id("tension", "brightness", 0, 0.4, "", false));
+                s.routes.push_back(route_by_id("tension", "setting", 0, -0.0625, "rate", false));
+                s.routes.push_back(
+                    route_by_id("build_progress", "setting", 1, 1.0, "width", false));
+            }
+            if (s.name == "Swarm") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("sparkle", {{"density", 0.02}, {"decay_s", 0.12}},
+                                               "add", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.6},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.08f, "domes"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.5},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.12f, "halo"));
+                s.layers.push_back(
+                    layer_by_id("stutter", {{"mode", 5.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+                s.routes.push_back(route_by_id("tension", "setting", 0, 0.75, "density", false));
+                s.routes.push_back(route_by_id("tension", "opacity", 1, 0.32, "", false));
+                s.routes.push_back(route_by_id("tension", "opacity", 2, 0.28, "", false));
+            }
+            if (s.name == "Bloom") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("polar_noise",
+                                               {{"level", 0.55},
+                                                {"floor", 0.3},
+                                                {"flow", 0.25},
+                                                {"clock", 2.0},
+                                                {"colour_spread", 1.0}},
+                                               "add", 0.4f, "glow"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 2.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.3},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.6}},
+                                               "screen", 0.2f, ""));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 1.0},
+                                                {"arms_per_note", 3.0},
+                                                {"colours", 2.0},
+                                                {"confidence", 0.2}},
+                                               "screen", 1.0f, "arms"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.8, "", false));
+            }
+            if (s.name == "Strike") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id(
+                    "arm_notes",
+                    {{"arm_mode", 2.0}, {"colours", 1.0}, {"per_16th", 2.0}, {"confidence", 0.2}},
+                    "add", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 2.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.06f, "domes"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 2.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.4},
+                                                {"level", 0.9},
+                                                {"colour_spread", 0.5}},
+                                               "screen", 0.06f, "rim"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.34, "", false));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.34, "", false));
+            }
+            if (s.name == "Drift") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(
+                    layer_by_id("polar_noise",
+                                {{"level", 0.45}, {"floor", 0.2}, {"flow", 0.05}, {"clock", 3.0}},
+                                "add", 0.4f, "panels"));
+                s.layers.push_back(
+                    layer_by_id("polar_noise",
+                                {{"level", 0.35}, {"floor", 0.15}, {"flow", -0.04}, {"clock", 3.0}},
+                                "add", 0.4f, "rim"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 4.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 0.0},
+                                                {"width", 0.5},
+                                                {"level", 0.5},
+                                                {"colour_spread", 0.4},
+                                                {"turn_offset", 1.0}},
+                                               "screen", 0.4f, "domes"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 0.0},
+                                                {"spread", 2.0},
+                                                {"level", 0.3},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 1.0f, "arms"));
+            }
+            if (s.name == "Held breath") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.2},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "domes"));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 5.0},
+                                                {"per_16th", 0.4},
+                                                {"release", 0.5},
+                                                {"colours", 2.0},
+                                                {"confidence", 0.3},
+                                                {"level", 1.0}},
+                                               "screen", 1.0f, "arms"));
+            }
+            if (s.name == "Afterimage") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.08},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "halo"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.03},
+                                                {"colour_spread", 0.3}},
+                                               "add", 0.4f, "panels"));
+                s.layers.push_back(layer_by_id("corner_sparks",
+                                               {{"sites", 1.0},
+                                                {"count", 6.0},
+                                                {"span", 2.0},
+                                                {"keep", 4.0},
+                                                {"decay_s", 0.2},
+                                                {"level", 1.0}},
+                                               "add", 1.0f, "arms"));
+                s.post.push_back({AfterglowParams{4.0, 0.85}, true});
+            }
+        }
+        packs.push_back(std::move(pack));
+    }
+    {
+        ShowPack pack = rotating_pack(
+            "Cagan abyss",
+            "For the Cagan piece in cyan, magenta and UV blue on "
+            "black: the arms always tight, the glow always slow, in "
+            "every section.",
+            {find(looks, "Dormant"), find(looks, "First light"), find(looks, "Nerve"),
+             find(looks, "Tide"), find(looks, "Spine"), find(looks, "Lure"), find(looks, "Inhale"),
+             find(looks, "Swarm"), find(looks, "Bloom"), find(looks, "Strike"),
+             find(looks, "Drift"), find(looks, "Held breath"), find(looks, "Afterimage")},
+            {{"Dormant", {"Ocean UV", "Abyss"}},
+             {"First light", {"Ocean UV", "Abyss"}},
+             {"Nerve", {"Abyss", "UV violet"}},
+             {"Tide", {"Abyss", "UV violet"}},
+             {"Spine", {"Abyss", "UV violet"}},
+             {"Lure", {"Abyss", "UV violet"}},
+             {"Inhale", {"UV violet", "Magenta storm"}},
+             {"Swarm", {"UV violet", "Magenta storm"}},
+             {"Bloom", {"Abyss", "Magenta storm"}},
+             {"Strike", {"Abyss", "Magenta storm"}},
+             {"Drift", {"Ocean UV", "Abyss"}},
+             {"Held breath", {"Ocean UV", "Abyss"}},
+             {"Afterimage", {"Ocean UV", "Abyss"}}});
+        for (Scene &s : pack.scenes) {
+            s.palette = s.palette_list.front(); // Its own list, not the look's.
+            if (s.name == "Nerve") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 5.0},
+                                                {"colours", 2.0},
+                                                {"per_16th", 1.5},
+                                                {"confidence", 0.3},
+                                                {"release", 0.5}},
+                                               "add", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.15f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.85, "", false));
+            }
+            if (s.name == "Tide") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", -1.0},
+                                                {"shape", 0.0},
+                                                {"spread", 1.0},
+                                                {"level", 0.35},
+                                                {"colour_spread", 0.5}},
+                                               "add", 1.0f, "panels"));
+                s.layers.push_back(layer_by_id(
+                    "arm_notes",
+                    {{"arm_mode", 2.0}, {"colours", 1.0}, {"confidence", 0.3}, {"release", 0.5}},
+                    "screen", 0.8f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.15f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+            }
+            if (s.name == "Spine") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.1},
+                                                {"colour_spread", 0.3}},
+                                               "add", 1.0f, "halo"));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 1.0},
+                                                {"colours", 2.0},
+                                                {"trail", 4.0},
+                                                {"confidence", 0.3},
+                                                {"release", 0.5}},
+                                               "screen", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 4.0},
+                                                {"clock", 6.0},
+                                                {"rate", 0.3333333333333333},
+                                                {"shape", 4.0},
+                                                {"spread", 0.0},
+                                                {"width", 0.3},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4},
+                                                {"turn_offset", 1.0}},
+                                               "screen", 0.15f, "domes"));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+            }
+            if (s.name == "Lure") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", -0.5},
+                                                {"shape", 0.0},
+                                                {"spread", 0.5},
+                                                {"level", 0.6},
+                                                {"colour_spread", 0.2}},
+                                               "add", 1.0f, "panels"));
+                s.layers.push_back(layer_by_id("corner_sparks",
+                                               {{"sites", 1.0},
+                                                {"count", 6.0},
+                                                {"span", 1.0},
+                                                {"decay_s", 0.1},
+                                                {"level", 0.9}},
+                                               "add", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.15f, "domes"));
+                s.routes.push_back(route_by_id("bass_pitch", "hue_shift", 0, 360.0, "", false));
+                s.routes.push_back(route_by_id("bass_active", "opacity", 0, 0.5, "", false));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+            }
+            if (s.name == "Inhale") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", -1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 0.6},
+                                                {"colour_spread", 0.4}},
+                                               "add", 1.0f, "glow"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 1.8},
+                                                {"width", 0.01},
+                                                {"level", 0.7},
+                                                {"colour_spread", 0.3}},
+                                               "screen", 1.0f, "arms"));
+                s.layers.push_back(
+                    layer_by_id("stutter", {{"mode", 5.0}, {"depth", 1.0}}, "multiply", 1.0f, ""));
+                s.routes.push_back(route_by_id("tension", "brightness", 0, 0.4, "", false));
+                s.routes.push_back(route_by_id("tension", "setting", 0, -0.0625, "rate", false));
+                s.routes.push_back(
+                    route_by_id("build_progress", "setting", 1, 1.0, "width", false));
+            }
+            if (s.name == "Bloom") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("polar_noise",
+                                               {{"level", 0.55},
+                                                {"floor", 0.3},
+                                                {"flow", 0.25},
+                                                {"clock", 3.0},
+                                                {"colour_spread", 1.0}},
+                                               "add", 1.0f, "glow"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 2.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.3},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.6}},
+                                               "screen", 0.2f, ""));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 1.0},
+                                                {"arms_per_note", 3.0},
+                                                {"colours", 2.0},
+                                                {"confidence", 0.2},
+                                                {"release", 0.5}},
+                                               "screen", 1.0f, "arms"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.8, "", false));
+            }
+            if (s.name == "Strike") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 2.0},
+                                                {"colours", 1.0},
+                                                {"per_16th", 2.0},
+                                                {"confidence", 0.2},
+                                                {"release", 0.5}},
+                                               "add", 1.0f, "arms"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"radial_from", 1.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.5},
+                                                {"level", 1.0},
+                                                {"colour_spread", 0.4}},
+                                               "screen", 0.15f, "domes"));
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 3.0},
+                                                {"clock", 3.0},
+                                                {"rate", 1.0},
+                                                {"shape", 4.0},
+                                                {"spread", 1.0},
+                                                {"width", 0.4},
+                                                {"level", 0.9},
+                                                {"colour_spread", 0.5}},
+                                               "screen", 0.15f, "rim"));
+                s.routes.push_back(route_by_id("kick", "opacity", 1, 0.85, "", false));
+                s.routes.push_back(route_by_id("kick", "opacity", 2, 0.85, "", false));
+            }
+            if (s.name == "Held breath") {
+                s.layers.clear();
+                s.routes.clear();
+                s.post.clear();
+                s.layers.push_back(layer_by_id("wave",
+                                               {{"mapping", 0.0},
+                                                {"clock", 0.0},
+                                                {"rate", 0.0},
+                                                {"shape", 3.0},
+                                                {"spread", 0.0},
+                                                {"width", 1.0},
+                                                {"level", 0.2},
+                                                {"colour_spread", 0.3}},
+                                               "add", 1.0f, "domes"));
+                s.layers.push_back(layer_by_id("arm_notes",
+                                               {{"arm_mode", 3.0},
+                                                {"step", 5.0},
+                                                {"per_16th", 0.4},
+                                                {"release", 0.25},
+                                                {"colours", 2.0},
+                                                {"confidence", 0.3},
+                                                {"level", 1.0}},
+                                               "screen", 1.0f, "arms"));
+            }
+        }
+        packs.push_back(std::move(pack));
+    }
+    // END Cagan packs
 
     ShowPack hexagon = pack_of(
         "Hexagon",
