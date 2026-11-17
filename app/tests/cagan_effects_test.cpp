@@ -54,6 +54,70 @@ Rig flower() {
     return build_rig(strips);
 }
 
+// A bass note at 150 BPM (16th 0.1 s): sounding `since_s` after its onset, or ended.
+EngineInputs bass(int midi, double gate_ratio, double since_s, bool sounding) {
+    EngineInputs in = grid_at(40, 0.25);
+    in.section = "groove";
+    in.bass_notes_so_far = 100;
+    in.bass_active = sounding;
+    in.bass_midi = midi;
+    in.bass_velocity = 1.0;
+    in.bass_confidence = 1.0;
+    in.bass_decay_tau_ms = 100.0;
+    in.bass_gate_ratio = gate_ratio;
+    in.since_bass_onset_s = since_s;
+    in.since_bass_offset_s = sounding ? 0.0 : std::max(0.0, since_s - gate_ratio * 0.1);
+    in.notes[0].age_s = since_s;
+    in.notes[0].midi = midi;
+    in.notes[0].sounding = sounding;
+    in.notes[0].length_s = sounding ? since_s : gate_ratio * 0.1;
+    for (size_t k = 1; k < in.notes.size(); ++k) {
+        in.notes[k].age_s = since_s + 0.25 * static_cast<double>(k);
+        in.notes[k].midi = midi;
+        in.notes[k].length_s = 0.08;
+        in.notes[k].velocity = 1.0;
+        in.notes[k].confidence = 1.0;
+        in.notes[k].decay_tau_ms = 100.0;
+    }
+    return in;
+}
+
+// The arm strips (0 to 11, by turn from the top) with a lit pixel.
+std::vector<int> lit_arms(const Rig &rig, const Frame &out) {
+    std::vector<int> arms;
+    for (size_t i = 0; i < out.size(); ++i) {
+        const int s = rig.pixels[i].strip;
+        if (s < 12 && level(out[i]) > 0.01f &&
+            std::find(arms.begin(), arms.end(), s) == arms.end()) {
+            arms.push_back(s);
+        }
+    }
+    std::sort(arms.begin(), arms.end());
+    return arms;
+}
+
+// How far out an arm is lit: the farthest lit pixel's place from its innermost pixel (0) to its
+// outermost (1), by distance from the centre (the origin).
+double lit_reach(const Rig &rig, const Frame &out, int strip) {
+    const auto d = [&](size_t i) {
+        return std::hypot(rig.pixels[i].position.x, rig.pixels[i].position.y);
+    };
+    const std::vector<size_t> px = pixels_of(rig, strip);
+    double lo = 1e9;
+    double hi = 0.0;
+    for (const size_t i : px) {
+        lo = std::min(lo, d(i));
+        hi = std::max(hi, d(i));
+    }
+    double reach = -1.0;
+    for (const size_t i : px) {
+        if (level(out[i]) > 0.5f) {
+            reach = std::max(reach, (d(i) - lo) / (hi - lo));
+        }
+    }
+    return reach;
+}
+
 } // namespace
 
 TEST_CASE("space: radial, per strip runs from each strip's centroid to its farthest pixel") {
@@ -143,4 +207,90 @@ TEST_CASE("wave: turn offset, off by default, steps the strips round the centre"
     for (const size_t i : pixels_of(rig, 3)) {
         CHECK(level(out[i]) == doctest::Approx(side));
     }
+}
+
+TEST_CASE("arm notes: pitch picks the arm, gate ratio the reach, wiring does not matter") {
+    const Rig rig = flower();
+    ArmNotesParams p;
+    p.confidence = 0.0;
+    // Pitch class: C on arm 0 (the top), D on arm 2, B on arm 11.
+    CHECK(lit_arms(rig, render({p}, rig, bass(36, 1.0, 0.2, false))) == std::vector<int>{0});
+    CHECK(lit_arms(rig, render({p}, rig, bass(38, 1.0, 0.2, false))) == std::vector<int>{2});
+    CHECK(lit_arms(rig, render({p}, rig, bass(47, 1.0, 0.2, false))) == std::vector<int>{11});
+    ArmNotesParams top = p;
+    top.top_pitch = 2;
+    CHECK(lit_arms(rig, render({top}, rig, bass(38, 1.0, 0.2, false))) == std::vector<int>{0});
+    // Reach: the gate ratio of the arm, within one pixel, just after the note ends; on an arm
+    // wired outwards (C, arm 0) and one wired inwards (C sharp, arm 1).
+    const double pixel = 1.0 / (kArmPixels - 1);
+    for (const double gate : {0.25, 0.5, 0.75}) {
+        CAPTURE(gate);
+        const Frame out = render({p}, rig, bass(36, gate, gate * 0.1 + 0.001, false));
+        CHECK(std::abs(lit_reach(rig, out, 0) - gate) <= pixel);
+        const Frame in_wired = render({p}, rig, bass(37, gate, gate * 0.1 + 0.001, false));
+        CHECK(std::abs(lit_reach(rig, in_wired, 1) - gate) <= pixel);
+        // The same picture, pixel for pixel by distance from the centre.
+        const std::vector<size_t> a = pixels_of(rig, 0);
+        std::vector<size_t> b = pixels_of(rig, 1);
+        std::reverse(b.begin(), b.end());
+        for (size_t k = 0; k < a.size(); ++k) {
+            CHECK(level(out[a[k]]) == doctest::Approx(level(in_wired[b[k]])).epsilon(1e-6));
+        }
+    }
+    // While it sounds, the head travels out a 16th at a time.
+    const Frame half = render({p}, rig, bass(36, 1.0, 0.05, true));
+    CHECK(std::abs(lit_reach(rig, half, 0) - 0.5) <= pixel);
+    // All arms.
+    ArmNotesParams all = p;
+    all.arm_mode = 2;
+    CHECK(lit_arms(rig, render({all}, rig, bass(36, 1.0, 0.2, false))).size() == 12);
+}
+
+TEST_CASE("arm notes: a slide lights two arms, a rest leaves the arms dark") {
+    const Rig rig = flower();
+    ArmNotesParams p;
+    p.confidence = 0.0;
+    EngineInputs slide = bass(40, 1.0, 0.05, true); // E, sliding from C.
+    slide.bass_slide = true;
+    slide.notes[1].midi = 36;
+    CHECK(lit_arms(rig, render({p}, rig, slide)) == std::vector<int>{0, 4});
+    slide.since_bass_onset_s = 0.1; // The slide done: only E.
+    CHECK(lit_arms(rig, render({p}, rig, slide)) == std::vector<int>{4});
+    // A rest: two seconds after a note ended, nothing lit.
+    const Frame rest = render({p}, rig, bass(36, 1.0, 2.1, false));
+    CHECK(std::all_of(rest.begin(), rest.end(), [](const Rgb &c) { return level(c) <= 0.01f; }));
+    // Before any note, black.
+    EngineInputs none = grid_at(4, 0.0);
+    const Frame dark = render({p}, rig, none);
+    CHECK(std::all_of(dark.begin(), dark.end(), [](const Rgb &c) { return level(c) == 0.0f; }));
+}
+
+TEST_CASE("arm notes: scale step, trail, and the same frame twice") {
+    const Rig rig = flower();
+    ArmNotesParams p;
+    p.confidence = 0.0;
+    p.arm_mode = 1;
+    // History E, G, A (40, 43, 45): ranks 0, 1, 2 spread round 12 arms as 0, 4 and 8.
+    EngineInputs in = bass(43, 1.0, 0.2, false);
+    for (size_t k = 1; k < in.notes.size(); ++k) {
+        in.notes[k].midi = k % 3 == 0 ? 40 : (k % 3 == 1 ? 43 : 45);
+    }
+    CHECK(lit_arms(rig, render({p}, rig, in)) == std::vector<int>{4});
+    in.bass_midi = 45;
+    CHECK(lit_arms(rig, render({p}, rig, in)) == std::vector<int>{8});
+    // Trail: two earlier notes stay on their arms, dimmer.
+    ArmNotesParams trail;
+    trail.confidence = 0.0;
+    trail.trail = 2;
+    EngineInputs t = bass(36, 1.0, 0.11, false);
+    t.notes[1].midi = 38;
+    t.notes[1].age_s = 0.35;
+    t.notes[2].midi = 41;
+    t.notes[2].age_s = 0.6;
+    const Frame out = render({trail}, rig, t);
+    CHECK(lit_arms(rig, out) == std::vector<int>{0, 2, 5});
+    // Their innermost pixels (arm 5 is wired inwards): the older dimmer.
+    CHECK(level(out[pixels_of(rig, 2).front()]) > level(out[pixels_of(rig, 5).back()]));
+    CHECK(level(out[pixels_of(rig, 5).back()]) > 0.01f);
+    CHECK(render({trail}, rig, t) == out);
 }

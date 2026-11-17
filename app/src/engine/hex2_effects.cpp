@@ -754,7 +754,226 @@ class RingAutomaton final : public Effect {
     RingAutomatonParams p_;
 };
 
+// Arm notes: the arms (strips tagged "arms", else every strip that is not a closed ring), in turn
+// round the bounding box's centre from the top, clockwise, and each pixel's place along its arm
+// from the end nearer the centre (0) to the far end (1), by distance from the centre.
+struct Arms {
+    std::vector<int> strips;     // In turn order.
+    std::vector<int> arm_of;     // Per pixel: index into strips, -1 off the arms.
+    std::vector<double> along;   // Per pixel: 0 at the inner end, 1 at the outer.
+    std::vector<double> pitch_u; // Per arm: one pixel's share of its length.
+};
+
+Arms arms_of(const Rig &rig) {
+    const size_t n = rig.strips.size();
+    std::vector<char> is_arm(n, 0);
+    bool tagged = false;
+    for (size_t s = 0; s < n; ++s) {
+        const auto &g = rig.strips[s].groups;
+        is_arm[s] = std::find(g.begin(), g.end(), "arms") != g.end();
+        tagged = tagged || is_arm[s];
+    }
+    if (!tagged) {
+        for (size_t s = 0; s < n; ++s) {
+            const auto &p = rig.strips[s].polyline;
+            const bool closed =
+                p.size() > 2 && std::hypot(p.front().x - p.back().x, p.front().y - p.back().y,
+                                           p.front().z - p.back().z) < 1e-3;
+            is_arm[s] = !closed;
+        }
+    }
+    const double cx = 0.5 * (rig.min.x + rig.max.x);
+    const double cy = 0.5 * (rig.min.y + rig.max.y);
+    std::vector<double> sx(n, 0.0);
+    std::vector<double> sy(n, 0.0);
+    std::vector<double> lo(n, 1e300);
+    std::vector<double> hi(n, -1e300);
+    std::vector<int> count(n, 0);
+    std::vector<double> d(rig.pixels.size(), 0.0);
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        const Pixel &p = rig.pixels[i];
+        const auto s = static_cast<size_t>(p.strip);
+        if (s >= n || !is_arm[s]) {
+            continue;
+        }
+        d[i] = std::hypot(p.position.x - cx, p.position.y - cy);
+        sx[s] += p.position.x;
+        sy[s] += p.position.y;
+        lo[s] = std::min(lo[s], d[i]);
+        hi[s] = std::max(hi[s], d[i]);
+        ++count[s];
+    }
+    std::vector<std::pair<double, int>> by_turn;
+    for (size_t s = 0; s < n; ++s) {
+        if (is_arm[s] && count[s] > 0) {
+            double turn =
+                frac(std::atan2(sx[s] / count[s] - cx, sy[s] / count[s] - cy) / (2.0 * kPi));
+            if (turn > 1.0 - 1e-9) {
+                turn = 0.0; // An arm straight up, a rounding error left of the top.
+            }
+            by_turn.emplace_back(turn, static_cast<int>(s));
+        }
+    }
+    std::sort(by_turn.begin(), by_turn.end());
+    Arms a;
+    std::vector<int> index(n, -1);
+    for (const auto &[turn, s] : by_turn) {
+        index[static_cast<size_t>(s)] = static_cast<int>(a.strips.size());
+        a.strips.push_back(s);
+        a.pitch_u.push_back(1.0 / std::max(1, count[static_cast<size_t>(s)] - 1));
+    }
+    a.arm_of.assign(rig.pixels.size(), -1);
+    a.along.assign(rig.pixels.size(), 0.0);
+    for (size_t i = 0; i < rig.pixels.size(); ++i) {
+        const auto s = static_cast<size_t>(rig.pixels[i].strip);
+        if (s < n && index[s] >= 0) {
+            a.arm_of[i] = index[s];
+            a.along[i] = hi[s] - lo[s] > 1e-9 ? (d[i] - lo[s]) / (hi[s] - lo[s]) : 0.0;
+        }
+    }
+    return a;
+}
+
+class ArmNotes final : public Effect {
+  public:
+    explicit ArmNotes(const ArmNotesParams &p) : p_(p) {}
+    const char *name() const override { return "Arm notes"; }
+    void render(const EffectContext &c, std::span<Rgb> out) const override {
+        std::fill(out.begin(), out.end(), Rgb{});
+        const EngineInputs &in = c.in;
+        if (in.bass_notes_so_far <= 0 || !std::isfinite(in.since_bass_onset_s)) {
+            return;
+        }
+        const Arms a = arms_of(c.rig);
+        const auto arms = static_cast<int>(a.strips.size());
+        if (arms == 0) {
+            return;
+        }
+        const double slot_s = in.beat_s > 0.0 ? in.beat_s / 4.0 : 0.1;
+        const double beat_s = in.beat_s > 0.0 ? in.beat_s : 0.4;
+        const auto notes =
+            static_cast<int>(std::min<long long>(kNoteHistory, in.bass_notes_so_far));
+        // Scale step: the distinct pitches of the notes in the history, low to high.
+        std::vector<int> pitches;
+        if (p_.arm_mode == 1) {
+            pitches.push_back(in.bass_midi);
+            for (int k = 1; k < notes; ++k) {
+                if (std::isfinite(in.notes[static_cast<size_t>(k)].age_s)) {
+                    pitches.push_back(in.notes[static_cast<size_t>(k)].midi);
+                }
+            }
+            std::sort(pitches.begin(), pitches.end());
+            pitches.erase(std::unique(pitches.begin(), pitches.end()), pitches.end());
+        }
+        // The arm a pitch lights; -1: every arm.
+        const auto arm_for = [&](int midi) {
+            switch (p_.arm_mode) {
+            case 0:
+                return ((((midi - p_.top_pitch) % 12) + 12) % 12) % arms;
+            case 1: {
+                const auto rank = static_cast<int>(
+                    std::lower_bound(pitches.begin(), pitches.end(), midi) - pitches.begin());
+                const int distinct = std::max(1, static_cast<int>(pitches.size()));
+                return std::min(arms - 1, rank * arms / distinct);
+            }
+            default:
+                return -1;
+            }
+        };
+        std::vector<double> head(static_cast<size_t>(arms), 0.0);
+        std::vector<double> value(static_cast<size_t>(arms), 0.0);
+        std::vector<Rgb> colour(static_cast<size_t>(arms));
+        // A note on its arm (or every arm), lit from the inner end to `reach`; the brightest
+        // note on an arm wins.
+        const auto put = [&](int arm, double reach, double v, double pitch) {
+            if (v < 2e-3 || reach <= 0.0) {
+                return;
+            }
+            const int first = arm < 0 ? 0 : arm;
+            const int last = arm < 0 ? arms - 1 : arm;
+            for (int k = first; k <= last; ++k) {
+                const auto u = static_cast<size_t>(k);
+                if (v > value[u]) {
+                    value[u] = v;
+                    head[u] = reach;
+                    colour[u] = p_.colours == 0 ? hsv(270.0 + 28.0 * pitch, 1.0, 1.0)
+                                                : c.palette.at(static_cast<double>(k) / arms);
+                }
+            }
+        };
+        const double per_16th = std::max(0.0, p_.per_16th);
+        const double release = std::max(0.1, p_.release);
+        // A note's fade time constant: its decay times the release, at least floor_s.
+        const auto fade_s = [&](double tau_ms, double floor_s) {
+            return std::max(floor_s, release * std::max(0.0, tau_ms) * 1e-3);
+        };
+        // Earlier notes (trail): each on its arm at its final reach, dimmer by age, fading over
+        // at least a beat once ended.
+        const int trail = std::min(std::clamp(p_.trail, 0, kNoteHistory - 1), notes - 1);
+        for (int k = trail; k >= 1; --k) {
+            const NoteEvent &e = in.notes[static_cast<size_t>(k)];
+            if (!std::isfinite(e.age_s) || e.length_s <= 0.0) {
+                continue;
+            }
+            const double reach = std::clamp(per_16th * e.length_s / slot_s, 0.0, 1.0);
+            const double fade = e.sounding ? 1.0
+                                           : std::exp(-std::max(0.0, e.age_s - e.length_s) /
+                                                      fade_s(e.decay_tau_ms, beat_s));
+            const double conf = 1.0 - std::clamp(p_.confidence, 0.0, 1.0) *
+                                          (1.0 - std::clamp(e.confidence, 0.0, 1.0));
+            const double by_age = 1.0 - static_cast<double>(k) / (trail + 1);
+            put(arm_for(e.midi), reach,
+                p_.level * conf * std::clamp(e.velocity, 0.0, 1.0) * fade * by_age,
+                e.midi + e.cents / 100.0);
+        }
+        // The latest note, from the bass fields: its head travels out while it sounds.
+        const double held_s =
+            in.bass_active ? in.since_bass_onset_s : std::max(0.0, in.bass_gate_ratio) * slot_s;
+        const double reach = std::clamp(per_16th * held_s / slot_s, 0.0, 1.0);
+        const double env =
+            in.bass_active ? 1.0
+                           : std::exp(-in.since_bass_offset_s / fade_s(in.bass_decay_tau_ms, 0.03));
+        const double v0 = p_.level * confidence_scale(p_.confidence, in) *
+                          std::clamp(in.bass_velocity, 0.0, 1.0) * env;
+        const double pitch = in.bass_midi + in.bass_cents / 100.0;
+        const int arm = arm_for(in.bass_midi);
+        const NoteEvent &prev = in.notes[1];
+        const int from = notes > 1 ? arm_for(prev.midi) : arm;
+        if (in.bass_slide && arm >= 0 && from != arm) {
+            // A slide: from the previous note's arm to this one's over slide_16ths.
+            const double w = std::clamp(
+                in.since_bass_onset_s / (std::max(0.25, p_.slide_16ths) * slot_s), 0.0, 1.0);
+            put(from, reach, v0 * (1.0 - w), prev.midi + prev.cents / 100.0);
+            put(arm, reach, v0 * w, pitch);
+        } else {
+            put(arm, reach, v0, pitch);
+        }
+        for (size_t i = 0; i < out.size(); ++i) {
+            const int k = a.arm_of[i];
+            if (k < 0) {
+                continue;
+            }
+            const auto u = static_cast<size_t>(k);
+            if (value[u] <= 0.0) {
+                continue;
+            }
+            // Soft over one pixel at the head.
+            const double edge = std::clamp((head[u] - a.along[i]) / a.pitch_u[u] + 0.5, 0.0, 1.0);
+            if (edge > 0.0) {
+                out[i] = scaled(colour[u], std::min(1.0, value[u] * edge));
+            }
+        }
+    }
+
+  private:
+    ArmNotesParams p_;
+};
+
 } // namespace
+
+std::unique_ptr<Effect> make_arm_notes(const ArmNotesParams &params) {
+    return std::make_unique<ArmNotes>(params);
+}
 
 std::unique_ptr<Effect> make_ring_automaton(const RingAutomatonParams &params) {
     return std::make_unique<RingAutomaton>(params);

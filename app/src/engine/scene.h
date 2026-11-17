@@ -419,6 +419,23 @@ struct RingAutomatonParams {
     double level = 0.8;
 };
 
+// Arm notes (bass): the bassline drawn on the arms (strips tagged "arms", else every strip that is
+// not a closed ring) as an instrument. Arms are taken in turn round the centre from the top,
+// clockwise; a note picks its arm by pitch and lights it from the end nearer the centre outwards
+// (by distance from the centre, so the wiring direction does not matter) as far as it is held,
+// then fades with its decay. A slide cross-fades from the previous note's arm.
+struct ArmNotesParams {
+    int arm_mode = 0;         // Pitch class, scale step, all arms.
+    int top_pitch = 0;        // Pitch class on the first arm (0 = C).
+    double per_16th = 1.0;    // Share of the arm per 16th held: 1 reaches the gate ratio.
+    double release = 1.0;     // Fade after the note: times its decay time constant.
+    double slide_16ths = 1.0; // A slide's cross-fade, in 16ths.
+    int trail = 0;            // Earlier notes (EngineInputs::notes) kept, dimmer by age.
+    int colours = 0;          // Pitch hue, palette.
+    double confidence = 0.5;  // Doubtful notes dimmer: level times 1 - this * (1 - confidence).
+    double level = 1.0;
+};
+
 // An effect as data: its type (the variant's alternative) and parameters (engine/effect_spec.h
 // makes the effect and describes the parameters).
 enum class EffectType {
@@ -448,7 +465,8 @@ enum class EffectType {
     corner_sparks,
     polar_noise,
     phrase_fill,
-    ring_automaton
+    ring_automaton,
+    arm_notes
 };
 using EffectParams =
     std::variant<PlasmaParams, ShockwaveParams, ConveyorParams, SparkleParams, ShimmerParams,
@@ -456,7 +474,7 @@ using EffectParams =
                  NoiseParams, FireParams, BurstsParams, SpiralParams, BassBarsParams,
                  HexPulseParams, CubeParams, SectorsParams, InterferenceParams, PitchClockParams,
                  NoteArcsParams, SpokeKickParams, CornerSparksParams, PolarNoiseParams,
-                 PhraseFillParams, RingAutomatonParams>;
+                 PhraseFillParams, RingAutomatonParams, ArmNotesParams>;
 struct EffectSpec {
     EffectParams params;
     EffectType type() const { return static_cast<EffectType>(params.index()); }
@@ -489,6 +507,7 @@ std::unique_ptr<Effect> make_corner_sparks(const CornerSparksParams &params = {}
 std::unique_ptr<Effect> make_polar_noise(const PolarNoiseParams &params = {});
 std::unique_ptr<Effect> make_phrase_fill(const PhraseFillParams &params = {});
 std::unique_ptr<Effect> make_ring_automaton(const RingAutomatonParams &params = {});
+std::unique_ptr<Effect> make_arm_notes(const ArmNotesParams &params = {});
 
 // Effects are immutable once made, so copies of a scene (for the show thread) share them. `spec`
 // describes `effect` for saving and editing; make_layer (engine/effect_spec.h) keeps them in step,

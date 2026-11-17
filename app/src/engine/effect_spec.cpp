@@ -536,6 +536,43 @@ template <> const std::vector<Field<PitchClockParams>> &fields<PitchClockParams>
     return f;
 }
 
+template <> const std::vector<Field<ArmNotesParams>> &fields<ArmNotesParams>() {
+    using P = ArmNotesParams;
+    static const std::vector<Field<P>> f = {
+        {{"arm_mode", "Arms", "", 0.0, 2.0, true,
+          "Which arm a note lights: by pitch class (modulo the arms), by its rank among the "
+          "recent notes' pitches spread round the arms, or every arm",
+          "Pitch class|Scale step|All arms"},
+         nullptr,
+         &P::arm_mode},
+        {{"top_pitch", "First arm", "", 0.0, 11.0, true,
+          "Pitch class on the first arm round from the top (0 = C)"},
+         nullptr,
+         &P::top_pitch},
+        {{"per_16th", "Reach", "", 0.05, 2.0, false,
+          "Share of the arm lit per 16th the note is held: 1 reaches its gate ratio"},
+         &P::per_16th},
+        {{"release", "Release", "x", 0.1, 8.0, false,
+          "Fade after the note ends, in multiples of its decay time"},
+         &P::release},
+        {{"slide_16ths", "Slide", "16ths", 0.25, 4.0, false,
+          "How long a slide takes to cross from the previous note's arm"},
+         &P::slide_16ths},
+        {{"trail", "Trail", "", 0.0, 7.0, true, "Earlier notes kept on their arms, dimmer by age"},
+         nullptr,
+         &P::trail},
+        {{"colours", "Colour", "", 0.0, 1.0, true, "Hue from pitch, or a palette step per arm",
+          "Pitch hue|Palette"},
+         nullptr,
+         &P::colours},
+        {{"confidence", "Doubt", "", 0.0, 1.0, false,
+          "How much a note the bass tracker doubts is dimmed"},
+         &P::confidence},
+        {{"level", "Level", "", 0.0, 1.0, false, "Brightness"}, &P::level},
+    };
+    return f;
+}
+
 template <> const std::vector<Field<NoteArcsParams>> &fields<NoteArcsParams>() {
     using P = NoteArcsParams;
     static const std::vector<Field<P>> f = {
@@ -786,6 +823,8 @@ EffectSpec default_spec(EffectType type) {
         return {PhraseFillParams{}};
     case EffectType::ring_automaton:
         return {RingAutomatonParams{}};
+    case EffectType::arm_notes:
+        return {ArmNotesParams{}};
     }
     return {PlasmaParams{}};
 }
@@ -846,6 +885,8 @@ std::shared_ptr<const Effect> make_effect(const EffectSpec &spec) {
                 return make_polar_noise(p);
             } else if constexpr (std::is_same_v<P, PhraseFillParams>) {
                 return make_phrase_fill(p);
+            } else if constexpr (std::is_same_v<P, ArmNotesParams>) {
+                return make_arm_notes(p);
             } else {
                 return make_ring_automaton(p);
             }
@@ -913,6 +954,8 @@ const char *effect_type_id(EffectType type) {
         return "phrase_fill";
     case EffectType::ring_automaton:
         return "ring_automaton";
+    case EffectType::arm_notes:
+        return "arm_notes";
     }
     return "plasma";
 }
