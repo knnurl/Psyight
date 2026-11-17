@@ -33,6 +33,9 @@ def kick_route(layer, amount=0.85):
 
 HAT_TIPS = L("corner_sparks", group="arms", sites=1, count=6, span=1, decay_s=0.1, level=0.9)
 PREDROP_GAP = L("stutter", "multiply", mode=5, depth=1.0)
+# A faint light circling the halo once a phrase (never held on one spot).
+HALO_ROUND = L("wave", "screen", group="halo", mapping=7, clock=4, rate=1.0, shape=4, spread=1.0,
+               width=0.5, level=0.2, colour_spread=0.3)
 
 INTROS = [
     scene("Dormant", "The halo breathing once a phrase over a dim glow, a faint drift in the "
@@ -150,6 +153,36 @@ BREAKDOWNS = [
            L("wave", "screen", group="arms", mapping=3, clock=3, rate=1.0 / 12.0, shape=4,
              spread=0.13, width=0.02, level=0.8, colour_spread=0.3, turn_offset=1.0)],
           post=[("afterglow", {"decay_beats": 2.0, "amount": 0.6})]),
+    # A second breakdown (the owner, 2026-11-17, with Abyss out): three candidates, each led by
+    # a different voice than Drift's smoke.
+    scene("Tendrils", "Arm-led: two slow swells travel round the piece, each lighting the arms "
+          "it passes from the centre outwards like a tentacle curling, a bar a step; a faint "
+          "light circling the halo once a phrase, the rest dark.", ["breakdown", "low"],
+          ["Ocean UV", "Ember"],
+          [HALO_ROUND,
+           L("wave", "screen", group="arms", mapping=3, clock=3, rate=0.25, shape=4, spread=0.8,
+             width=0.35, level=0.6, colour_spread=0.6, turn_offset=2.0)],
+          post=[("afterglow", {"decay_beats": 1.0, "amount": 0.4})]),
+    scene("Spores", "Dome-led: each dome swells from its middle to its edge once a bar, the swell "
+          "carrying on out through the panels and rim as a slow ring, the three domes a third of "
+          "a bar apart; the arms dark.", ["breakdown", "low"], ["Ember", "Ocean UV"],
+          [L("wave", group="domes", mapping=3, radial_from=1, clock=3, rate=1.0, shape=4,
+             spread=1.0, width=0.5, level=0.7, colour_spread=0.4, turn_offset=1.0),
+           L("wave", "screen", group="panels", mapping=3, clock=3, rate=1.0, shape=4, spread=1.0,
+             width=0.6, level=0.5, colour_spread=0.5),
+           L("wave", "screen", group="rim", mapping=3, clock=3, rate=1.0, shape=4, spread=1.0,
+             width=0.6, level=0.4, colour_spread=0.5),
+           HALO_ROUND]),
+    scene("Undertow", "The bassline at breakdown pace: each note on the next arm five round, "
+          "drawn out and slow to fade, its last notes trailing; the panels a slow tide coloured "
+          "by the bass pitch, so the piece stays alive when the bass drops out.",
+          ["breakdown", "low"], ["Ember", "Ocean UV"],
+          [L("wave", group="panels", mapping=3, clock=4, rate=-1.0, shape=0, spread=1.0,
+             level=0.35, colour_spread=0.3),
+           HALO_ROUND,
+           L("arm_notes", "screen", group="arms", arm_mode=3, step=5, per_16th=0.5, release=6.0,
+             trail=3, colours=2, confidence=0.3, level=0.7)],
+          [R("bass_pitch", "hue_shift", 0, 120.0)]),
 ]
 
 BREAKS = [
